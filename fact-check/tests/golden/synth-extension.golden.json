@@ -1,0 +1,8 @@
+[
+  {"normalized_claim": "API pricing $0.50/1M tokens", "expected_type": "pricing", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "FedRAMP Moderate compliance", "expected_type": "compliance", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "GDPR compliance", "expected_type": "compliance", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "/v1/chat/completions p99 2.3s", "expected_type": "route", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "port 8080 default, 443 production TLS", "expected_type": "port", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "max retries 3 for 5xx exponential backoff", "expected_type": "retry", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"}
+]

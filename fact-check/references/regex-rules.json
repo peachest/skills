@@ -1,0 +1,467 @@
+{
+  "rules_version": "1.1",
+  "description": "Regex patterns for routing extracted claims to the correct verifier (rule engine vs web search vs refused vs inferred). Applied after LLM extraction, before verification. Chinese + English bilingual coverage.",
+  "priority": "first-match-wins, ordered from most specific to least specific",
+  "authority_rules": [
+    {
+      "name": "arxiv_id",
+      "description": "arXiv paper identifier",
+      "pattern": "\\barXiv:\\d{4}\\.\\d{4,5}(v\\d+)?\\b",
+      "extract": "group 0 (the matched arXiv ID)",
+      "verifier": "rule_engine.arxiv",
+      "examples": [
+        "arXiv:2412.19437",
+        "arXiv:2605.18071",
+        "arXiv:2606.14779v2"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "doi",
+      "description": "DOI identifier",
+      "pattern": "\\b10\\.\\d{4,}/[^\\s]+\\b",
+      "extract": "group 0 (the full DOI)",
+      "verifier": "rule_engine.doi",
+      "examples": [
+        "10.1145/3731569.3764843",
+        "10.1145/3773772"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "github_pr_slash",
+      "description": "GitHub PR reference via /owner/repo#number format",
+      "pattern": "github\\.com/([\\w.-]+)/([\\w.-]+)/pull/(\\d+)\\b",
+      "extract": "owner (g1), repo (g2), pr_number (g3)",
+      "verifier": "rule_engine.code_platform_pr",
+      "examples": [
+        "github.com/ggerganov/llama.cpp/pull/11049"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "github_pr_symbol",
+      "description": "GitHub PR reference via #number format (requires context), Chinese + English",
+      "pattern": "\\b(?:PR|拉取请求|PR)\\s*#?(\\d+)\\b",
+      "extract": "pr_number (g1), repo extracted from surrounding context or document metadata",
+      "verifier": "rule_engine.code_platform_pr",
+      "examples": [
+        "PR #11049",
+        "PR#11049",
+        "拉取请求 #11049"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "github_issue",
+      "description": "GitHub Issue reference, Chinese + English",
+      "pattern": "\\b(?:Issue|问题|议题|issue)\\s*#?(\\d+)\\b",
+      "extract": "issue_number (g1), repo from surrounding context",
+      "verifier": "rule_engine.code_platform_issue",
+      "examples": [
+        "Issue #19039",
+        "Issue#19039",
+        "问题 #19039"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "gitlab_mr",
+      "description": "GitLab Merge Request reference via URL",
+      "pattern": "gitlab\\.com/([\\w.-]+)/([\\w.-]+)/-/merge_requests/(\\d+)\\b",
+      "extract": "owner (g1), repo (g2), mr_number (g3)",
+      "verifier": "rule_engine.code_platform_pr",
+      "examples": [
+        "gitlab.com/mlcommons/openfold/-/merge_requests/42"
+      ],
+      "priority": "P0",
+      "note": "GitLab !N shortcut matched by code_platform_symbol pattern below."
+    },
+    {
+      "name": "gitlab_issue",
+      "description": "GitLab Issue reference via URL",
+      "pattern": "gitlab\\.com/([\\w.-]+)/([\\w.-]+)/-/issues/(\\d+)\\b",
+      "extract": "owner (g1), repo (g2), issue_number (g3)",
+      "verifier": "rule_engine.code_platform_issue",
+      "examples": [
+        "gitlab.com/gitlab-org/gitlab/-/issues/12345"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "code_platform_symbol_pr",
+      "description": "Generic code platform PR/MR reference via symbol (!N / #N) — platform inferred from context",
+      "pattern": "\\b[!#](\\d+)\\b",
+      "extract": "number (g1), platform inferred from document metadata",
+      "verifier": "rule_engine.code_platform_pr",
+      "examples": [
+        "!42",
+        "#11049"
+      ],
+      "priority": "P0",
+      "note": "Matches both GitHub #n and GitLab !n. When preceded by domain-specific patterns, those win."
+    },
+    {
+      "name": "gitlab_repo",
+      "description": "GitLab repository via URL",
+      "pattern": "gitlab\\.com/([\\w.-]+/[\\w.-]+)",
+      "extract": "full_name (g1)",
+      "verifier": "rule_engine.code_platform_repo",
+      "examples": [
+        "gitlab.com/mlcommons/openfold"
+      ],
+      "priority": "P0",
+      "note": "Before github_repo to prevent domain-gated GitLab URLs from being routed to gh CLI."
+    },
+    {
+      "name": "gitee_repo",
+      "description": "Gitee repository via URL",
+      "pattern": "gitee\\.com/([\\w.-]+/[\\w.-]+)",
+      "extract": "full_name (g1)",
+      "verifier": "rule_engine.code_platform_repo",
+      "examples": [
+        "gitee.com/mindspore/mindspore"
+      ],
+      "priority": "P0",
+      "note": "Before github_repo. Gitee uses REST API (no CLI)."
+    },
+    {
+      "name": "github_repo",
+      "description": "GitHub repository via github.com URL (no bare owner/repo matching)",
+      "pattern": "github\\.com/([\\w.-]+/[\\w.-]+)",
+      "extract": "full_name (g1)",
+      "verifier": "rule_engine.code_platform_repo",
+      "examples": [
+        "github.com/kvcache-ai/ktransformers",
+        "github.com/ggerganov/llama.cpp"
+      ],
+      "note": "Only matches github.com/owner/repo URLs. Bare owner/repo references (without github.com/) are NOT matched — they fall through to web_search.",
+      "priority": "P0"
+    },
+    {
+      "name": "url",
+      "description": "URL reference",
+      "pattern": "https?://[^\\s)]+",
+      "extract": "group 0 (the full URL)",
+      "verifier": "rule_engine.url",
+      "examples": [
+        "https://hardware-corner.net/article/42",
+        "https://huggingface.co/unsloth/DeepSeek-V3-GGUF"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "npm_package",
+      "description": "NPM package reference via install command, Chinese + English",
+      "pattern": "\\bnpm\\s+(?:install|i|安装|装)\\s+(?:-g\\s+)?['\"]?(@?[\\w@./-]+)['\"]?",
+      "extract": "package_name (g1)",
+      "verifier": "rule_engine.npm",
+      "examples": [
+        "npm install react-virtualized",
+        "npm i @anthropic/claude-code",
+        "npm 安装 react-virtualized",
+        "npm 装 @anthropic/claude-code"
+      ],
+      "priority": "P0",
+      "note": "Catches both English CLI (install/i) and Chinese (安装/装). Non-install mentions fall through to web_search."
+    },
+    {
+      "name": "pypi_package",
+      "description": "PyPI package reference via pip install command, Chinese + English",
+      "pattern": "\\bpip\\d*\\s+(?:install|download|安装|装)\\s+['\"]?([\\w.-]+)['\"]?",
+      "extract": "package_name (g1)",
+      "verifier": "rule_engine.pypi",
+      "examples": [
+        "pip install torch",
+        "pip3 install requests",
+        "pip 安装 torch",
+        "pip3 装 requests"
+      ],
+      "priority": "P0",
+      "note": "Catches both English CLI (install/download) and Chinese (安装/装). pypi.org URLs caught by url rule."
+    },
+    {
+      "name": "cargo_crate",
+      "description": "Cargo crate reference via install command or crates.io URL, Chinese + English",
+      "pattern": "\\bcargo\\s+(?:install|add|安装|添加|装)\\s+[\"\\']?([\\w-]+)[\"\\']?|crates\\.io/crates/([\\w-]+)",
+      "extract": "crate_name (g1 or g2)",
+      "verifier": "rule_engine.cargo",
+      "examples": [
+        "cargo install ripgrep",
+        "crates.io/crates/serde",
+        "cargo 安装 ripgrep",
+        "cargo 添加 serde"
+      ],
+      "priority": "P0",
+      "note": "Catches both English CLI (install/add) and Chinese (安装/添加/装). Pure crates.io URL caught by url rule."
+    },
+    {
+      "name": "go_module",
+      "description": "Go module reference via go get or pkg.go.dev URL, Chinese + English",
+      "pattern": "\\bgo\\s+get\\s+(?:拉取|获取|安装)?\\s*[\"\\']?([\\w.-]+/[\\w./-]+)[\"\\']?|pkg\\.go\\.dev/([\\w.-]+/[\\w./-]+)",
+      "extract": "module_path (g1 or g2)",
+      "verifier": "rule_engine.go_module",
+      "examples": [
+        "go get github.com/spf13/cobra",
+        "pkg.go.dev/github.com/gin-gonic/gin",
+        "go get 拉取 github.com/spf13/cobra"
+      ],
+      "priority": "P0",
+      "note": "Allows optional Chinese bridging words (拉取/获取/安装) between 'go get' and the module path."
+    },
+    {
+      "name": "nuget_package",
+      "description": "NuGet package reference via install or nuget.org URL, Chinese + English",
+      "pattern": "\\b(?:Install-Package|dotnet\\s+add\\s+package|NuGet\\s*(?:安装|装)|通过\\s*NuGet\\s*安装)\\s+[\"\\']?([\\w.-]+)[\"\\']?|nuget\\.org/packages/([\\w.-]+)",
+      "extract": "package_name (g1 or g2)",
+      "verifier": "rule_engine.nuget",
+      "examples": [
+        "dotnet add package Microsoft.ML",
+        "nuget.org/packages/Newtonsoft.Json",
+        "NuGet 安装 Newtonsoft.Json",
+        "通过 NuGet 安装 Microsoft.ML"
+      ],
+      "priority": "P0",
+      "note": "Catches both English CLI (Install-Package/dotnet add) and Chinese (NuGet 安装/通过 NuGet 安装)."
+    },
+    {
+      "name": "git_commit",
+      "description": "Git commit hash reference, Chinese + English",
+      "pattern": "\\b(?:commit|提交|commit)\\s+#?([0-9a-f]{7,40})\\b",
+      "extract": "commit_hash (g1), repo from surrounding context",
+      "verifier": "rule_engine.git_commit",
+      "examples": [
+        "commit abc1234",
+        "fixed in commit 7c8e2f1b3a",
+        "提交 abc1234"
+      ],
+      "priority": "P0",
+      "note": "Requires repo context (owner/repo) from document metadata or preceding github_repo match."
+    },
+    {
+      "name": "rfc",
+      "description": "RFC document reference",
+      "pattern": "\\bRFC\\s*#?(\\d{1,5})\\b",
+      "extract": "rfc_number (g1)",
+      "verifier": "rule_engine.rfc",
+      "examples": [
+        "RFC 2616",
+        "RFC#9000",
+        "as specified in RFC 8446"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "pmid",
+      "description": "PubMed ID (PMID) reference",
+      "pattern": "\\bPMID:\\s*(\\d{8})\\b",
+      "extract": "pmid (g1)",
+      "verifier": "rule_engine.pmid",
+      "examples": [
+        "PMID: 37441724",
+        "PubMed:37441724"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "patent",
+      "description": "Patent number (US/CN/WO/EP/JP/KR)",
+      "pattern": "\\b(?:US|CN|WO|EP|JP|KR)\\d{6,12}(?:B\\d|A\\d)?\\b",
+      "extract": "full patent number (g0)",
+      "verifier": "rule_engine.patent",
+      "examples": [
+        "US10147678B2",
+        "CN115345678A",
+        "WO2023151234"
+      ],
+      "priority": "P0"
+    },
+    {
+      "name": "ietf_draft",
+      "description": "IETF Internet-Draft reference",
+      "pattern": "\\bdraft-(?:ietf-)?[\\w-]+-\\d{2}\\b",
+      "extract": "draft name (g0)",
+      "verifier": "rule_engine.ietf_draft",
+      "examples": [
+        "draft-ietf-tls-rfc8446bis-09",
+        "draft-rescorla-tls-esni-00"
+      ],
+      "priority": "P0",
+      "note": "IETF Internet-Drafts are distinct from RFCs. Use RFC pattern for published RFCs."
+    },
+    {
+      "name": "docker_image",
+      "description": "Docker image reference via CLI command, Chinese + English",
+      "pattern": "\\bdocker\\s+(?:pull|run|拉取|运行|启动)\\s+(?:--[\\w.=-]+\\s+)*['\"]?([\\w.-]+(?:/[\\w.-]+)?)(?::[\\w.-]+)?['\"]?",
+      "extract": "image_name (g1), tag (g2 if present)",
+      "verifier": "rule_engine.docker",
+      "examples": [
+        "docker pull nginx:latest",
+        "docker run --rm alpine",
+        "docker 拉取 nginx",
+        "docker 运行 alpine"
+      ],
+      "priority": "P1",
+      "note": "Catches both English (pull/run) and Chinese (拉取/运行/启动) CLI references. Matches single-segment (nginx) and org/image (library/nginx) names. hub.docker.com URLs caught by url rule."
+    },
+    {
+      "name": "spdx_license",
+      "description": "SPDX license identifier in license declaration context",
+      "pattern": "(?:licensed\\s+under|使用|采用|许可证|license[d]?\\s+under|released\\s+under)\\s+[\"\\']?([A-Za-z0-9.\\-+]+)",
+      "extract": "license_id (g1), validated against SPDX license list",
+      "verifier": "rule_engine.spdx_license",
+      "examples": [
+        "licensed under MIT",
+        "使用 Apache-2.0 协议",
+        "released under GPL-3.0-only"
+      ],
+      "priority": "P0",
+      "note": "Validates identifier against SPDX license list, then checks actual project metadata if repo context available."
+    },
+    {
+      "name": "git_tag",
+      "description": "Git tag reference (lightweight, non-release), Chinese + English",
+      "pattern": "\\b(?:git\\s+tag|打(?:了)?(?:\\s*个)?\\s*(?:git\\s+)?tag|标记(?:为)?\\s*(?:git\\s+)?tag)\\b.*?\\b(v?\\d[\\w.]{1,30})\\b",
+      "extract": "tag_name (g1), repo from surrounding context",
+      "verifier": "rule_engine.git_tag",
+      "examples": [
+        "git tag v1.2.3",
+        "tagged as b4567",
+        "打 tag v1.2.3",
+        "打了个 tag v1.2.3",
+        "标记为 tag v1.2.3"
+      ],
+      "priority": "P1",
+      "note": "Catches both English CLI (git tag) and Chinese (打 tag/标记 tag). Requires repo context. GitHub Release tags caught by version rule."
+    }
+  ],
+  "judgment_rules": [
+    {
+      "name": "opinion_value",
+      "description": "Pure first-person value judgments — inherently non-verifiable",
+      "patterns": [
+        "比.*更好",
+        "更适合",
+        "建议.*使用",
+        "推荐.*采用",
+        "优于",
+        "优于.*方案",
+        "is better than",
+        "is preferred",
+        "is recommended over"
+      ],
+      "verdict": "REFUSED",
+      "note": "These patterns are first-person evaluations, not attributable to a named source"
+    },
+    {
+      "name": "opinion_attribution",
+      "description": "Community consensus claims — verifiable that someone said it (T3)",
+      "patterns": [
+        "社区认为",
+        "(GitHub|HN|Reddit|v2ex)(.*)称",
+        "(Discussion|Issue|PR)(.*)(报告中|显示|称)",
+        "用户(.*)(称|报告|report)",
+        "according to",
+        "reported by",
+        "据.*称"
+      ],
+      "verdict": "web_search",
+      "evidence_tier": "T3",
+      "note": "Verifies that the attribution exists, not that the underlying claim is true"
+    },
+    {
+      "name": "opinion_vague",
+      "description": "Claims too vague or speculative to verify, without verifiable atoms",
+      "patterns": [
+        "大概率",
+        "或许",
+        "也许是",
+        "possibly",
+        "probably",
+        "perhaps"
+      ],
+      "verdict": "REFUSED",
+      "note": "Pure speculation without searchable content — not useful to verify"
+    },
+    {
+      "name": "hedging_factual",
+      "description": "Hedged factual claims — verifiable but low confidence, NOT refused",
+      "patterns": [
+        "可能",
+        "应该",
+        "预计",
+        "may be",
+        "might be",
+        "could be"
+      ],
+      "verdict": "web_search",
+      "evidence_tier": "T3",
+      "guard": "check_contains_verifiable_atoms",
+      "fallback_on_guard_fail": "REFUSED",
+      "note": "Routed to web_search only if claim also contains searchable entities (numbers, proper names, URLs, technical terms). Guard checks against authority_rules + relationship_rules patterns. If no verifiable atoms found → REFUSED."
+    }
+  ],
+  "interpretation_rules": [
+    {
+      "name": "interpretation_causal",
+      "description": "Causal inference claims — source data exists but the inference itself is not directly verifiable",
+      "patterns": [
+        "使.*可行",
+        "使.*可能",
+        "makes.*possible",
+        "enables",
+        "因此",
+        "由此",
+        "thereby",
+        "thus"
+      ],
+      "verdict": "INFERRED",
+      "note": "Claims that draw conclusions from source data. Source data may be verifiable (→ SUPPORTED), but the derived conclusion cannot be directly proven by external evidence. Separate from REFUSED: these are NOT pure value judgments."
+    },
+    {
+      "name": "interpretation_significance",
+      "description": "Significance/importance claims — subjective assessment of impact",
+      "patterns": [
+        "关键",
+        "核心",
+        "重要",
+        "根本",
+        "critical",
+        "essential",
+        "fundamental"
+      ],
+      "verdict": "INFERRED",
+      "note": "Claims about the importance or significance of a fact. The fact itself may be verifiable, but its 'importance' is the author's interpretation."
+    }
+  ],
+  "relationship_rules": [
+    {
+      "name": "benchmark_data",
+      "description": "Performance benchmark claims with numerical data",
+      "patterns": [
+        "\\d+(\\.\\d+)?\\s*tok/s",
+        "\\d+(\\.\\d+)?\\s*tokens/s",
+        "\\d+(\\.\\d+)?\\s*GB",
+        "\\d+(\\.\\d+)?\\s×"
+      ],
+      "verifier": "web_search",
+      "priority": "P2"
+    },
+    {
+      "name": "model_parameter",
+      "description": "Model architecture parameter claims",
+      "patterns": [
+        "\\d+\\s*(B|M|K)\\s*(参数|parameters)",
+        "\\d+\\s*layers?",
+        "\\d+\\s*experts?"
+      ],
+      "verifier": "web_search",
+      "priority": "P2"
+    }
+  ],
+  "fallback": {
+    "description": "Any claim not matched by authority, judgment, or interpretation rules defaults here",
+    "verifier": "web_search",
+    "note": "Relationship-type claims are the default bucket for anything that doesn't match the above rules"
+  }
+}

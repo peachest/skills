@@ -1,0 +1,9 @@
+[
+  {"normalized_claim": "AuthHub uses gitee.com/authhub/identity-core", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.code_platform_repo"},
+  {"normalized_claim": "authhub/identity-core has issue #42", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.code_platform_issue"},
+  {"normalized_claim": "gitlab authhub/identity-core issue #100", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.code_platform_issue"},
+  {"normalized_claim": "npm install @authhub/jwt-validator", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.npm"},
+  {"normalized_claim": "licensed under MIT", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.spdx_license"},
+  {"normalized_claim": "DOI 10.1145/3731569.3764843", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.doi"},
+  {"normalized_claim": "https://docs.authhub.example.com/spec", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.url"}
+]
