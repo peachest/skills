@@ -3,8 +3,7 @@ set -euo pipefail
 
 # execute-plan.sh - 校验并执行 CommitPlan JSON
 # Usage: execute-plan.sh <plan.json>
-#
-# 输出: plan-result.json（与 plan.json 同目录）
+# 输出: <PROJECT_DIR>/.pi/commit-buddy/result.json
 
 if [ $# -ne 1 ]; then
   echo "Usage: execute-plan.sh <plan.json>" >&2
@@ -12,17 +11,34 @@ if [ $# -ne 1 ]; then
 fi
 
 PLAN_FILE="$1"
-if [ ! -f "$PLAN_FILE" ]; then
-  echo "ERROR: plan file not found: $PLAN_FILE" >&2
-  exit 1
-fi
+[ -f "$PLAN_FILE" ] || { echo "ERROR: file not found: $PLAN_FILE" >&2; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
 
 PLAN_DIR="$(cd "$(dirname "$PLAN_FILE")" && pwd)"
-RESULT_FILE="$PLAN_DIR/plan-result.json"
+RESULT_FILE="$PLAN_DIR/result.json"
 
-# 进程唯一临时目录，避免并发竞态
-TMPDIR=$(mktemp -d /tmp/commit-buddy-XXXXXXXXXX)
+TMPDIR=$(mktemp -d /tmp/commit-buddy-exec-XXXXXXXXXX)
 trap 'rm -rf "$TMPDIR"' EXIT
+
+HEAD_SHA=$(git rev-parse HEAD)
+COMMITS_COUNT=$(jq '.commits | length' "$PLAN_FILE")
+
+# ----- 校验前提取所有文件 hunk（供 Rule 3 用） -----
+
+declare -A HUNK_COUNTS
+
+for row in $(jq -c '.snapshot.files[]' "$PLAN_FILE"); do
+  path=$(echo "$row" | jq -r '.path')
+  count=$(echo "$row" | jq '.hunks | length')
+  if [ "$count" -gt 0 ]; then
+    extract_hunks "$path" "$TMPDIR" hcount
+    HUNK_COUNTS["$path"]=$hcount
+  else
+    HUNK_COUNTS["$path"]=0
+  fi
+done
 
 # ----- helpers -----
 
@@ -157,7 +173,6 @@ for row in $(jq -c '.snapshot.files[]' "$PLAN_FILE"); do
     idx=$(echo "$hunk_row" | jq '.index')
     plan_fp=$(echo "$hunk_row" | jq -r '.fingerprint_sha256')
 
-    # 检查这个 hunk 是否被 commits 引用
     is_allocated=$(jq --arg path "$path" --argjson idx "$idx" '
       [.commits[].files[] |
         select(.path == $path) |
@@ -167,57 +182,37 @@ for row in $(jq -c '.snapshot.files[]' "$PLAN_FILE"); do
       ] | any
     ' "$PLAN_FILE")
 
-    if [ "$is_allocated" != "true" ]; then
-      continue  # 未分配的不校验
-    fi
+    [ "$is_allocated" != "true" ] && continue
 
-    if [ "$idx" -ge "$count" ]; then
-      ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx out of range (file has $count hunks)\n"
-      continue
-    fi
+    [ "$idx" -ge "$count" ] && { ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx out of range (file has $count hunks)\n"; continue; }
 
     safename="${path//\//_}"
     patch_file="$TMPDIR/hunks/$safename/$idx.patch"
-    if [ ! -f "$patch_file" ]; then
-      ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx patch file not found\n"
-      continue
-    fi
+    [ ! -f "$patch_file" ] && { ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx patch file not found\n"; continue; }
 
     current_fp=$(compute_hunk_fingerprint "$patch_file")
-    if [ "$current_fp" != "$plan_fp" ]; then
-      ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx fingerprint mismatch\n"
-    fi
+    [ "$current_fp" != "$plan_fp" ] && { ALL_ERRORS="${ALL_ERRORS}Rule 3: hunk $path:$idx fingerprint mismatch\n"; }
   done
 done
 
-if [ -n "$ALL_ERRORS" ]; then
-  fail "$ALL_ERRORS"
-fi
-echo "  Rule 3 OK: allocated hunk fingerprints match"
+[ -n "$ALL_ERRORS" ] && fail "$ALL_ERRORS"
+echo "  Rule 3 OK"
 
-# Rule 4: 同一个 hunk 序号不能出现在多个 commit
 DUPE=$(jq '
   [.commits[].files[] |
     select(.hunks != "all" and (.hunks | type) == "array") |
-    .path as $p |
-    .hunks[] | "\($p):\(.)"
+    .path as $p | .hunks[] | "\($p):\(.)"
   ] | group_by(.) | map(select(length > 1)) | flatten
 ' "$PLAN_FILE")
+[ "$DUPE" != "[]" ] && [ -n "$DUPE" ] && fail "Rule 4: duplicate hunk assignments: $(echo "$DUPE" | jq -r '. | join(", ")')"
+echo "  Rule 4 OK"
 
-if [ "$DUPE" != "[]" ] && [ -n "$DUPE" ]; then
-  fail "Rule 4: duplicate hunk assignments: $(echo "$DUPE" | jq -r '. | join(", ")')"
-fi
-echo "  Rule 4 OK: no duplicate hunk assignments"
-
-# Rule 5: untracked 文件检查
 for row in $(jq -c '.commits[].files[] | select(.untracked == true)' "$PLAN_FILE"); do
   path=$(echo "$row" | jq -r '.path')
   status=$(git status --short -- "$path" | head -1 | cut -c1-2 || true)
-  if [ "$status" != "??" ]; then
-    fail "Rule 5: file marked untracked but status is '$status': $path"
-  fi
+  [ "$status" != "??" ] && fail "Rule 5: file marked untracked but status is '$status': $path"
 done
-echo "  Rule 5 OK: untracked files verified"
+echo "  Rule 5 OK"
 
 echo ""
 echo "=== Validation passed, executing ==="
@@ -225,16 +220,14 @@ echo "=== Validation passed, executing ==="
 # ----- execute -----
 
 STASHED=false
-if [ -n "$(git status --short)" ]; then
+[ -n "$(git status --short)" ] && {
   git stash push --keep-index --message "commit-buddy-auto-stash" 2>/dev/null || true
   STASHED=true
-fi
+}
 
 COMMITTED_FILE=$(mktemp -p "$TMPDIR" committed.XXXXXX)
 ALLOCATED_MAP=$(mktemp -p "$TMPDIR" alloc.XXXXXX)
 
-# 记录所有已分配 hunk 用于最后报告未分配部分
-# 同时处理 hunks: "all"（展开 snapshot 中该文件的所有 hunk）和 hunks: [...]
 jq -r '
   .snapshot.files as $snap |
   [.commits[].files[] |
@@ -243,14 +236,11 @@ jq -r '
       ($snap[] | select(.path == $p) | .hunks[].index | "\($p):\(.)")
     elif (.hunks | type) == "array" then
       .hunks[] | "\($p):\(.)"
-    else
-      empty
-    end
+    else empty end
   ] | .[]
 ' "$PLAN_FILE" | sort | uniq > "$ALLOCATED_MAP"
 
 for i in $(seq 0 $((COMMITS_COUNT - 1))); do
-  echo ""
   echo "--- Commit $((i + 1))/$COMMITS_COUNT ---"
 
   spec=$(jq ".commits[$i]" "$PLAN_FILE")
@@ -261,25 +251,12 @@ for i in $(seq 0 $((COMMITS_COUNT - 1))); do
   breaking=$(echo "$spec" | jq -r '.breaking // false')
   signoff=$(echo "$spec" | jq -r '.signoff // false')
 
-  # 构造 commit message
-  if [ -n "$scope" ]; then
-    msg="${type}(${scope}): ${summary}"
-  else
-    msg="${type}: ${summary}"
-  fi
-
-  if [ "$breaking" = "true" ]; then
-    msg="${msg}\n\nBREAKING CHANGE: ${body}"
-  elif [ -n "$body" ]; then
-    msg="${msg}\n\n${body}"
-  fi
+  msg="${type}${scope:+($scope)}: ${summary}"
+  [ "$breaking" = "true" ] && msg="${msg}\n\nBREAKING CHANGE: ${body}" || [ -n "$body" ] && msg="${msg}\n\n${body}"
 
   commit_args=(-m "$msg")
-  if [ "$signoff" = "true" ]; then
-    commit_args+=("--signoff")
-  fi
+  [ "$signoff" = "true" ] && commit_args+=("--signoff")
 
-  # 重置 index
   git reset HEAD > /dev/null 2>&1 || true
 
   file_count=$(echo "$spec" | jq '.files | length')
@@ -296,7 +273,7 @@ for i in $(seq 0 $((COMMITS_COUNT - 1))); do
     fi
 
     if [ "$hunks" = "string" ]; then
-      # "all" — apply all pre-extracted hunk patches to index
+      # hunks: "all" — apply all pre-extracted patches
       echo "  apply all hunks for $path"
       safename="${path//\//_}"
       hunk_dir="$TMPDIR/hunks/$safename"
@@ -309,25 +286,15 @@ for i in $(seq 0 $((COMMITS_COUNT - 1))); do
       hunk_list=$(echo "$fspec" | jq -r '.hunks[]')
       echo "  $path hunks: $(echo "$hunk_list" | tr '\n' ' ')"
 
-      # 从预提取的 hunk patch 中取需要的
       safename="${path//\//_}"
       hunk_dir="$TMPDIR/hunks/$safename"
-
       for h_idx in $hunk_list; do
         patch_file="$hunk_dir/$h_idx.patch"
-        if [ -f "$patch_file" ]; then
-          cat "$patch_file" | git apply --cached --unidiff-zero --whitespace=nowarn 2>/dev/null || {
-            # 如果没有 context 行 apply 失败，fallback:
-            # 用完整 diff 配合 hunks 在多个 commit 的场景，
-            # 先收集所有需要的 hunk patch 按序号顺序拼接再 apply
-            :
-          }
-        fi
+        [ -f "$patch_file" ] && cat "$patch_file" | git apply --cached --unidiff-zero --whitespace=nowarn 2>/dev/null || true
       done
     fi
   done
 
-  # 检查 index 是否有 staged 改动
   if [ -z "$(git diff --cached --stat)" ]; then
     echo "  WARNING: no changes staged for commit, skipping"
     continue
@@ -356,9 +323,7 @@ fi
 
 # ----- 收集未分配 hunk -----
 ALL_HUNKS=$(mktemp -p "$TMPDIR" all.XXXXXX)
-jq -r '
-  [.snapshot.files[] | .path as $p | .hunks[].index | "\($p):\(.)"] | .[]
-' "$PLAN_FILE" | sort > "$ALL_HUNKS"
+jq -r '[.snapshot.files[] | .path as $p | .hunks[].index | "\($p):\(.)"] | .[]' "$PLAN_FILE" | sort > "$ALL_HUNKS"
 
 UNALLOCATED_RESULT=$(comm -23 "$ALL_HUNKS" "$ALLOCATED_MAP" 2>/dev/null |
   head -20 |
