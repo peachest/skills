@@ -1,0 +1,7 @@
+[
+  {"normalized_claim": "vLLM is better than SGLang strongly recommend vLLM", "expected_type": "interpretation", "expected_verdict": "REFUSED", "expected_verifier": "refused"},
+  {"normalized_claim": "NUMA topology mismatch probably and GPU affinity", "expected_type": "interpretation", "expected_verdict": "REFUSED", "expected_verifier": "refused"},
+  {"normalized_claim": "may achieve 6432 tok/s on H100 cluster", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "community reports APC production usage over 80%", "expected_type": "attribution", "expected_verdict": "NUANCED", "expected_verifier": "web_search"},
+  {"normalized_claim": "may have slight latency jitter in extreme cases", "expected_type": "interpretation", "expected_verdict": "REFUSED", "expected_verifier": "refused"}
+]

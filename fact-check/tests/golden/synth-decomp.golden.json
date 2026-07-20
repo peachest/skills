@@ -1,0 +1,12 @@
+[
+  {"normalized_claim": "supports vLLM TensorRT-LLM and llama.cpp", "expected_type": "existence", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "and_enum"},
+  {"normalized_claim": "paper submitted by Tsinghua team in 2025", "expected_type": "temporal", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "paren_append"},
+  {"normalized_claim": "Huawei Ascend 910B", "expected_type": "existence", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "paren_expand"},
+  {"normalized_claim": "Ascend 910C", "expected_type": "existence", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "paren_expand"},
+  {"normalized_claim": "n腾 950", "expected_type": "existence", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "paren_expand"},
+  {"normalized_claim": "loading time from 320.8s to 47.3s", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "from_to"},
+  {"normalized_claim": "Tutti GPU io_uring reduces GPU wait by 78.3%", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "clause_embed"},
+  {"normalized_claim": "engine compilation stage total 70s", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "ie_supplement"},
+  {"normalized_claim": "Llama 3.1 8B runs on RTX 4090", "expected_type": "factual", "expected_verdict": "SUPPORTED", "expected_decomposition_mode": "dash_supplement"},
+  {"normalized_claim": "KVCache spans HBM DRAM NVMe CXL RDMA multi-tier", "expected_type": "factual", "expected_compound_flag": "compound_embedded"}
+]
