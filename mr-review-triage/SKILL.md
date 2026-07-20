@@ -8,6 +8,12 @@ disable-model-invocation: true
 
 mr-review-triage 是**状态机编排层**。代码分析（分类依据、影响面、设计意图）委托给 `code-review` skill。
 
+## 路径约定
+
+- `<SKILL_DIR>` — 本 skill 的安装目录，内含 `scripts/`、`reference/` 等子目录。
+- `<PROJECT_DIR>` — 被评审的 MR 所在项目根目录。
+- 本文档中的脚本路径统一以 `<SKILL_DIR>` 或 `<PROJECT_DIR>` 开头，agent 执行时按实际路径替换。
+
 ## 分类体系
 
 | 标记 | 分类 | 操作 |
@@ -31,7 +37,7 @@ TP 优先级：🚨 高（安全/崩溃）/ ⚠️ 中（逻辑/竞态）/ 🟢 
 ### Step 1: 拉取
 
 ```bash
-python3 scripts/ocr-pull-discussions.py <MR_ID> > /tmp/issues.json
+python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_ID> > /tmp/issues.json
 ```
 
 输出字段：`discussion_id`、`file`、`line`、`body`。脚本内置去重（精确匹配 file+line+body）。
@@ -48,11 +54,11 @@ glab mr list --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '
 
 #### 2a. 预读 ADR
 
-读取 `docs/adr/*.md`，提取架构决策摘要供匹配。
+读取当前项目目录下的 `docs/adr/*.md`，提取架构决策摘要供匹配。
 
 #### 2b. 预分类
 
-脚本按 file pattern + `docs/agents/review-knowledge.md` 批量预分类，输出 `classified.json`。
+脚本按 file pattern + 当前项目目录下的 `docs/agents/review-knowledge.md` 批量预分类，输出 `classified.json`。
 
 条目格式：
 
@@ -149,7 +155,7 @@ go vet ./... && go build ./... && go test ./...
 **必须执行**，agent 不允许跳过。
 
 ```bash
-cat classified.json | python3 scripts/ocr-post-labels.py <MR_ID>
+cat classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_ID>
 ```
 
 输入即 Step 2b 的 `classified.json`。脚本自动生成分类标签并 resolve。格式见 [`reference/templates.md`](reference/templates.md)。
