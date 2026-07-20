@@ -1,0 +1,8 @@
+[
+  {"normalized_claim": "arXiv:2605.10670", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.arxiv"},
+  {"normalized_claim": "PR #3729", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.code_platform_pr"},
+  {"normalized_claim": "6432 tok/s on H100×8 Qwen3-235B-A22B", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "batch latency 0.5s", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "vLLM APC introduced in v0.14.0", "expected_type": "temporal", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "54.92 GiB per GPU memory", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"}
+]
