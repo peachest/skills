@@ -1,0 +1,6 @@
+[
+  {"normalized_claim": "MLA compresses KV cache to 1/32", "expected_type": "numerical", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"},
+  {"normalized_claim": "MLA 32x compression makes CPU inference feasible", "expected_type": "causal", "expected_verdict": "INFERRED", "expected_verifier": "web_search"},
+  {"normalized_claim": "Prefix Caching is core optimization for long-doc QA", "expected_type": "interpretation", "expected_verdict": "INFERRED", "expected_verifier": "inferred"},
+  {"normalized_claim": "GitHub Discussion users say KTransformers is most active domestic framework", "expected_type": "attribution", "expected_verdict": "NUANCED", "expected_verifier": "web_search"}
+]

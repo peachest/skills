@@ -1,0 +1,9 @@
+[
+  {"normalized_claim": "pip install torch", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.pypi"},
+  {"normalized_claim": "cargo install ripgrep", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.cargo"},
+  {"normalized_claim": "go get github.com/spf13/cobra", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.go_module"},
+  {"normalized_claim": "dotnet add package Microsoft.ML", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.nuget"},
+  {"normalized_claim": "docker pull nginx:1.25", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.docker"},
+  {"normalized_claim": "gitlab.com/mlcommons/openfold merge_request 42", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.code_platform_pr"},
+  {"normalized_claim": "HuggingFace unsloth/DeepSeek-V3-GGUF", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "web_search"}
+]

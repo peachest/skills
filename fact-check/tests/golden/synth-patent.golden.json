@@ -1,0 +1,11 @@
+[
+  {"normalized_claim": "US patent US10147678B2 GPU memory management", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.patent"},
+  {"normalized_claim": "CN patent CN115345678A KV eviction", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.patent"},
+  {"normalized_claim": "WO patent WO2023151234 prefix sharing", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.patent"},
+  {"normalized_claim": "IETF draft draft-ietf-tls-rfc8446bis-09", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.ietf_draft"},
+  {"normalized_claim": "RFC 8446", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.rfc"},
+  {"normalized_claim": "PMID 37441724", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.pmid"},
+  {"normalized_claim": "commit 7c8e2f1b3a45678 crash fix", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.git_commit"},
+  {"normalized_claim": "git tag v2.5.1", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.git_tag"},
+  {"normalized_claim": "DOI 10.1145/3773772", "expected_type": "authority", "expected_verdict": "SUPPORTED", "expected_verifier": "rule_engine.doi"}
+]
