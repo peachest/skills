@@ -230,7 +230,7 @@ if [ -n "$(git status --short)" ]; then
   STASHED=true
 fi
 
-COMMITTED=()
+COMMITTED_FILE=$(mktemp -p "$TMPDIR" committed.XXXXXX)
 ALLOCATED_MAP=$(mktemp -p "$TMPDIR" alloc.XXXXXX)
 
 # 记录所有已分配 hunk 用于最后报告未分配部分
@@ -296,8 +296,15 @@ for i in $(seq 0 $((COMMITS_COUNT - 1))); do
     fi
 
     if [ "$hunks" = "string" ]; then
-      echo "  git add $path (all)"
-      git add "$path"
+      # "all" — apply all pre-extracted hunk patches to index
+      echo "  apply all hunks for $path"
+      safename="${path//\//_}"
+      hunk_dir="$TMPDIR/hunks/$safename"
+      if [ -d "$hunk_dir" ]; then
+        for patch_file in "$hunk_dir"/*.patch; do
+          [ -f "$patch_file" ] && cat "$patch_file" | git apply --cached --unidiff-zero --whitespace=nowarn 2>/dev/null || true
+        done
+      fi
     else
       hunk_list=$(echo "$fspec" | jq -r '.hunks[]')
       echo "  $path hunks: $(echo "$hunk_list" | tr '\n' ' ')"
@@ -329,7 +336,7 @@ for i in $(seq 0 $((COMMITS_COUNT - 1))); do
   git commit "${commit_args[@]}"
 
   sha=$(git rev-parse HEAD)
-  COMMITTED+=("{\"sha\":\"$sha\",\"message\":\"$msg\"}")
+  jq -n --arg sha "$sha" --arg msg "$msg" '{sha: $sha, message: $msg}' >> "$COMMITTED_FILE"
   echo "  committed: $sha"
 done
 
@@ -365,7 +372,7 @@ UNALLOCATED_RESULT=$(comm -23 "$ALL_HUNKS" "$ALLOCATED_MAP" 2>/dev/null |
 
 # ----- 输出 PlanResult -----
 
-COMMITTED_JSON=$(printf '%s\n' "${COMMITTED[@]}" | jq -s '.' 2>/dev/null || echo "[]")
+COMMITTED_JSON=$(jq -s '.' "$COMMITTED_FILE" 2>/dev/null || echo "[]")
 
 jq -n \
   --argjson ok true \
