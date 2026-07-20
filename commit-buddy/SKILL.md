@@ -1,7 +1,6 @@
 ---
 name: commit-buddy
-description: 你的 git commit 伙伴——分析变更、规划拆分、输出 CommitPlan JSON，调用脚本执行。手动触发。
-disable-model-invocation: true
+description: git commit 伙伴——当用户提到 commit、提交、commit message、提交信息、变更分组、提交计划、conventional commits 时触发。
 ---
 
 commit-buddy 是你的 git commit 伙伴：拿到一堆变更后，先规划再动手，等你拍板粒度合适后才执行。
@@ -49,63 +48,62 @@ N. type(scope): summary
 
 **完成标准**：所有变更文件都已归入某个 commit，无遗漏。部分文件因跨组依赖而出现在多个 commit 中时，说明原因。
 
-### Step 2.5: 输出 CommitPlan JSON
+### Step 2.5: 输出方案并生成 CommitPlan
 
-按 `SCHEMA.md` 格式输出完整 CommitPlan：
+按 `SCHEMA.md` 中的简化方案格式输出 commit 分组（只含语义信息，不需要计算指纹）：
 
 ```json
 {
   "version": 1,
   "commits": [
-    { "type": "feat", "summary": "...", "files": [...] }
-  ],
-  "snapshot": {
-    "files": [
-      { "path": "...", "head_sha": "...", "hunks": [...] }
-    ],
-    "created_at": "<now>",
-    "source": "commit-buddy"
-  }
+    {
+      "type": "feat",
+      "scope": "auth",
+      "summary": "...",
+      "files": [
+        { "path": "...", "hunks": "all" },
+        { "path": "...", "hunks": [0, 2] }
+      ]
+    }
+  ]
 }
 ```
 
-snapshot 的 hunks 内容通过运行 `git diff HEAD -- <path>` 并逐行解析获取，跳过 diff header（`diff --git` / `index` / `---` / `+++` 行）。
+写入临时文件后，调用脚本自动补全 snapshot（hunk 指纹、HEAD sha）：
 
-对每个有 diff 的文件：
-1. 运行 `git diff HEAD -- <file>`
-2. 跳过 diff header 行，直到遇到第一个以 `@@` 开头的行 → 这是 hunk 0
-3. 每个 `@@` 行标志着一个新 hunk 的开始（从 `@@` 到下一个 `@@` 之前或文件尾）
-4. 对每个 hunk 的完整内容（含 `@@` 行和所有 +/-/context 行）计算 SHA256 指纹
+```bash
+mkdir -p <PROJECT_DIR>/.pi/commit-buddy
+# 将方案 JSON 写入 <PROJECT_DIR>/.pi/commit-buddy/input.json
+bash <skill-dir>/scripts/generate-plan.sh <PROJECT_DIR>/.pi/commit-buddy/input.json
+```
 
-注意：diff header 行（`diff --git`、`index`、`--- a/`、`+++ b/`）不计入 hunk，hunk 编号从第一个 `@@` 行开始为 0。
+脚本输出完整 CommitPlan 到 `<PROJECT_DIR>/.pi/commit-buddy/plan.json`。
 
-**新文件（untracked）**：`git diff HEAD` 不会输出其内容，snapshot 中该文件的 hunks 设为空数组。
-
-**完成标准**：CommitPlan JSON 已写入 `<项目根目录>/commit-plan.json`。
+**完成标准**：`plan.json` 已生成。
 
 ### Step 3: 确认粒度
 
-向用户展示 Commit 计划和 CommitPlan JSON 文件路径，用 `ask_user_question` 一次性询问：
+向用户展示 Commit 计划，用 `ask_user_question` 一次性询问：
 
 - **粒度是否合适？**（确认 / 太粗需要拆分 / 太细需要合并）
 - 太粗或太细时，追问哪个 commit 需要调整
 - 是否有 hunk 需要跳过不提？
 
-迭代直到用户确认。
+迭代直到用户确认。用户确认后直接进入 Step 4，不需要重新生成 plan.json（execute-plan.sh 会在执行前校验指纹，如果确认期间代码被改动会中止）。
 
 **完成标准**：用户回复确认。
 
 ### Step 4: 执行
 
 ```bash
-bash <skill-dir>/scripts/execute-plan.sh <项目根目录>/commit-plan.json
+bash <skill-dir>/scripts/execute-plan.sh <PROJECT_DIR>/.pi/commit-buddy/plan.json
 ```
 
-**完成标准**：脚本执行完毕。检查 `plan-result.json` 的 `ok` 字段。
+**完成标准**：脚本执行完毕。检查 `<PROJECT_DIR>/.pi/commit-buddy/result.json` 的 `ok` 字段。
 
 ### Step 5: 汇报
 
-读取 `plan-result.json`，向用户汇报：
+读取 `<PROJECT_DIR>/.pi/commit-buddy/result.json`，向用户汇报：
 
 - 每个 commit 的 SHA 和 message
 - stash pop 结果
@@ -115,3 +113,13 @@ bash <skill-dir>/scripts/execute-plan.sh <项目根目录>/commit-plan.json
 最后展示 `git log --oneline -n <N>` 确认最终结果。
 
 若 stash pop 有冲突，指出冲突文件并暂停。
+
+### Step 6: 清理
+
+删除 `<PROJECT_DIR>/.pi/commit-buddy/` 目录：
+
+```bash
+rm -rf <PROJECT_DIR>/.pi/commit-buddy/
+```
+
+**完成标准**：中间产物已清理。
