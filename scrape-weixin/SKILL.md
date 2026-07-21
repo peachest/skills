@@ -1,11 +1,11 @@
 ---
-name: weixin-scraper
+name: scrape-weixin
 description: |
   Extract structured content from saved WeChat (微信) article HTML files
-  (mp.weixin.qq.com). Use when the user has a saved HTML file of a WeChat
-  article and wants title, author, publish date, and body text extracted.
-  The actual fetching is handled by fetch-article skill — this skill only
-  does the extraction step.
+  (mp.weixin.qq.com). Use when the user wants to scrape web content from
+  WeChat public accounts (微信公众号), or mentions: scrape, weixin, 爬取,
+  微信公众号, 微信文章, 公众号文章. The actual fetching is handled by
+  fetch-article skill — this skill only does the extraction step.
 ---
 
 # WeChat Article Extractor
@@ -26,9 +26,9 @@ WeChat public account (微信公众号) article. This script extracts:
 ## Usage
 
 ```bash
-python3 .agent/skills/weixin-scraper/scripts/extract.py /path/to/article.html
-python3 .agent/skills/weixin-scraper/scripts/extract.py /path/to/article.html --json
-python3 .agent/skills/weixin-scraper/scripts/extract.py /path/to/article.html --json --images
+python3 .agent/skills/scrape-weixin/scripts/extract.py /path/to/article.html
+python3 .agent/skills/scrape-weixin/scripts/extract.py /path/to/article.html --json
+python3 .agent/skills/scrape-weixin/scripts/extract.py /path/to/article.html --json --images
 ```
 
 ## Fetching the HTML
