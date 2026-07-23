@@ -18,7 +18,7 @@ A skill's job is to wrangle determinism out of a stochastic system, so the goal 
 
 ## When to reach for it
 
-You invoke this by typing `/writing-great-skills` — the agent won't reach for it on its own.
+You invoke this by typing `/skill:writing-great-skills` — the agent won't reach for it on its own.
 
 Reach for it whenever you're authoring a new skill or editing an existing one and want it to behave the same way every time: deciding invocation mode, writing a description, choosing what lives in `SKILL.md` versus a linked file, or diagnosing why a skill misfires.
 
