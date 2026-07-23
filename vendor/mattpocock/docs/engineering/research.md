@@ -16,7 +16,7 @@ npx skills update research
 
 ## When to reach for it
 
-Type `/research`, or the agent reaches for it automatically when a task turns into reading legwork.
+Type `/skill:research`, or the agent reaches for it automatically when a task turns into reading legwork.
 
 Reach for it when the next step is *finding something out* — how an API behaves, what a spec actually says, whether a claim holds — and you'd rather not stall your own thread doing the reading. For sharpening a plan by interview instead of by reading, use [grilling](https://aihero.dev/skills-grilling); for exploring what to build with throwaway code, use [prototype](https://aihero.dev/skills-prototype).
 
