@@ -18,7 +18,7 @@ Every ticket is a **tracer bullet** — a thin *vertical* slice that cuts throug
 
 ## When to reach for it
 
-You invoke this by typing `/to-tickets` — the agent won't reach for it on its own.
+You invoke this by typing `/skill:to-tickets` — the agent won't reach for it on its own.
 
 Reach for it once you have an agreed plan or a written spec and you want it split into tickets. Point it at the conversation, or pass a spec or issue reference and it fetches the body and comments first. If the change hasn't been written up as a spec yet, produce one first — for that, use [to-spec](https://aihero.dev/skills-to-spec).
 
