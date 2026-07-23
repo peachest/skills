@@ -50,7 +50,9 @@ N. type(scope): summary
 
 ### Step 3: 确认粒度
 
-用 `ask_user_question` 一次性询问：
+Run a `/skill:grilling` session
+
+用 `ask_user_question` 询问：
 
 - **粒度是否合适？**（确认 / 太粗需要拆分 / 太细需要合并）
 - 太粗或太细时，追问哪个 commit 需要调整

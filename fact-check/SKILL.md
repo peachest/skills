@@ -1,4 +1,5 @@
 ---
+name: fact-check
 description: "Extract verifiable claims from documents, route to rule engines or web search, produce evidence-backed verdicts. Use when user says \"/fact-check\" / \"fact check this\" / \"verify this document\" / \"check this report for accuracy\" / \"are these claims true\"."
 ---
 
