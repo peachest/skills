@@ -39,11 +39,10 @@ Lead each section with the recommended answer so the user can accept it in a wor
 
 > Explainer: The "issue tracker" is where issues live for this repo. Skills like `to-tickets`, `triage`, `to-spec`, and `qa` read from and write to it — they need to know whether to call `gh issue create`, write a markdown file under `.scratch/`, or follow some other workflow you describe. Pick the place you actually track work for this repo.
 
-Default posture: these skills were designed for GitHub. If a `git remote` points at GitHub, propose that. If a `git remote` points at GitLab (`gitlab.com` or a self-hosted host), propose GitLab — or **Internal GitLab** when the host is a self-hosted instance with commit-close conventions (e.g. `gitblue.transwarp.io`). Otherwise (or if the user prefers), offer:
+Default posture: these skills were designed for GitHub. If a `git remote` points at GitHub, propose that. If a `git remote` points at GitLab (`gitlab.com` or a self-hosted host), propose GitLab. Otherwise (or if the user prefers), offer:
 
-- **GitHub** — issues live in the repo's GitHub Issues (uses the `gh` CLI)
-- **GitLab** — issues live in the repo's GitLab Issues (uses the [`glab`](https://gitlab.com/gitlab-org/cli) CLI)
-- **Internal GitLab** — self-hosted GitLab with commit-message-based issue closing, MR conventions, and structured issue templates (uses the [`glab`](https://gitlab.com/gitlab-org/cli) CLI). Use when the remote points at a self-hosted GitLab and you want the full convention set (commit-close, Map/MR workflow, spec/task/decision templates).
+- **GitHub** — issues live in the repo's GitHub Issues, with commit-close conventions, PR workflow, and structured issue templates (uses the `gh` CLI)
+- **GitLab** — issues live in the repo's GitLab Issues, with commit-close conventions, MR workflow, and structured issue templates (uses the [`glab`](https://gitlab.com/gitlab-org/cli) CLI)
 - **Local markdown** — issues live as files under `.scratch/<feature>/` in this repo (good for solo projects or repos without a remote)
 - **Other** (Jira, Linear, etc.) — ask the user to describe the workflow in one paragraph; the skill will record it as freeform prose
 
@@ -104,9 +103,8 @@ Include the `### Triage labels` sub-block, and write `docs/agents/triage-labels.
 
 Then write the docs files using the seed templates in this skill folder as a starting point:
 
-- [issue-tracker-github.md](./issue-tracker-github.md) — GitHub issue tracker
-- [issue-tracker-gitlab.md](./issue-tracker-gitlab.md) — GitLab issue tracker
-- [issue-tracker-internal-gitlab.md](./issue-tracker-internal-gitlab.md) — internal self-hosted GitLab issue tracker (commit-close conventions, MR workflow, issue templates)
+- [issue-tracker-github.md](./issue-tracker-github.md) — GitHub issue tracker (commit-close conventions, PR workflow, structured issue templates)
+- [issue-tracker-gitlab.md](./issue-tracker-gitlab.md) — GitLab issue tracker (commit-close conventions, MR workflow, structured issue templates)
 - [issue-tracker-local.md](./issue-tracker-local.md) — local-markdown issue tracker
 - [triage-labels.md](./triage-labels.md) — label mapping (only if `triage` is installed)
 - [domain.md](./domain.md) — domain doc consumer rules + layout
