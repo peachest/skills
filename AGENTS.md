@@ -27,6 +27,32 @@
 
 3. 向用户汇报本次同步的变更摘要。
 
+## 安装 skill 到本地 agent
+
+使用 `npx skills` CLI 将当前仓库下的 skill 安装到全局（所有 agent，包括 Pi）：
+
+```bash
+# 安装单个 skill（交互式选择 agent）
+npx skills add -g ./<skill-name>
+
+# 安装单个 skill（跳过确认，安装到所有 agent）
+npx skills add -g -y ./<skill-name>
+
+# 列出已安装的全局 skill
+npx skills list -g
+
+# 移除
+npx skills remove -g <skill-name>
+```
+
+安装后，skill 文件存放在 `~/.agents/skills/<skill-name>/`，各 agent（包括 Pi）通过符号链接引用：
+
+```
+~/.agents/skills/<skill-name>/        ← npx skills 的全局存储（实际文件）
+    ↑ symlink
+~/.pi/agent/skills/<skill-name>       ← Pi agent 读取 skills 的目录
+```
+
 ## Agent skills
 
 ### Issue tracker
