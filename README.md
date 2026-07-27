@@ -71,15 +71,17 @@ skills/
 
 ### 安装到 Pi
 
-所有 skill 通过 `npx skills add` 安装，由 pi 从 `~/.claude/skills/` 自动加载：
+所有 skill 通过 `npx skills add` 安装，由 pi 从 `~/.claude/skills/` 和 `~/.pi/skills/` 自动加载。用 `-a pi` 显式指定只装给 Pi：
 
 ```bash
 # 自定义 skill
-npx skills add ~/skills/ --global --all -y
+npx skills add ~/skills/ --global --all -a pi -y
 
 # 引入的 mattpocock skill
-npx skills add ~/skills/vendor/mattpocock --global --all -y
+npx skills add ~/skills/vendor/mattpocock --global --all -a pi -y
 ```
+
+> `--all` 会自动纳入 Pi（`lastSelectedAgents` 中已包含 pi），在 `~/.pi/agent/skills/` 下创建 symlink。
 
 ### 更新上游
 
