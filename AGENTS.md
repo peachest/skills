@@ -26,3 +26,21 @@
    - **未归类**（既不在白名单也不在黑名单）：跳过同步，并提示用户将其加入白名单或黑名单。
 
 3. 向用户汇报本次同步的变更摘要。
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `github.com/peachest/skills`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use default label strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout. See `docs/agents/domain.md`.
+
+# Writing Skills
+
+skill.md 描述中使用 `<SKILL_DIR>` 和 `<PROJECT_DIR>` 占位符区别不同工作目录
