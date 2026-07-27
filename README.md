@@ -37,6 +37,7 @@ skills/
 - **[write-gomega-matcher](./write-gomega-matcher/SKILL.md)** — 编写自定义 Gomega matcher（gcustom.MakeMatcher）
 - **[k8s-dra](./k8s-dra/SKILL.md)** — Kubernetes DRA（动态资源分配）概念、API 参考和示例
 - **[vscode-extension](./vscode-extension/SKILL.md)** — VS Code 扩展开发辅助
+- **[ci-pipeline-profiler](./ci-pipeline-profiler/SKILL.md)** — GitLab CI pipeline 耗时分析：拉取 job 数据、下钻日志、关联配置文件，产出结构化报告 + 优化建议
 
 ### 代码审查与修复
 
@@ -71,7 +72,7 @@ skills/
 
 ### 安装到 Pi
 
-所有 skill 通过 `npx skills add` 安装，由 pi 从 `~/.claude/skills/` 和 `~/.pi/skills/` 自动加载。用 `-a pi` 显式指定只装给 Pi：
+见 [`docs/agents/install-skills.md`](./docs/agents/install-skills.md)。
 
 ```bash
 # 自定义 skill
@@ -80,8 +81,6 @@ npx skills add ~/skills/ --global --all -a pi -y
 # 引入的 mattpocock skill
 npx skills add ~/skills/vendor/mattpocock --global --all -a pi -y
 ```
-
-> `--all` 会自动纳入 Pi（`lastSelectedAgents` 中已包含 pi），在 `~/.pi/agent/skills/` 下创建 symlink。
 
 ### 更新上游
 
