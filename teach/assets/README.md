@@ -1,6 +1,6 @@
 # teach assets — 模板源
 
-teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从此目录复制到自己需要的文件到工作区的 `assets/` 目录。
+teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从此目录复制需要的文件到工作区的 `assets/` 目录。
 
 ## 架构决策
 
@@ -13,13 +13,43 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 
 | 文件 | 用途 | 来源 ticket | 必需? |
 |---|---|---|---|
-| `base.css` | 统一 CSS 基底 | #7 (待定) | ✅ 所有工作区 |
+| `base.css` | 统一 CSS 基底 | #7 | ✅ 所有工作区 |
 | `quiz.js` | 声明式 quiz 组件 | #8 (待定) | 可选 |
 | `katex.min.css` | KaTeX 公式渲染样式 | #6 | 可选(有公式时) |
 | `katex.min.js` | KaTeX 公式渲染核心 | #6 | 可选(有公式时) |
 | `auto-render.min.js` | KaTeX 自动扫描渲染 | #6 | 可选(有公式时) |
 | `render.js` | KaTeX 定界符配置($ 和 $$) | #6 | 可选(有公式时) |
 | `fonts/*.woff2` | KaTeX 字体(20 个 woff2) | #6 | 可选(有公式时) |
+
+## CSS 统一策略 (#7)
+
+**选优扩展**:以 mtp `style.css`(最完整)为基底,吸收 llm-rl 和 ocr-image 的有用部分。
+
+### 设计决策
+
+- **字体**:serif body(Georgia / Songti SC)+ sans-serif heading(系统)+ mono(SF Mono)。系统字体,无需 web font
+- **色板**:mtp 色值(accent `#0366d6`,bg `#ffffff`,text `#1a1a1a`)
+- **变量命名**:mtp 命名 + `--radius`(from llm-rl)。`--accent-light` 改为 `--accent-bg`
+- **Callout**:5 种,Obsidian 命名 — `.callout-note`(蓝)、`.callout-tip`(紫)、`.callout-warning`(橙)、`.callout-success`(绿)、`.callout-danger`(红)
+- **吸收的组件**:`.tag`、`.src-ref`、`.sidenote`(from llm-rl);`figure/figcaption`、`.meta`(from ocr-image)
+- **移除**:`.math-block`、`.math-inline`、`.formula`(KaTeX 接管)
+- **新增**:`.katex-display` margin 样式
+
+### 迁移映射(现有 → 新)
+
+| 旧 class | 新 class | 工作区 |
+|---|---|---|
+| `.callout-note` | `.callout-note` | mtp (不变) |
+| `.callout-warn` | `.callout-warning` | mtp, ocr-image |
+| `.callout-key` | `.callout-tip` | mtp |
+| `.callout.info` | `.callout-note` | llm-rl |
+| `.callout.warn` | `.callout-warning` | llm-rl |
+| `.callout.green` | `.callout-success` | llm-rl |
+| `.callout.red` | `.callout-danger` | llm-rl |
+| `.callout-success` | `.callout-success` | ocr-image (不变) |
+| `.callout-info` | `.callout-note` | ocr-image |
+| `--accent-light` | `--accent-bg` | mtp |
+| `--max-w` / `--measure` | `--max-width` | llm-rl, ocr-image |
 
 ## KaTeX 引入方式 (#6)
 
@@ -33,9 +63,5 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 ```
 
 正文中用 `$...$` (行内) 或 `$$...$$` (块级) 包裹 LaTeX 公式即可自动渲染。
-
-- **本地 vendored**:离线完全可用,总大小 ~600KB(仅 woff2 字体)
-- **opt-in**:不需要公式的工作区(如 ocr-image)不复制 KaTeX 文件
-- **定界符**:`$...$` 行内 + `$$...$$` 块级
 
 参见 [Map #4](https://github.com/peachest/skills/issues/4)。
