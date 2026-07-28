@@ -14,7 +14,7 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 | 文件 | 用途 | 来源 ticket | 必需? |
 |---|---|---|---|
 | `base.css` | 统一 CSS 基底 | #7 | ✅ 所有工作区 |
-| `quiz.js` | 声明式 quiz 组件 | #8 (待定) | 可选 |
+| `quiz.js` | 声明式 quiz 组件 (data-quiz JSON + radio button, a11y) | #8 | 可选 |
 | `katex.min.css` | KaTeX 公式渲染样式 | #6 | 可选(有公式时) |
 | `katex.min.js` | KaTeX 公式渲染核心 | #6 | 可选(有公式时) |
 | `auto-render.min.js` | KaTeX 自动扫描渲染 | #6 | 可选(有公式时) |
