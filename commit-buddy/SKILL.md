@@ -1,11 +1,11 @@
 ---
 name: commit-buddy
-description: 你的 git commit 伙伴——分析变更、规划拆分、按 Conventional Commits 提交。使用此 skill 处理所有和 git commit、提交、commit message 相关的任务——当用户提到 git、commit、提交、commit message、提交信息、变更分组、提交计划、conventional commits 时都应该触发。
+description: 你的 git commit 伙伴——分析变更、规划拆分、按 Conventional Commits 提交。使用此 skill 处理所有和 git commit、提交相关的任务。
 ---
 
 commit-buddy 是你的 git commit 伙伴：拿到一堆变更后，先规划再动手，等你拍板粒度合适后才执行。
 
-commit message 遵循 Conventional Commits 规范，参考 [conventional-commits skill](~/.claude/skills/conventional-commits/SKILL.md)。
+commit message 遵循 Conventional Commits 规范。
 
 ## 流程
 
@@ -63,7 +63,7 @@ Run a `/skill:grilling` session
 
 ### Step 4: 执行
 
-按 commit 顺序逐个执行。工作区有 unstaged 改动时，先 `git stash --keep-index`。
+按 commit 顺序逐个执行，遵循 /skill:conventional-commits。工作区有 unstaged 改动时，先 `git stash --keep-index`。
 
 **单个 commit 的执行步骤**：
 
