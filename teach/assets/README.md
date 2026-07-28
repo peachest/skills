@@ -65,3 +65,16 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 正文中用 `$...$` (行内) 或 `$$...$$` (块级) 包裹 LaTeX 公式即可自动渲染。
 
 参见 [Map #4](https://github.com/peachest/skills/issues/4)。
+
+## 字体加载策略 (#9)
+
+**系统字体,零 web font**。base.css 已定义系统字体栈:
+
+- body: Georgia, "Songti SC", "Noto Serif SC", serif
+- heading: -apple-system, "Segoe UI", "PingFang SC", sans-serif
+- mono: "SF Mono", "Fira Code", "Consolas", monospace
+
+迁移时:
+- llm-rl: 删除 `@import url('https://fonts.googleapis.com/...')`
+- ocr-image: 删除 "Source Serif 4" 引用(未本地化,fallback 到 Georgia)
+- mtp: 无需改动
