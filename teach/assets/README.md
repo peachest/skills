@@ -78,3 +78,12 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 - llm-rl: 删除 `@import url('https://fonts.googleapis.com/...')`
 - ocr-image: 删除 "Source Serif 4" 引用(未本地化,fallback 到 Georgia)
 - mtp: 无需改动
+
+## Mission 自动映射规则 (#13, map #12)
+
+批量生成时,mission 从子目录全部笔记内容自动推断:
+
+- **Why**: 从笔记内容推断学习动机
+- **Success looks like**: 从笔记覆盖的主题提取 3-5 个可观测目标
+- **Constraints**: 固定模板("从零开始,基于已有笔记,AFK 自动生成")
+- **Out of scope**: 从子目录边界推断
