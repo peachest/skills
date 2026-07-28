@@ -2,10 +2,23 @@
 
 每个子目录 spawn 一个 subagent,使用以下 prompt 模板。
 
+## ⚠️ 前置步骤(父 agent 执行,在 spawn subagent 之前)
+
+Subagent 沙箱限制所有文件访问到 CWD 内。父 agent **必须**在 spawn 前把源笔记复制到工作区:
+
+```bash
+mkdir -p ~/teach-lab/<subdir>/source-notes
+cp -r <notes_path>/*.md ~/teach-lab/<subdir>/source-notes/
+# 如果有子目录,递归复制
+cp -r <notes_path>/*/ ~/teach-lab/<subdir>/source-notes/ 2>/dev/null || true
+```
+
+Subagent 从 `source-notes/` 读取笔记,而非原始路径。
+
 ## 模板变量
 
 - `{subdir_name}` — 子目录名(如 `go`、`KVCache`)
-- `{notes_path}` — 源笔记目录绝对路径
+- `{notes_path}` — 源笔记目录绝对路径(仅父 agent 使用,用于预复制)
 - `{workspace_path}` — 工作区路径(如 `~/teach-lab/go/`)
 - `{notes_count}` — 笔记文件数
 
@@ -17,11 +30,11 @@
 ## 工作区
 
 工作区目录:{workspace_path}
-源笔记目录:{notes_path}({notes_count} 篇笔记)
+源笔记目录:source-notes/({notes_count} 篇笔记,已由父 agent 预复制到工作区内)
 
 ## 第一步:创建工作区
 
-在工作区目录下创建以下结构:
+在工作区目录下创建以下结构(如果尚不存在):
 - MISSION.md
 - RESOURCES.md
 - lessons/
@@ -29,9 +42,11 @@
 - reference/
 - NOTES.md
 
+注意:source-notes/ 目录已存在,里面是源笔记。不要修改它。
+
 ## 第二步:推断 Mission
 
-读取 {notes_path} 下全部 .md 文件(排除 assets/ 子目录)的完整内容。
+读取 source-notes/ 下全部 .md 文件的完整内容。
 
 从笔记内容推断 MISSION.md:
 
@@ -94,11 +109,19 @@
 ## 使用方式
 
 ```bash
-# 在 wayfinder 的执行阶段,对每个子目录 spawn subagent:
+# 在 wayfinder 的执行阶段,对每个子目录:
+
+# 1. 父 agent 预复制源笔记到工作区
+mkdir -p ~/teach-lab/<subdir>/source-notes
+cp -r <notes_path>/*.md ~/teach-lab/<subdir>/source-notes/
+find <notes_path> -name '*.md' -not -path '*/assets/*' \
+  -exec cp --parents {} ~/teach-lab/<subdir>/source-notes/ \; 2>/dev/null || true
+
+# 2. Spawn subagent with CWD = workspace
 subagent({
   agent: "<any available agent>",
   task: "<上述 prompt 模板,填入变量>",
-  cwd: "<workspace_path>",
+  cwd: "~/teach-lab/<subdir>",
   async: true
 })
 ```
