@@ -322,6 +322,10 @@ figcaption {
 }
 
 /* --- Quiz --- */
+.quiz {
+  margin: 1.5rem 0;
+}
+
 .quiz-section {
   margin-top: 3rem;
   padding-top: 1.5rem;
@@ -345,14 +349,9 @@ figcaption {
   font-size: 1rem;
 }
 
-.quiz-options {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
 .quiz-option {
-  display: block;
+  display: flex;
+  align-items: flex-start;
   padding: 0.6rem 0.9rem;
   margin-bottom: 0.5rem;
   border: 1px solid var(--border);
@@ -367,9 +366,9 @@ figcaption {
   border-color: var(--accent);
 }
 
-.quiz-option.selected {
-  background: var(--accent-bg);
-  border-color: var(--accent);
+.quiz-option input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .quiz-option.correct {
