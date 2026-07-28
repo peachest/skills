@@ -1,0 +1,480 @@
+/* teach — Shared Stylesheet (base.css)
+   Inspired by Tufte: serif body, generous spacing, minimal chrome.
+   Canonical source: skills/teach/assets/base.css — copy to workspace assets/. */
+
+:root {
+  /* --- Fonts --- */
+  --body-font: Georgia, "Songti SC", "Noto Serif SC", "Times New Roman", serif;
+  --heading-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
+  --mono-font: "SF Mono", "Fira Code", "Consolas", "Liberation Mono", monospace;
+
+  /* --- Colors --- */
+  --text: #1a1a1a;
+  --muted: #6b6b6b;
+  --light: #999;
+  --accent: #0366d6;
+  --accent-bg: #0969da14;
+  --bg: #ffffff;
+  --code-bg: #f6f8fa;
+  --border: #e1e4e8;
+
+  /* --- Callout colors --- */
+  --note-color: #0366d6;
+  --tip-color: #6f42c1;
+  --warning-color: #d97706;
+  --warning-bg: #fffbdd;
+  --success-color: #22863a;
+  --success-bg: #f0fff4;
+  --danger-color: #cb2431;
+  --danger-bg: #ffeef0;
+
+  /* --- Quiz colors --- */
+  --correct: #22863a;
+  --correct-bg: #f0fff4;
+  --wrong: #cb2431;
+  --wrong-bg: #ffeef0;
+
+  /* --- Layout --- */
+  --max-width: 680px;
+  --line-height: 1.75;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--body-font);
+  font-size: 17px;
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  margin: 0;
+  padding: 2rem 1.5rem 4rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+article {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* --- Headings --- */
+h1, h2, h3, h4 {
+  font-family: var(--heading-font);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 {
+  font-size: 1.9rem;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.35rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-size: 1.1rem;
+  margin-top: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 1.1rem;
+}
+
+/* --- Lesson Header --- */
+.lesson-header {
+  margin-bottom: 2rem;
+}
+
+.lesson-meta {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+/* alias: .meta (from ocr-image) */
+.meta {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+.subtitle {
+  font-size: 1.05rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-bottom: 0;
+}
+
+/* --- Tags (from llm-rl) --- */
+.tag {
+  display: inline-block;
+  font-family: var(--heading-font);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  margin-right: 0.15rem;
+}
+
+/* --- Navigation --- */
+.lesson-nav {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.lesson-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.lesson-nav a:hover { text-decoration: underline; }
+
+.lesson-nav .separator { margin: 0 0.5rem; color: var(--light); }
+
+/* alias: .nav-links (from llm-rl) */
+.nav-links {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.nav-links a { color: var(--accent); }
+
+/* --- Links --- */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+/* --- Lists --- */
+ul, ol {
+  padding-left: 1.4rem;
+  margin-bottom: 1.1rem;
+}
+
+li { margin-bottom: 0.4rem; }
+
+/* --- Blockquotes --- */
+blockquote {
+  margin: 1.2rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-style: italic;
+}
+
+blockquote p { margin-bottom: 0; }
+
+/* --- Sidenote (from llm-rl) --- */
+.sidenote {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+/* --- Source reference (from llm-rl) --- */
+.src-ref {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.25rem 0;
+}
+.src-ref a { color: var(--accent); }
+
+/* --- Callouts (Obsidian-inspired naming) --- */
+.callout {
+  margin: 1.2rem 0;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+}
+
+.callout-title {
+  font-family: var(--heading-font);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+
+.callout p { margin-bottom: 0; }
+
+.callout-note {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--note-color);
+}
+.callout-note .callout-title { color: var(--note-color); }
+
+.callout-tip {
+  background: #f6f8fa;
+  border-left: 3px solid var(--tip-color);
+}
+.callout-tip .callout-title { color: var(--tip-color); }
+
+.callout-warning {
+  background: var(--warning-bg);
+  border-left: 3px solid var(--warning-color);
+}
+.callout-warning .callout-title { color: #92400e; }
+
+.callout-success {
+  background: var(--success-bg);
+  border-left: 3px solid var(--success-color);
+}
+.callout-success .callout-title { color: var(--success-color); }
+
+.callout-danger {
+  background: var(--danger-bg);
+  border-left: 3px solid var(--danger-color);
+}
+.callout-danger .callout-title { color: var(--danger-color); }
+
+/* --- Code --- */
+code {
+  font-family: var(--mono-font);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code-bg);
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  line-height: 1.5;
+  font-size: 0.85rem;
+  margin: 1.2rem 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* --- Tables --- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2rem 0;
+  font-size: 0.92rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  font-family: var(--heading-font);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+}
+
+/* --- Figures (from ocr-image) --- */
+figure {
+  margin: 1.2rem 0;
+  text-align: center;
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 0.88em;
+  margin-top: 0.3rem;
+}
+
+/* --- KaTeX display math --- */
+.katex-display {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+
+/* --- Quiz --- */
+.quiz-section {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--border);
+}
+
+.quiz-intro {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+.quiz-question {
+  margin-bottom: 2rem;
+}
+
+.quiz-question-text {
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+  font-family: var(--heading-font);
+  font-size: 1rem;
+}
+
+.quiz-options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.quiz-option {
+  display: block;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-size: 0.95rem;
+}
+
+.quiz-option:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.quiz-option.selected {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.quiz-option.correct {
+  background: var(--correct-bg);
+  border-color: var(--correct);
+  color: var(--correct);
+}
+
+.quiz-option.wrong {
+  background: var(--wrong-bg);
+  border-color: var(--wrong);
+  color: var(--wrong);
+}
+
+.quiz-option.disabled {
+  cursor: default;
+}
+
+.quiz-option.disabled:hover {
+  background: var(--code-bg);
+}
+
+.quiz-option.correct:hover {
+  background: var(--correct-bg);
+}
+
+.quiz-option.wrong:hover {
+  background: var(--wrong-bg);
+}
+
+.quiz-feedback {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  display: none;
+}
+
+.quiz-feedback.visible { display: block; }
+
+.quiz-feedback.correct {
+  color: var(--correct);
+}
+
+.quiz-feedback.wrong {
+  color: var(--wrong);
+}
+
+.quiz-score {
+  font-family: var(--heading-font);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 1rem;
+  border-radius: var(--radius);
+  margin-top: 1.5rem;
+  display: none;
+}
+
+.quiz-score.visible { display: block; }
+
+.quiz-score.pass {
+  background: var(--correct-bg);
+  color: var(--correct);
+}
+
+.quiz-score.fail {
+  background: var(--wrong-bg);
+  color: var(--wrong);
+}
+
+/* --- Resources --- */
+.resources-section {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.resources-section h2 { border-bottom: none; }
+
+.resource-item {
+  margin-bottom: 0.8rem;
+  font-size: 0.93rem;
+}
+
+/* --- Footer --- */
+.lesson-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.followup-reminder {
+  background: var(--accent-bg);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  font-size: 0.93rem;
+}
+
+.followup-reminder p { margin: 0; }
+
+.followup-reminder strong { color: var(--accent); }
+
+/* --- Print --- */
+@media print {
+  body { padding: 1rem; font-size: 12pt; }
+  .quiz-option { border: 1px solid #ccc; }
+  .lesson-nav { display: none; }
+  .followup-reminder { display: none; }
+}
