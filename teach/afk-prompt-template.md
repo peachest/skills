@@ -210,3 +210,17 @@ RAG 已完成(冒烟测试),跳过。
 - 独有的全是内容驱动领域组件(pipeline/decision-matrix/fusion-viz/tree-diagram)
 
 AI 的随机性 + 主题差异 = 自然多样性。无需额外激励。
+
+## 批量生成结果 (Map #12)
+
+| 批次 | 工作区 | Lessons | CSS Classes |
+|---|---|---|---|
+| Batch 1 | go-core, go-eng, go-tools, go-k8s | 18 | 284 |
+| Batch 2 | k8s-scheduling, k8s-ops, KVCache-quant, KVCache-sys | 18 | 368 |
+| Batch 3 | 前端, 函数式编程, git, attention | 17 | 339 |
+| Batch 4 | 容器, Linux, 量化, nvidia | 20 | 334 |
+| Batch 5 | 设计范式, 算法, 自动化测试, 密码学 | 19 | 354 |
+| RAG (冒烟测试) | RAG | 3 | 77 |
+| **合计** | **21 工作区** | **95** | **1124 unique** |
+
+3 轮组件分析 (v1 → v2 → v3) → 27 个组件族抽取到 base.css。
