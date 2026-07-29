@@ -109,6 +109,7 @@ done
 - 不要尝试和人类对话
 - 不要打开 lesson 文件(不需要 CLI 命令)
 - 不要创建 learning-records/(AFK 模式下没有学习者)
+- **绝对不要向工作区目录之外的路径写任何文件**。所有文件(MISSION.md、RESOURCES.md、NOTES.md、lessons/、reference/)都必须写在工作区目录内。如果 write 工具失败,用 `cat > 文件名 <<'EOF'` heredoc 写文件时,确保文件名是相对路径(如 `lessons/0001-xxx.html`),不要用绝对路径或 `~/` 前缀。先 `cd` 到工作区目录再写文件。
 ```
 
 ## 使用方式
