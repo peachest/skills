@@ -12,10 +12,10 @@ npx skills add -g -y ./<skill-name>
 npx skills add -g ./<skill-name>
 
 # 批量安装当前仓库所有 skill 到 Pi
-npx skills add ~/skills/ --global --all -a pi -y
+npx skills add ~/skills/ --global -a pi -y
 
 # 安装 vendor 下的 mattpocock skill
-npx skills add ~/skills/vendor/mattpocock --global --all -a pi -y
+npx skills add ~/skills/vendor/mattpocock --global -a pi -y
 ```
 
 ## 管理
