@@ -8,12 +8,17 @@ Subagent 沙箱限制所有文件访问到 CWD 内。父 agent **必须**在 spa
 
 ```bash
 mkdir -p ~/teach-lab/<subdir>/source-notes
-cp -r <notes_path>/*.md ~/teach-lab/<subdir>/source-notes/
-# 如果有子目录,递归复制
-cp -r <notes_path>/*/ ~/teach-lab/<subdir>/source-notes/ 2>/dev/null || true
+cd <notes_path>
+find . -name '*.md' -not -path '*/assets/*' | while read f; do
+  dir=$(dirname "$f")
+  mkdir -p "~/teach-lab/<subdir>/source-notes/$dir"
+  cp "$f" "~/teach-lab/<subdir>/source-notes/$dir/"
+done
 ```
 
-Subagent 从 `source-notes/` 读取笔记,而非原始路径。
+这会保留子目录结构(如 `source-notes/llamaIndex/LlamaIndex.md`)。Subagent 从 `source-notes/` 读取笔记,而非原始路径。
+
+**冒烟测试验证**(RAG,4 篇笔记):此方案可行,subagent 成功读取全部笔记并生成了 3 课 + 1 reference。
 
 ## 模板变量
 
@@ -111,11 +116,14 @@ Subagent 从 `source-notes/` 读取笔记,而非原始路径。
 ```bash
 # 在 wayfinder 的执行阶段,对每个子目录:
 
-# 1. 父 agent 预复制源笔记到工作区
+# 1. 父 agent 预复制源笔记到工作区(保留子目录结构)
 mkdir -p ~/teach-lab/<subdir>/source-notes
-cp -r <notes_path>/*.md ~/teach-lab/<subdir>/source-notes/
-find <notes_path> -name '*.md' -not -path '*/assets/*' \
-  -exec cp --parents {} ~/teach-lab/<subdir>/source-notes/ \; 2>/dev/null || true
+cd <notes_path>
+find . -name '*.md' -not -path '*/assets/*' | while read f; do
+  dir=$(dirname "$f")
+  mkdir -p "~/teach-lab/<subdir>/source-notes/$dir"
+  cp "$f" "~/teach-lab/<subdir>/source-notes/$dir/"
+done
 
 # 2. Spawn subagent with CWD = workspace
 subagent({
@@ -125,6 +133,23 @@ subagent({
   async: true
 })
 ```
+
+## 冒烟测试发现 (#14 验证)
+
+RAG 子目录(4 篇笔记)冒烟测试结果:
+
+- ✅ **Prompt 可行**:subagent 15 分钟内自主完成全部流程
+- ✅ **Mission 推断正确**:从笔记内容提取了 RAG pipeline 的 Why/Success/Out-of-scope
+- ✅ **CSS 多样性自然产生**:3 课产出 77 个不同 CSS class,含 pipeline 流程图、暗色主题、融合可视化等
+- ✅ **Quiz 声明式格式**:3 课都用 data-quiz JSON
+- ✅ **NOTES.md 组件记录**:为 #16 组件分析提供了结构化输入
+- ⚠️ **大目录 token 消耗**:go(231 篇)全读可能超出 context,需在 #15 并行策略中考虑分批
+
+### 值得注意的设计行为
+
+- AI 自行决定每课不同视觉风格(暖色/暗色/多彩),多样性激励(#17)可能不需要额外干预
+- AI 自行决定了 3 课(而非更多),覆盖了笔记的核心知识点
+- lesson 2 主动使用了暗色主题 — 这是 #4 的 #11(暗色模式)没有预期的发现
 
 ## 关联
 
