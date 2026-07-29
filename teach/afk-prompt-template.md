@@ -151,9 +151,49 @@ RAG 子目录(4 篇笔记)冒烟测试结果:
 - AI 自行决定了 3 课(而非更多),覆盖了笔记的核心知识点
 - lesson 2 主动使用了暗色主题 — 这是 #4 的 #11(暗色模式)没有预期的发现
 
+## 并行生成策略 (#15)
+
+### 大目录按主题拆分
+
+大目录(go/k8s/KVCache)按主题拆分为多个独立工作区,每个工作区一个 subagent。每个工作区有自己的 MISSION.md 和 lessons/。
+
+### 工作区清单(12 个 subagent + RAG 已完成)
+
+| 批次 | 工作区 | 来源 | ~Tokens |
+|---|---|---|---|
+| 1 | `teach-lab/go-core` | go 语言核心+并发 | ~100K |
+| 1 | `teach-lab/go-eng` | go 测试+工程实践 | ~90K |
+| 1 | `teach-lab/go-tools` | go 工具链+设计模式 | ~80K |
+| 1 | `teach-lab/go-k8s` | go K8s controller+可观测性 | ~110K |
+| 2 | `teach-lab/k8s-scheduling` | k8s 调度+DRA+资源管理 | ~85K |
+| 2 | `teach-lab/k8s-ops` | k8s 部署+运维+网络 | ~85K |
+| 2 | `teach-lab/KVCache-quant` | KVCache 量化方法 | ~80K |
+| 2 | `teach-lab/KVCache-sys` | KVCache 系统与缓存管理 | ~80K |
+| 3 | `teach-lab/前端` | 前端 20 篇 | ~27K |
+| 3 | `teach-lab/函数式编程` | 8 篇 | ~30K |
+| 3 | `teach-lab/git` | 7 篇 | ~10K |
+| 3 | `teach-lab/attention` | 7 篇 | ~3K |
+
+RAG 已完成(冒烟测试),跳过。
+
+### 调度规则
+
+- **每批 4 个 subagent 并行**,共 3 批
+- 每批等全部完成再跑下一批
+- 预计总时间 ~45-60 分钟(每批 ~15-20 分钟)
+- 父 agent 负责预分割笔记到各工作区的 `source-notes/`
+
+### 父 agent 预分割流程
+
+对每个大目录,父 agent:
+1. 读取全部笔记文件名
+2. 按主题分类(用上方表格的分组)
+3. 为每个工作区创建 `source-notes/` 并复制对应笔记
+4. Spawn subagent
+
 ## 关联
 
 - #13: mission 推断规则(已嵌入 prompt)
-- #15: 并行生成策略(决定几个 subagent 同时跑)
+- #15: 并行生成策略(已确定:4 个一批,大目录按主题拆分)
 - #17: lesson 多样性激励(prompt 中的"自由发挥"部分,可在 #17 中增强)
 - #16: 组件分析 spec(生成完毕后扫描产物)
