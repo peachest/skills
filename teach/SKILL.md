@@ -175,6 +175,18 @@ While creating lessons, you should also create reference documents. Lessons can 
 
 Lessons will rarely be revisited later - reference documents will be. They should be the compressed essence of the lesson, in a format designed for quick reference.
 
+### Reference Document Styling
+
+Reference documents follow the **same CSS conventions** as lessons:
+
+- Link `../assets/base.css` (same stylesheet as lessons)
+- Use the component library (`.compare-table`, `.compare-card`, `.badge`, `.term-card`, `.callout`, etc.) — never plain `h2/h3/p` stacks
+- Match the workspace's theme: if lessons use `.dark`, reference docs should too
+- Glossaries: use `.compare-table` for term comparison, `.badge` for version/category tags, colored borders for grouping
+- Cheatsheets: use `.compare-grid` for side-by-side patterns, `.code-block` for snippets, `.callout-warning` for gotchas
+
+Reference documents should be **visually rich** — they are the documents users return to most. A wall of plain text defeats the purpose of quick reference.
+
 Some learning topics lend themselves to reference:
 
 - Syntax and code snippets for programming
