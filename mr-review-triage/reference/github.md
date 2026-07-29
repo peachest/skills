@@ -1,6 +1,6 @@
 # GitHub 操作参考
 
-GitHub 平台的具体命令、API 端点和数据格式。通用流程见 [SKILL.md](../SKILL.md)。
+GitHub 平台的具体命令、API 端点和数据格式。
 
 ## 平台检测
 
