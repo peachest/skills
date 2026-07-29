@@ -43,7 +43,7 @@ def _is_review_content(body):
         return False
     # Exclude summary / fallback / LGTM / error notes
     # (fallback notes are handled separately by _is_fallback_*)
-    if body_stripped.startswith("🔍 OpenCodeReview — issues"):
+    if _is_fallback_body(body_stripped):
         return False  # fallback note — handled separately
     if body_stripped.startswith("🔍"):
         return False  # summary
@@ -110,8 +110,13 @@ def _parse_fallback_issues(discussion_id, body):
 
 
 def _is_fallback_body(body):
-    """Check if a body is an OCR fallback note."""
-    return body.strip().startswith("🔍 OpenCodeReview — issues")
+    """Check if a body is an OCR fallback note.
+
+    Matches both plain text and markdown bold variants:
+    - 🔍 OpenCodeReview — issues ...
+    - 🔍 **OpenCodeReview** — issues ...
+    """
+    return bool(re.match(r"🔍 \*{0,2}OpenCodeReview\*{0,2} — issues", body.strip()))
 
 
 # ── GitLab backend ──
