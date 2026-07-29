@@ -221,10 +221,9 @@ def _post_gitlab(mr_iid, items):
             method="POST",
             data={"body": body},
         )
-        if not (200 <= status < 300):
-            print(f"[FAIL] reply {disc_id[:12]}: HTTP {status}", file=sys.stderr)
-            fail += 1
-            continue
+        reply_ok = 200 <= status < 300
+        if not reply_ok:
+            print(f"[WARN] reply {disc_id[:12]}: HTTP {status} — trying resolve anyway", file=sys.stderr)
 
         # 2) Resolve
         if do_resolve:
@@ -236,14 +235,17 @@ def _post_gitlab(mr_iid, items):
             if 200 <= status < 300:
                 ok += 1
                 label = _CLASSIFICATION_LABELS.get(cls, cls)
-                print(f"[OK] {label} resolved {disc_id[:12]}", file=sys.stderr)
+                print(f"[OK] {label} resolved {disc_id[:12]}" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
             else:
-                print(f"[WARN] reply ok but resolve failed for {disc_id[:12]}: HTTP {status}", file=sys.stderr)
+                print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}" + ("" if reply_ok else " (reply also failed)"), file=sys.stderr)
                 fail += 1
-        else:
+        elif reply_ok:
             ok += 1
             label = _CLASSIFICATION_LABELS.get(cls, cls)
             print(f"[OK] {label} labeled {disc_id[:12]} (open)", file=sys.stderr)
+        else:
+            fail += 1
+            print(f"[FAIL] {disc_id[:12]}: both reply and resolve skipped", file=sys.stderr)
 
     total = ok + fail
     print(f"Done: {ok} ok, {fail} failed, {skip} skipped ({total}/{len(items)} processed)", file=sys.stderr)
