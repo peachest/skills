@@ -967,6 +967,14 @@ figcaption {
   }
 }
 
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* --- Print --- */
 @media print {
   body { padding: 1rem; font-size: 12pt; }
