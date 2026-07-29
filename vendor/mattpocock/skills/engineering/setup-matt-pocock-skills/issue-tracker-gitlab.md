@@ -11,11 +11,26 @@ Remote: `internal.example.com:10022/llm/llmops/hami/ppu-device-plugin.git`
 - **列出 issue**：`glab issue list -F json`，配合 `--label` 过滤。
 - **评论 issue**：`glab issue note <number> --message "..."`。GitLab 将评论称为 "notes"。
 - **添加/移除标签**：`glab issue update <number> --label "..."` / `--unlabel "..."`。多个标签用逗号分隔或重复参数。
-- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push/merge 到默认分支后 GitLab 自动 close。关闭前通过 `glab issue update <n> --unlabel "in-progress,ready-for-agent"` 清理工作流标签。**唯一例外**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。
+- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push/merge 到默认分支后 GitLab 自动 close。关闭前通过 `glab issue update <n> --unlabel "in-progress,ready-for-agent"` 清理工作流标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭 Map（漏写 `Closes #<map>` 或 GitLab 未触发），agent 手动 `glab issue close <map>`（先 note 记录原因）。详见 MR 约定段的「merge 后验证」。
 - **更新 issue body**：`glab issue update <n> --description "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--description "$(cat <<'EOF'\n...\nEOF\n)"`。
 - **Merge Request**：GitLab 将 PR 称为 "merge request"。使用 `glab mr create`、`glab mr view`、`glab mr note` 等。
 
 `glab` 在仓库中运行时自动推断项目。
+
+## CI/CD 操作 — Pipeline 与 Job 查询
+
+- **列出 pipeline**：`glab ci list`。按 MR 过滤：`glab ci list 2>&1 | grep "merge-requests/<n>/head"`
+- **查看 pipeline 状态**：`glab api "projects/22412/pipelines/<id>" | jq -r '.status'`
+- **查看 pipeline 的 job 列表**：`glab api "projects/22412/pipelines/<id>/jobs" | jq -r '.[] | "\(.name) | \(.status) | \(.web_url)"'`
+- **查看 job 日志**：`glab api "projects/22412/jobs/<job_id>/trace"`
+- **轮询 pipeline 完成**：`while true; do status=$(glab api "projects/22412/pipelines/<id>" | jq -r '.status'); echo "$(date +%H:%M:%S) pipeline status: $status"; [ "$status" = "success" ] || [ "$status" = "failed" ] && break; sleep 15; done`（timeout 600s）
+- **JSON 过滤**：管道外部 `jq`：`glab api "..." | jq -r '...'`
+
+project_id 为 22412。Pipeline ID 和 Job ID 是全局唯一的，不等于 issue IID。
+
+## Issue linking
+
+- **创建 issue link 返回 409**：`Part of #<map>` 在 body 中已自动建立 `relates_to` 关联，手动 link 是冗余操作。遇到 409 直接忽略。
 
 ## MR 作为 triage 来源
 
@@ -83,6 +98,7 @@ Agent 不主动创建 MR。用户说"提交 MR"或"创建 merge request"时，�
 - **命令**：`glab mr create --title "<map title>" --description "$(cat <<'EOF'\n参见 #<map>。\n\n子 ticket：\n- #<n> <title>\n- #<m> <title>\n\nCloses #<map>\nEOF\n)" --target-branch main`。
 - **确认**：创建前必须向用户展示 MR 描述并等待确认。
 - **关闭 Map**：merge 后 GitLab 根据 MR description 中的 `Closes #<map>` 自动关闭。
+- **merge 后验证**：merge 完成后，agent 必须运行 `glab api "projects/22412/issues/<map_iid>" | jq -r '.state'` 确认 Map 已 closed。若仍为 opened（MR description 漏写 `Closes #<map>` 或 GitLab 未触发自动关闭），则手动关闭：先 `glab issue note <map> --message "..."` 记录原因，再 `glab issue close <map>`。此为 `glab issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
 
 ## Issue 模板
 
