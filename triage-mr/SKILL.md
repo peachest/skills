@@ -10,6 +10,16 @@ Pull unresolved review comments from a remote MR or PR, hand them to `/skill:fix
 
 This skill is a thin orchestration layer. The classification, grilling, and fixing all live in `/skill:fix`. This skill owns only the remote-specific work: **pull**, **post labels**, and **resolve**.
 
+## Architecture
+
+```
+/skill:triage-mr  (orchestration: pull → /fix → post labels → resolve)
+    │
+    ├── /fix  (classification + grill + fix + verify + report)
+    │
+    └── mr-review-triage  (scripts + platform reference docs)
+```
+
 ## Platform support
 
 GitLab and GitHub are both supported. The platform is auto-detected from `git remote get-url origin`:
@@ -31,7 +41,28 @@ Platform-specific commands, API endpoints, and data formats:
 
 ## Scripts
 
-All scripts live in the `mr-review-triage` skill directory. Use `<SKILL_DIR>` to resolve them — both skills share the same scripts.
+All scripts live in the `mr-review-triage` skill directory. Use `<SKILL_DIR>` to resolve them.
+
+| Script | Purpose |
+| ------ | ------- |
+| `<SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_OR_PR_ID>` | Pull OCR bot review comments, deduplicated |
+| `<SKILL_DIR>/scripts/ocr-post-labels.py <MR_OR_PR_ID>` | Post verdict labels + resolve threads |
+
+### Platform detection
+
+Scripts auto-detect the platform from `git remote get-url origin`:
+
+- `github.com` in URL → GitHub
+- anything else → GitLab
+
+Override with `OCR_PLATFORM=gitlab|github` env var.
+
+### Backend modules
+
+| Module | Platform |
+| ------ | -------- |
+| `scripts/ocr_gitlab.py` | GitLab API client (`curl`, `get_project_id`) |
+| `scripts/ocr_github.py` | GitHub API client (`curl`, `graphql`, `get_project_id`) |
 
 ## Process
 
