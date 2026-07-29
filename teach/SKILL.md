@@ -27,7 +27,7 @@ To learn at a deep level, the user needs three things:
 - **Skills**, acquired through highly-relevant interactive lessons devised by you, based on the knowledge
 - **Wisdom**, which comes from interacting with other learners and practitioners
 
-Before the `RESOURCES.md` is well-populated, your focus should be to find high-quality resources which will help the user acquire knowledge. Never trust your parametric knowledge.
+Before the `RESOURCES.md` is well-populated, your focus should be to find high-quality resources which will help the user acquire knowledge.
 
 Some topics may require more skills than knowledge. Learning more about theoretical physics might be more knowledge-based. For yoga, more skills-based.
 
@@ -52,8 +52,6 @@ A lesson should be **beautiful** — clean, readable typography and layout — s
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development.
 
-If possible, open the lesson file for the user by running a CLI command.
-
 Each lesson should link via HTML anchors to other lessons and reference documents.
 
 Each lesson should recommend a primary source for the user to read or watch. This should be the most high-quality, high-trust resource you found on the topic.
@@ -64,59 +62,11 @@ Each lesson should contain a reminder to ask followup questions to the agent. Th
 
 Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse.
 
-Reuse is the default, not the exception. Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — never inline code a future lesson would duplicate.
+Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — keep inline code to things no future lesson would duplicate.
 
 A shared stylesheet is the first component every workspace earns: every lesson links it, so the lessons look like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
 
-### CSS Conventions
-
-The canonical stylesheet is `skills/teach/assets/base.css`. Each workspace copies it to `./assets/base.css`. Every lesson links it:
-
-```html
-<link rel="stylesheet" href="../assets/base.css">
-```
-
-**CSS variables** (defined in `:root`, overridden in dark mode):
-
-| Variable | Purpose | Light default |
-|---|---|---|
-| `--serif` | Body font | Georgia, Songti SC, serif |
-| `--sans` | Heading font | -apple-system, PingFang SC, sans-serif |
-| `--mono` | Code font | SF Mono, Fira Code, monospace |
-| `--bg` | Page background | #ffffff |
-| `--surface` | Card/container background | #ffffff |
-| `--text` | Body text | #1a1a1a |
-| `--muted` | Secondary text | #6b6b6b |
-| `--accent` | Link/brand color | #0366d6 |
-| `--border` | Border color | #e1e4e8 |
-| `--green`/`--red`/`--orange`/`--purple`/`--teal` | Semantic colors | GitHub-style palette |
-
-**Dark mode**: automatic via `prefers-color-scheme: dark`, or per-lesson override by adding `.dark` class to `<html>` or `<body>`. To force light mode, add `.light` class.
-
-**Available components** (use these class names; don't reinvent):
-
-| Category | Classes |
-|---|---|
-| Callouts | `.callout` + `.callout-note/-tip/-warning/-success/-danger` |
-| Quiz | `.quiz-container` > `.quiz` + `.quiz-section/-question/-option/-feedback/-score` |
-| Compare | `.compare-grid` > `.compare-card`, `.compare-table` |
-| Pipeline | `.pipeline` > `.pipeline-stage` + `.pipeline-arrow` |
-| Flow chart | `.flow-diagram` > `.flow-box` + `.flow-arrow` + `.flow-row` + `.flow-step` + `.flow-num` |
-| Timeline | `.timeline` > `.timeline-item` + `.timeline-title` + `.timeline-desc` |
-| Steps | `.step-list` (auto-numbered), `.stage-num` + `.stage-name` + `.stage-desc` |
-| Architecture | `.arch-layer` + `.arch-arrow` |
-| Matrix | `.matrix-grid` > `.matrix-cell` + `.matrix-label` |
-| Code | `.code-block` + `.keyword`/`.string` syntax highlight, `.code-compare` (diff) |
-| Formula | `.formula-box` (KaTeX container) |
-| File tree | `.tree` (generic) > `.tree-node`/`.tree-leaf`, `.file-tree` > `.dir`/`.file` |
-| Cards | `.tech-card` + `.tech-badge` |
-| States | `.selected`, `.show`/`.hidden`, `.good`/`.bad`/`.new` |
-| Inline | `.badge`, `.highlight`, `.label`, `.comment`, `.tag`, `.arrow`, `.ref-link` |
-
-**Rules**:
-- Use these class names as-is. Don't create variants (`.callout-green`, `.badge-good`) — use semantic colors via CSS variables instead.
-- For domain-specific components not in base.css, use inline `<style>` in the lesson. Only extract to base.css if the same pattern appears in ≥2 workspaces.
-- KaTeX is opt-in per workspace. Copy `katex.min.css`, `katex.min.js`, `auto-render.min.js`, `render.js` to `./assets/` and add `<script>` tags to lessons that need math.
+When creating or styling HTML (lessons or reference documents), follow the [CSS Conventions](./CSS-CONVENTIONS.md) — component catalog, CSS variables, dark mode, and reference document styling.
 
 ## The Mission
 
@@ -174,18 +124,6 @@ You should attempt to find high-reputation communities the user can join. If the
 While creating lessons, you should also create reference documents. Lessons can reference these documents - they are useful for tracking raw units of knowledge useful across lessons.
 
 Lessons will rarely be revisited later - reference documents will be. They should be the compressed essence of the lesson, in a format designed for quick reference.
-
-### Reference Document Styling
-
-Reference documents follow the **same CSS conventions** as lessons:
-
-- Link `../assets/base.css` (same stylesheet as lessons)
-- Use the component library (`.compare-table`, `.compare-card`, `.badge`, `.term-card`, `.callout`, etc.) — never plain `h2/h3/p` stacks
-- Match the workspace's theme: if lessons use `.dark`, reference docs should too
-- Glossaries: use `.compare-table` for term comparison, `.badge` for version/category tags, colored borders for grouping
-- Cheatsheets: use `.compare-grid` for side-by-side patterns, `.code-block` for snippets, `.callout-warning` for gotchas
-
-Reference documents should be **visually rich** — they are the documents users return to most. A wall of plain text defeats the purpose of quick reference.
 
 Some learning topics lend themselves to reference:
 
