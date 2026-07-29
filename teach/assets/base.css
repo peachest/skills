@@ -1,12 +1,13 @@
 /* teach — Shared Stylesheet (base.css)
    Inspired by Tufte: serif body, generous spacing, minimal chrome.
-   Canonical source: skills/teach/assets/base.css — copy to workspace assets/. */
+   Canonical source: skills/teach/assets/base.css — copy to workspace assets/.
+   Components derived from empirical analysis of 95 lessons across 21 workspaces. */
 
 :root {
-  /* --- Fonts --- */
-  --body-font: Georgia, "Songti SC", "Noto Serif SC", "Times New Roman", serif;
-  --heading-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
-  --mono-font: "SF Mono", "Fira Code", "Consolas", "Liberation Mono", monospace;
+  /* --- Fonts (renamed from --body-font/--heading-font/--mono-font, 186:0 consensus) --- */
+  --serif: Georgia, "Songti SC", "Noto Serif SC", "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", "Fira Code", "Consolas", "Liberation Mono", monospace;
 
   /* --- Colors --- */
   --text: #1a1a1a;
@@ -15,24 +16,37 @@
   --accent: #0366d6;
   --accent-bg: #0969da14;
   --bg: #ffffff;
+  --surface: #ffffff;          /* container/card background (63/95 lessons) */
   --code-bg: #f6f8fa;
   --border: #e1e4e8;
 
-  /* --- Callout colors --- */
-  --note-color: #0366d6;
-  --tip-color: #6f42c1;
-  --warning-color: #d97706;
-  --warning-bg: #fffbdd;
-  --success-color: #22863a;
-  --success-bg: #f0fff4;
-  --danger-color: #cb2431;
-  --danger-bg: #ffeef0;
+  /* --- Semantic colors (85+ lesson consensus) --- */
+  --green: #22863a;
+  --green-bg: #f0fff4;
+  --red: #cb2431;
+  --red-bg: #ffeef0;
+  --orange: #d97706;
+  --orange-bg: #fffbdd;
+  --purple: #6f42c1;
+  --purple-bg: #f6f8fa;
+  --teal: #2dd4bf;
+  --teal-bg: #f0fdfa;
+
+  /* --- Callout colors (mapped to semantic colors) --- */
+  --note-color: var(--accent);
+  --tip-color: var(--purple);
+  --warning-color: var(--orange);
+  --warning-bg: var(--orange-bg);
+  --success-color: var(--green);
+  --success-bg: var(--green-bg);
+  --danger-color: var(--red);
+  --danger-bg: var(--red-bg);
 
   /* --- Quiz colors --- */
-  --correct: #22863a;
-  --correct-bg: #f0fff4;
-  --wrong: #cb2431;
-  --wrong-bg: #ffeef0;
+  --correct: var(--green);
+  --correct-bg: var(--green-bg);
+  --wrong: var(--red);
+  --wrong-bg: var(--red-bg);
 
   /* --- Layout --- */
   --max-width: 680px;
@@ -40,10 +54,48 @@
   --radius: 6px;
 }
 
+/* --- Dark mode (67% of lessons use dark themes; support both system + per-lesson override) --- */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --light: #6e7681;
+    --accent: #58a6ff;
+    --accent-bg: #58a6ff14;
+    --bg: #0d1117;
+    --surface: #16161e;
+    --code-bg: #16161e;
+    --border: #30363d;
+    --green-bg: #0d2818;
+    --red-bg: #2d1217;
+    --orange-bg: #2d1b00;
+    --purple-bg: #1a1a2e;
+    --teal-bg: #042f2e;
+  }
+}
+
+/* Per-lesson dark override (add .dark class to <html> or <body>) */
+.dark {
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --light: #6e7681;
+  --accent: #58a6ff;
+  --accent-bg: #58a6ff14;
+  --bg: #0d1117;
+  --surface: #16161e;
+  --code-bg: #16161e;
+  --border: #30363d;
+  --green-bg: #0d2818;
+  --red-bg: #2d1217;
+  --orange-bg: #2d1b00;
+  --purple-bg: #1a1a2e;
+  --teal-bg: #042f2e;
+}
+
 * { box-sizing: border-box; }
 
 body {
-  font-family: var(--body-font);
+  font-family: var(--serif);
   font-size: 17px;
   line-height: var(--line-height);
   color: var(--text);
@@ -60,7 +112,7 @@ article {
 
 /* --- Headings --- */
 h1, h2, h3, h4 {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-weight: 600;
   line-height: 1.3;
   color: var(--text);
@@ -98,7 +150,7 @@ p {
 }
 
 .lesson-meta {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -106,9 +158,9 @@ p {
   margin-bottom: 0.3rem;
 }
 
-/* alias: .meta (from ocr-image) */
+/* alias: .meta */
 .meta {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 0.85rem;
   color: var(--muted);
   margin-bottom: 1.5rem;
@@ -121,10 +173,10 @@ p {
   margin-bottom: 0;
 }
 
-/* --- Tags (from llm-rl) --- */
+/* --- Tags --- */
 .tag {
   display: inline-block;
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 0.72rem;
   font-weight: 500;
   padding: 0.1rem 0.4rem;
@@ -136,7 +188,7 @@ p {
 
 /* --- Navigation --- */
 .lesson-nav {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 0.85rem;
   color: var(--muted);
   margin-bottom: 2rem;
@@ -153,7 +205,6 @@ p {
 
 .lesson-nav .separator { margin: 0 0.5rem; color: var(--light); }
 
-/* alias: .nav-links (from llm-rl) */
 .nav-links {
   margin-top: 2.5rem;
   padding-top: 1rem;
@@ -190,7 +241,7 @@ blockquote {
 
 blockquote p { margin-bottom: 0; }
 
-/* --- Sidenote (from llm-rl) --- */
+/* --- Sidenote --- */
 .sidenote {
   font-size: 0.82rem;
   color: var(--muted);
@@ -199,7 +250,7 @@ blockquote p { margin-bottom: 0; }
   border-left: 2px solid var(--border);
 }
 
-/* --- Source reference (from llm-rl) --- */
+/* --- Source reference --- */
 .src-ref {
   font-size: 0.8rem;
   color: var(--muted);
@@ -216,7 +267,7 @@ blockquote p { margin-bottom: 0; }
 }
 
 .callout-title {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 0.85rem;
   text-transform: uppercase;
@@ -233,7 +284,7 @@ blockquote p { margin-bottom: 0; }
 .callout-note .callout-title { color: var(--note-color); }
 
 .callout-tip {
-  background: #f6f8fa;
+  background: var(--purple-bg);
   border-left: 3px solid var(--tip-color);
 }
 .callout-tip .callout-title { color: var(--tip-color); }
@@ -242,7 +293,7 @@ blockquote p { margin-bottom: 0; }
   background: var(--warning-bg);
   border-left: 3px solid var(--warning-color);
 }
-.callout-warning .callout-title { color: #92400e; }
+.callout-warning .callout-title { color: var(--warning-color); }
 
 .callout-success {
   background: var(--success-bg);
@@ -258,7 +309,7 @@ blockquote p { margin-bottom: 0; }
 
 /* --- Code --- */
 code {
-  font-family: var(--mono-font);
+  font-family: var(--mono);
   font-size: 0.88em;
   background: var(--code-bg);
   padding: 0.15em 0.35em;
@@ -296,14 +347,14 @@ th, td {
 }
 
 th {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 0.85rem;
   color: var(--muted);
   border-bottom: 2px solid var(--border);
 }
 
-/* --- Figures (from ocr-image) --- */
+/* --- Figures --- */
 figure {
   margin: 1.2rem 0;
   text-align: center;
@@ -321,7 +372,13 @@ figcaption {
   overflow-x: auto;
 }
 
+/* === COMPONENTS (from v3 analysis: 95 lessons, 21 workspaces) === */
+
 /* --- Quiz --- */
+.quiz-container {
+  margin: 1.5rem 0;
+}
+
 .quiz {
   margin: 1.5rem 0;
 }
@@ -345,7 +402,7 @@ figcaption {
 .quiz-question-text {
   font-weight: 600;
   margin-bottom: 0.8rem;
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 1rem;
 }
 
@@ -416,7 +473,7 @@ figcaption {
 }
 
 .quiz-score {
-  font-family: var(--heading-font);
+  font-family: var(--sans);
   font-size: 1.05rem;
   font-weight: 600;
   text-align: center;
@@ -436,6 +493,420 @@ figcaption {
 .quiz-score.fail {
   background: var(--wrong-bg);
   color: var(--wrong);
+}
+
+/* --- Interaction states (20 ws, 14 ws) --- */
+.selected {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.show { display: block; }
+.hidden { display: none; }
+
+/* --- Semantic status (10 ws, 10 ws, 3 ws) --- */
+.good { color: var(--green); }
+.bad { color: var(--red); }
+.new { color: var(--green); font-weight: 600; }
+
+/* --- Badge (16 ws) --- */
+.badge {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* --- Highlight (15 ws) --- */
+.highlight {
+  background: var(--accent-bg);
+  border-radius: 3px;
+  padding: 0.05em 0.2em;
+}
+
+/* --- Label (10 ws) --- */
+.label {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- Comment (9 ws) --- */
+.comment {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.88em;
+}
+
+/* --- Compare components (24 ws, 19 ws, 8 ws) --- */
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1.2rem 0;
+}
+
+.compare-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin: 1.2rem 0;
+}
+
+.compare-table th {
+  font-family: var(--sans);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.compare-table td {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* --- Pipeline (10 ws) --- */
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.2rem 0;
+}
+
+.pipeline-stage {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.pipeline-arrow {
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+/* --- Flow diagram (9 ws) --- */
+.flow-diagram {
+  margin: 1.2rem 0;
+}
+
+.flow-box {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: 0.3rem 0;
+}
+
+.flow-arrow {
+  color: var(--muted);
+  margin: 0 0.3rem;
+}
+
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--sans);
+}
+
+/* --- Timeline (9 ws) --- */
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+  margin: 1.2rem 0;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.2rem;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1.6rem;
+  top: 0.4rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+
+.timeline-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.2rem;
+}
+
+.timeline-desc {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* --- Step list + stage numbering (5 ws, 6 ws) --- */
+.step-list {
+  counter-reset: step;
+  list-style: none;
+  padding-left: 0;
+  margin: 1.2rem 0;
+}
+
+.step-list > li {
+  counter-increment: step;
+  padding-left: 2.2rem;
+  position: relative;
+  margin-bottom: 0.8rem;
+}
+
+.step-list > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--sans);
+}
+
+.stage-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--sans);
+  margin-right: 0.4rem;
+}
+
+.stage-name {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.stage-desc {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+/* --- Architecture layer (6 ws) --- */
+.arch-layer {
+  padding: 0.8rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: 0.5rem 0;
+}
+
+.arch-arrow {
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.2rem;
+  margin: 0.2rem 0;
+}
+
+/* --- Matrix visualization (7 ws) --- */
+.matrix-grid {
+  display: inline-grid;
+  gap: 2px;
+  margin: 1.2rem 0;
+}
+
+.matrix-cell {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-family: var(--mono);
+}
+
+.matrix-label {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* --- Code block + syntax highlighting (6 ws, 5 ws) --- */
+.code-block {
+  background: var(--code-bg);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 1.2rem 0;
+}
+
+.code-block pre {
+  margin: 0;
+  background: none;
+  padding: 0;
+}
+
+.keyword { color: var(--purple); font-weight: 600; }
+.string { color: var(--green); }
+
+/* --- Code diff block (code-compare, 2 ws) --- */
+.code-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 1.2rem 0;
+}
+
+.code-compare .code-block {
+  margin: 0;
+}
+
+/* --- Formula box (6 ws, KaTeX container) --- */
+.formula-box {
+  background: var(--code-bg);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  margin: 1.2rem 0;
+  overflow-x: auto;
+}
+
+/* --- Tech card (4 ws) --- */
+.tech-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: 1rem 0;
+}
+
+.tech-badge {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+}
+
+/* --- File tree (4 ws, lazygit-style: generic tree + file-tree specialization) --- */
+.tree {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  margin: 1.2rem 0;
+}
+
+.tree-node {
+  display: block;
+  padding: 0.15rem 0;
+}
+
+.tree-leaf {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+}
+
+.file-tree {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  margin: 1.2rem 0;
+}
+
+.file-tree .dir {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.file-tree .file {
+  color: var(--text);
+}
+
+/* --- Reference link (4 ws) --- */
+.ref-link {
+  display: block;
+  font-size: 0.88rem;
+  margin: 0.3rem 0;
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--border);
+}
+
+.ref-link a { color: var(--accent); }
+
+/* --- Arrow (4 ws) --- */
+.arrow {
+  color: var(--muted);
+  font-size: 1.1rem;
+  text-align: center;
 }
 
 /* --- Resources --- */
@@ -469,6 +940,32 @@ figcaption {
 .followup-reminder p { margin: 0; }
 
 .followup-reminder strong { color: var(--accent); }
+
+/* --- Responsive (E: base.css was missing this) --- */
+@media (max-width: 600px) {
+  body {
+    padding: 1rem;
+    font-size: 15px;
+  }
+
+  .compare-grid,
+  .code-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline {
+    flex-direction: column;
+  }
+
+  .pipeline-arrow {
+    transform: rotate(90deg);
+  }
+
+  .flow-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
 /* --- Print --- */
 @media print {
