@@ -93,7 +93,7 @@ One `ask_user_question` at a time. Wait for the user's choice before acting. Bat
 
 #### Fix path
 
-Delegate to `/skill:code-review` for impact analysis → edit → build/vet → show diff → update report.
+Delegate to `/skill:implement` with the confirmed fix plan. Do not edit code yourself — that is `/skill:implement`'s job. After `/skill:implement` completes, proceed to Step 6 (Verify).
 
 #### Discuss path
 
