@@ -59,7 +59,7 @@ MR/PR ID not given? Derive it from the branch name — see the platform referenc
 
 ### 2. Delegate to /fix
 
-Pass `/tmp/issues.json` to `/skill:fix`. It runs its own process and outputs `classified.json` — findings enriched with verdicts, reasons, fix plans, and resolved flags.
+Invoke `/skill:fix` with `/tmp/issues.json` as input. Do not classify, verify, or fix findings yourself — that is `/skill:fix`'s job. `/skill:fix` runs its full process (gather → recommend → verify → grill → fix → verify build → report) and outputs `classified.json` — findings enriched with verdicts, reasons, fix plans, and resolved flags.
 
 **Completion criterion**: `classified.json` exists with a verdict for every finding.
 
