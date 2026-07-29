@@ -1,0 +1,34 @@
+{
+  "name": "pi-insight",
+  "version": "0.1.0",
+  "description": "Diagnose pi usage: system prompt structure, tool/skill frequency, trimming suggestions",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "insight",
+    "diagnostic",
+    "system-prompt"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "index.ts",
+    "scripts/",
+    "SKILL.md",
+    "CONTEXT.md",
+    "REPORT_TEMPLATE.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  }
+}
