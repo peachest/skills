@@ -1,0 +1,5 @@
+# project-wiki Runtime Configuration
+# Auto-generated during installation. Do not edit manually unless necessary.
+# Detection priority: Python > Node.js
+Runtime: <detected_runtime>
+Command: <detected_command>
