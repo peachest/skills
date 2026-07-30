@@ -44,7 +44,15 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
     -F issue_id=$BLOCKER_DB_ID
   ```
 
-  GitHub 的 `issue_dependencies_summary.blocked_by` 只返回**开放中的** blocker（即实时门控）。当依赖子图不可用时，回退到 body **第二行**（紧跟 `Part of`）的 `Blocked by: #<n>, #<m>` 文本。当所有阻塞 issue 关闭后，ticket 解除阻塞。Body 格式：
+  `gh api` 的退出码区分三类故障，处理策略不同：
+
+  | 状况 | 表现 | 处理 |
+  |------|------|------|
+  | **503 / 502** (Service Unavailable) | `gh api` exit code 22，stderr 含 `Service Unavailable` | **重试**（最多 3 次，间隔 3s）。这是暂时性故障，不是功能缺失 |
+  | **404 / 403** (Not Found / Forbidden) | exit code 22，HTTP 状态码 4xx | **回退**到 body 文本。端点不存在或无权限，重试无意义 |
+  | **exit code 2** (用法错误) | stderr 含 `unknown command` 或 `flag needs an argument` | **修命令语法**。不是 API 问题，重试和回退都不会解决 |
+
+  GitHub 的 `issue_dependencies_summary.blocked_by` 只返回**开放中的** blocker（即实时门控）。当 dependencies API 返回 404/403（端点不可用或无权限）时，回退到 body **第二行**（紧跟 `Part of`）的 `Blocked by: #<n>, #<m>` 文本。当所有阻塞 issue 关闭后，ticket 解除阻塞。Body 格式：
 
   ```markdown
   Part of #<map>
@@ -54,15 +62,15 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
   ...
   ```
 
-- **查询子 ticket（Sub-issues）**：如果仓库开启了 sub-issues 功能，通过 API 查询：
+- **查询子 ticket**：**不要使用** `repos/:owner/:repo/issues/<n>/sub-issues` REST 端点——该端点不存在。GitHub sub-issues 功能没有公开的 REST API。改为通过以下方式获取子 ticket 列表：
 
-  ```bash
-  gh api repos/:owner/:repo/issues/<map_number>/sub-issues
-  ```
+  1. **首选**：`gh issue list --search "in:title \"Part of #<map>\"" --json number,title,labels,assignees,state` — 按 body 文本 `Part of #<map>` 搜索子 ticket
+  2. **备选**：`gh issue view <map_number> --json subIssues` — 如果仓库开启了 sub-issues 功能，issue 对象上的 `subIssues` 字段会返回子 issue 列表（只读 summary，非独立端点）
+  3. **兜底**：从 map body 的 task list / Decisions-so-far 文本中解析链接
 
-  否则回退到 map body 中的 task list 文本解析。
+  实际操作中，路径 1（body 文本搜索）是**最可靠的**主路径，因为 `Part of #<map>` 是所有子 ticket body 的约定首行。
 
-- **Frontier 查询**：列出 map 的子 ticket（sub-issues 或 task list），排除 `Blocked by` 行中仍有开放 issue 的 ticket，或已分配人的 issue。
+- **Frontier 查询**：列出 map 的子 ticket（通过上述查询路径），排除 `Blocked by` 行中仍有开放 issue 的 ticket，或已分配人的 issue。
 - **领取**：`gh issue edit <n> --add-assignee "@me"`。
 - **解决**：先 `gh issue comment <n> --body "<answer>"` 记录结果，然后通过 commit message（`Closes #n`）关闭，最后将上下文指针追加到 map 的 Decisions-so-far。禁止直接调用 `gh issue close`，必须走 git commit 方式关闭。
 
