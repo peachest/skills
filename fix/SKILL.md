@@ -123,11 +123,11 @@ Generate `fix-plan-<ID>.md` with a summary table + per-finding detail. Template:
 
 The skill produces two artifacts:
 
-1. **classified.json** — the input findings enriched with verdicts, reasons, fix plans, and resolved flags. Consumers (like `/skill:triage-mr`) read this to post labels and resolve threads.
+1. **`.triage/classified.json`** — the input findings enriched with verdicts, reasons, fix plans, and resolved flags. Consumers (like `/skill:triage-mr`) read this to post labels and resolve threads. The `.triage/` directory is a working area — add it to `.gitignore`.
 
-2. **fix-plan-<ID>.md** — human-readable report.
+2. **`fix-plan-<ID>.md`** — human-readable report, also written to `.triage/`.
 
-### classified.json format
+### `.triage/classified.json` format
 
 ```json
 [
@@ -151,4 +151,4 @@ After the run, if new FP patterns surfaced, write them to `docs/agents/review-kn
 
 ## Resuming
 
-If `classified.json` from a prior run exists, load it. Findings already marked `resolved: true` are skipped. Present the state and continue from where it left off.
+If `.triage/classified.json` from a prior run exists, load it. Findings already marked `resolved: true` are skipped. Present the state and continue from where it left off.
