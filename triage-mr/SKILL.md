@@ -71,21 +71,21 @@ Read `/skill:fix` and execute its full process (gather → recommend → verify 
 
 `/skill:fix` owns the classification logic — verdict definitions, the verify-before-grill ordering, the grilling process, and the fix workflow. Follow it as written. The verify-before-grill, grill-before-fix ordering is what makes verdicts trustworthy; shortcutting it produces shallow classifications.
 
-The output is `classified.json` — each finding enriched with `classification`, `reason`, `fix_plan`, `priority`, and `resolved` fields. Build this file incrementally as each finding's verdict is finalized — do not assemble it by hand at the end. The fix skill defines the exact format.
+The output is `.triage/classified.json` — each finding enriched with `classification`, `reason`, `fix_plan`, `priority`, and `resolved` fields. Build this file incrementally as each finding's verdict is finalized — do not assemble it by hand at the end. The fix skill defines the exact format. Create the `.triage/` directory if it doesn't exist (`mkdir -p .triage`). Add `.triage/` to the project's `.gitignore` if not already present.
 
-**Completion criterion**: `classified.json` exists with a verdict for every finding.
+**Completion criterion**: `.triage/classified.json` exists with a verdict for every finding.
 
 ### 3. Post labels + resolve
 
 ```bash
-cat classified.json | python3 <SCRIPTS_DIR>/ocr-post-labels.py <MR_OR_PR_ID>
+cat .triage/classified.json | python3 <SCRIPTS_DIR>/ocr-post-labels.py <MR_OR_PR_ID>
 ```
 
 For each finding: posts a reply with the verdict label + reason/fix-plan, and resolves the thread if the verdict's `resolved` flag is `true`.
 
 On failure, fall back to manual commands — see the platform reference doc.
 
-**Completion criterion**: every finding in `classified.json` has been posted (ok or failed count reported by the script).
+**Completion criterion**: every finding in `.triage/classified.json` has been posted (ok or failed count reported by the script).
 
 ### 4. Wrap up
 
@@ -104,4 +104,4 @@ If `/skill:fix` surfaced new FP patterns or coding insights, it writes them to `
 
 ## Resuming
 
-If `classified.json` from a prior run exists, `/skill:fix` loads it and skips already-resolved findings. Re-run Step 1 with `--all` to re-pull including resolved threads if needed.
+If `.triage/classified.json` from a prior run exists, `/skill:fix` loads it and skips already-resolved findings. Re-run Step 1 with `--all` to re-pull including resolved threads if needed.
