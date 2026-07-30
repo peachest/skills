@@ -10,8 +10,9 @@ A self-maintaining codebase map that lets any AI session or new teammate
 orient in seconds instead of grep-ing blindly.
 
 > **Path convention**: `<SKILL_DIR>` is this skill's directory (holds
-> `scripts/`, `references/`, `CONTEXT.md`). `<PROJECT_DIR>` is the project
-> being documented (holds source code and receives `docs/project_wiki/`).
+> `scripts/`, `references/`, `CONTEXT.md`, and the machine-specific
+> `runtime.conf`). `<PROJECT_DIR>` is the project being documented (holds
+> source code and receives `docs/project_wiki/`).
 
 ## What it produces
 
@@ -46,30 +47,94 @@ Full format spec with examples: [references/wiki_format.md](./references/wiki_fo
 
 ## CLI tool
 
-All deterministic operations are handled by `<SKILL_DIR>/scripts/wiki.py`.
-`--root` defaults to the current directory; pass `--root <PROJECT_DIR>` to
-run from elsewhere:
+All deterministic operations are handled by a bundled CLI. The skill ships
+**two interchangeable runtimes** — Python (`scripts/wiki.py`) and Node.js
+(`scripts/wiki.js`, zero external dependencies) — that produce identical
+wikis and share the same SHA baseline, so they can be mixed freely on one
+project (e.g. `init` with Python, then `check` with Node).
+
+`<cmd>` below is the resolved CLI command — resolve it once per
+*Platform Detection & CLI Routing* below (`runtime.conf` is the fast
+path; detection is the fallback). `--root` defaults to the current
+directory; pass `--root <PROJECT_DIR>` to run from elsewhere.
 
 ```bash
 # Initialize: scan project, detect modules, generate wiki skeleton
-python3 <SKILL_DIR>/scripts/wiki.py init [--root <PROJECT_DIR>] [--lang auto]
+<cmd> init [--root <PROJECT_DIR>] [--lang auto]
 
 # Check: report drift (new / deleted / modified files since last review)
-python3 <SKILL_DIR>/scripts/wiki.py check [--root <PROJECT_DIR>] [--fail-on-stale]
+<cmd> check [--root <PROJECT_DIR>] [--fail-on-stale]
 
 # Update: refresh SHA baseline after wiki has been reviewed/edited
-python3 <SKILL_DIR>/scripts/wiki.py update [--root <PROJECT_DIR>]
+<cmd> update [--root <PROJECT_DIR>]
 
 # Status: show coverage summary
-python3 <SKILL_DIR>/scripts/wiki.py status [--root <PROJECT_DIR>]
+<cmd> status [--root <PROJECT_DIR>]
 ```
+
+## Platform Detection & CLI Routing
+
+### Pre-detected Runtime
+
+If `<SKILL_DIR>/runtime.conf` exists, read the `Runtime` and `Command`
+values from it and skip detection — this is the fast path for routine
+calls. The file is machine-specific (gitignored; see
+`runtime.conf.example` for the template). If it is absent or the
+configured command fails, fall back to the full detection procedure.
+
+### Detection Procedure
+
+At first use, detect the best available runtime. Priority order:
+
+```
+Python  >  Node.js
+```
+
+Run these checks in order. The first success determines the active CLI:
+
+**Step 1 — Check Python**
+
+```bash
+python3 --version 2>&1   # need >= 3.6
+python --version 2>&1    # also valid on some systems
+```
+
+- If `python3` (or `python`) exists → use
+  `python3 <SKILL_DIR>/scripts/wiki.py`
+- No external dependencies (stdlib only).
+
+**Step 2 — Check Node.js** (if Python failed)
+
+```bash
+node --version 2>&1      # need >= 12
+```
+
+- If exit code 0 → use `node <SKILL_DIR>/scripts/wiki.js`
+- No external dependencies (built-in `fs` / `crypto` / `path` only).
+
+### CLI Invocation
+
+Once the active CLI is determined, all commands use the same subcommand
+syntax:
+
+| Runtime | Invocation |
+|---------|-----------|
+| Python  | `python3 <SKILL_DIR>/scripts/wiki.py <command> [options]` |
+| Node.js | `node <SKILL_DIR>/scripts/wiki.js <command> [options]` |
+
+### Fallback & Error Handling
+
+- If the selected CLI fails with a runtime error, fall through to the
+  next runtime in priority order.
+- If **all** runtimes fail, report that no compatible runtime was found
+  and list the minimum requirements (Python 3.6+ or Node.js 12+).
 
 ## Workflow
 
 ### 1. Initialize the wiki
 
 ```bash
-python3 <SKILL_DIR>/scripts/wiki.py init --root <PROJECT_DIR>
+<cmd> init --root <PROJECT_DIR>
 ```
 
 Scans the project, detects the language, groups files into modules by
@@ -105,7 +170,7 @@ For each module wiki:
 4. Run `update` to mark the wiki as reviewed:
 
    ```bash
-   python3 <SKILL_DIR>/scripts/wiki.py update --root <PROJECT_DIR>
+   <cmd> update --root <PROJECT_DIR>
    ```
 
 **Completion criterion**: zero placeholder descriptions remain across all
@@ -124,13 +189,13 @@ types of file drift plus L3 domain-language connectivity drift:
 | **L3 DRIFT** | CONTEXT.md or ADRs exist but overview.md doesn't link (or vice versa) | Run `update` to re-link | 🔵 |
 
 ```bash
-python3 <SKILL_DIR>/scripts/wiki.py check --root <PROJECT_DIR>
+<cmd> check --root <PROJECT_DIR>
 ```
 
 After resolving all stale signals, re-register the baseline:
 
 ```bash
-python3 <SKILL_DIR>/scripts/wiki.py update --root <PROJECT_DIR>
+<cmd> update --root <PROJECT_DIR>
 ```
 
 **Completion criterion**: `check` reports zero stale signals.
@@ -138,7 +203,7 @@ python3 <SKILL_DIR>/scripts/wiki.py update --root <PROJECT_DIR>
 ### 4. Periodic audit
 
 ```bash
-python3 <SKILL_DIR>/scripts/wiki.py status --root <PROJECT_DIR>
+<cmd> status --root <PROJECT_DIR>
 ```
 
 Shows module count, tracked files, described entries ratio, unreviewed
