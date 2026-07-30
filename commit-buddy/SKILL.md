@@ -50,8 +50,6 @@ N. type(scope): summary
 
 ### Step 3: 确认粒度
 
-Run a `/skill:grilling` session
-
 用 `ask_user_question` 询问：
 
 - **粒度是否合适？**（确认 / 太粗需要拆分 / 太细需要合并）
@@ -63,7 +61,7 @@ Run a `/skill:grilling` session
 
 ### Step 4: 执行
 
-按 commit 顺序逐个执行，遵循 /skill:conventional-commits。工作区有 unstaged 改动时，先 `git stash --keep-index`。
+按 commit 顺序逐个执行，遵循 /skill:conventional-commits。
 
 **单个 commit 的执行步骤**：
 
@@ -73,8 +71,5 @@ git add <commit 涉及的每个文件>
 git commit -m "type(scope): summary" -m "<详细 body>"
 ```
 
-所有 commit 执行完后，若之前 stash 过则 `git stash pop`。
-
 **完成标准**：所有 commit 已执行。
 展示 `git log --oneline -n <N>` 确认最终结果。
-若 stash pop 有冲突，指出冲突文件并暂停。
