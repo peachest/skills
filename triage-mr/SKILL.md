@@ -48,18 +48,30 @@ Scripts live in the **mr-review-triage** skill directory. `<SCRIPTS_DIR>` below 
 ### 1. Pull
 
 ```bash
-python3 <SCRIPTS_DIR>/ocr-pull-discussions.py <MR_OR_PR_ID> > /tmp/issues.json
+python3 <SCRIPTS_DIR>/ocr-pull-discussions.py <MR_OR_PR_ID> > /tmp/issues.json 2>/tmp/pull-source.log
 ```
 
-Pulls OCR bot review comments. Output: JSON array of `{discussion_id, file, line, body}`, deduplicated.
+The script writes JSON to stdout and progress info to stderr — including the source MR/PR title, URL, and state, so the user can verify the pull came from the right MR. Keep them separate: **do not use `2>&1`**, which would corrupt the JSON output with progress text.
 
 MR/PR ID not given? Derive it from the branch name — see the platform reference doc.
 
-**Completion criterion**: `/tmp/issues.json` exists and contains a valid JSON array.
+**Validate**: confirm the output is valid JSON and show the source identity:
+```bash
+# Show source identity (title, URL, state, finding count)
+cat /tmp/pull-source.log
+# Validate JSON
+python3 -c "import json; d=json.load(open('/tmp/issues.json')); print(f'{len(d)} findings confirmed')"
+```
 
-### 2. Delegate to /fix
+**Completion criterion**: `/tmp/issues.json` exists, contains a valid JSON array, and the source MR/PR identity in `/tmp/pull-source.log` matches expectations.
 
-Invoke `/skill:fix` with `/tmp/issues.json` as input. Do not classify, verify, or fix findings yourself — that is `/skill:fix`'s job. `/skill:fix` runs its full process (gather → recommend → verify → grill → fix → verify build → report) and outputs `classified.json` — findings enriched with verdicts, reasons, fix plans, and resolved flags.
+### 2. Run /fix
+
+Read `/skill:fix` and execute its full process (gather → recommend → verify → grill → fix → verify build → report) with `/tmp/issues.json` as input.
+
+`/skill:fix` owns the classification logic — verdict definitions, the verify-before-grill ordering, the grilling process, and the fix workflow. Follow it as written. The verify-before-grill, grill-before-fix ordering is what makes verdicts trustworthy; shortcutting it produces shallow classifications.
+
+The output is `classified.json` — each finding enriched with `classification`, `reason`, `fix_plan`, `priority`, and `resolved` fields. Build this file incrementally as each finding's verdict is finalized — do not assemble it by hand at the end. The fix skill defines the exact format.
 
 **Completion criterion**: `classified.json` exists with a verdict for every finding.
 
@@ -87,7 +99,7 @@ If `/skill:fix` surfaced new FP patterns or coding insights, it writes them to `
 
 | # | When | Show | Decision |
 |---|------|------|----------|
-| 1 | After Step 1 | Pulled finding count | Proceed to /fix? |
+| 1 | After Step 1 | Source MR/PR identity + pulled finding count | Proceed to /fix? |
 | 2 | After Step 3 | Final summary | User confirms done |
 
 ## Resuming
