@@ -3,7 +3,7 @@
 Outputs deduplicated review issues as JSON to stdout.
 Progress messages go to stderr — do NOT redirect stderr into stdout (no 2>&1).
 
-    python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_OR_PR_ID> > /tmp/issues.json
+    python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_OR_PR_ID> > /tmp/issues.json 2>/tmp/pull-source.log
 
 Platform is auto-detected from git remote:
   - github.com        → GitHub PR review comments
@@ -271,6 +271,41 @@ def deduplicate(issues):
 # ── Main ──
 
 
+def _print_source_info(platform, mr_or_pr_id):
+    """Fetch and print MR/PR identity to stderr for source verification.
+
+    This lets the user confirm the pull came from the right MR/PR —
+    a common friction point when multiple MRs exist.
+    """
+    try:
+        if platform == "github":
+            from ocr_github import curl, get_project_id
+            owner_repo = get_project_id()
+            if not owner_repo:
+                return
+            status, body, _ = curl(f"/repos/{owner_repo}/pulls/{mr_or_pr_id}")
+            if status == 200 and body:
+                title = body.get("title", "?")
+                url = body.get("html_url", "?")
+                state = body.get("state", "?")
+                print(f"Source: PR #{mr_or_pr_id} [{state}] \"{title}\"", file=sys.stderr)
+                print(f"URL: {url}", file=sys.stderr)
+        else:
+            from ocr_gitlab import curl, get_project_id
+            project_id = get_project_id()
+            if not project_id:
+                return
+            status, body, _ = curl(f"/projects/{project_id}/merge_requests/{mr_or_pr_id}")
+            if status == 200 and body:
+                title = body.get("title", "?")
+                url = body.get("web_url", "?")
+                state = body.get("state", "?")
+                print(f"Source: MR !{mr_or_pr_id} [{state}] \"{title}\"", file=sys.stderr)
+                print(f"URL: {url}", file=sys.stderr)
+    except Exception:
+        pass  # source info is best-effort; don't fail the pull
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 ocr-pull-discussions.py <MR_OR_PR_ID> [--all]", file=sys.stderr)
@@ -281,6 +316,8 @@ def main():
 
     platform = detect_platform()
     print(f"Detected platform: {platform}", file=sys.stderr)
+
+    _print_source_info(platform, mr_or_pr_id)
 
     if platform == "github":
         issues = _pull_github(mr_or_pr_id, skip_resolved=skip_resolved)
