@@ -44,3 +44,17 @@ Prototype branch: `session-profile-prototype-22` (throwaway, not merged to main)
 - API design from #21 is viable — all 5 subcommands + library import patterns work
 - 7 pain points discovered (cwd not in entries, ESM require, package import, etc.)
 - Recommendations for real impl: package.json, zod schemas, child session index, diff parsing
+
+## Consumer-Driven Revision (from #26)
+
+See resolution comment: https://github.com/peachest/skills/issues/26#issuecomment-5166799909
+ADR: docs/adr/0003-enriched-scan-result.md
+
+### Key decisions:
+- scanSessions() returns SessionScanResult[] (metrics + toolCalls + subagentSpawns), not SessionMetrics[]
+- ToolCallRecord: lightweight per-tool-call projection (name + arguments + error + timestamp)
+- SubagentSpawnRecord: parsed from toolCall + toolResult pair (runId, agent, mode, taskText, childSessionPaths)
+- Child session linking: from toolResult text, NOT from toolCall id field
+- parseSession(): supplementary, not primary extension point
+- aggregate.*() takes SessionScanResult[] instead of SessionMetrics[]
+- Revises #20 (metrics catalog) and #21 (API interface)
