@@ -307,16 +307,17 @@
     {
       "name": "spdx_license",
       "description": "SPDX license identifier in license declaration context",
-      "pattern": "(?:licensed\\s+under|使用|采用|许可证|license[d]?\\s+under|released\\s+under)\\s+[\"\\']?([A-Za-z0-9.\\-+]+)",
+      "pattern": "(?:licensed\\s+under|license[d]?\\s+under|released\\s+under|许可证)\\s*[为：:|]?\\s*[\"\\']?([A-Za-z0-9.\\-+]+)",
       "extract": "license_id (g1), validated against SPDX license list",
       "verifier": "rule_engine.spdx_license",
       "examples": [
         "licensed under MIT",
-        "使用 Apache-2.0 协议",
+        "许可证：MIT",
+        "许可证为 Apache-2.0",
         "released under GPL-3.0-only"
       ],
       "priority": "P0",
-      "note": "Validates identifier against SPDX license list, then checks actual project metadata if repo context available."
+      "note": "Removed bare 使用/采用 as triggers — too generic in Chinese (matches 'uses Node.js' etc). License context required via 许可证 or English license phrases."
     },
     {
       "name": "git_tag",

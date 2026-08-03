@@ -80,7 +80,7 @@ PATTERNS = {
     "github_pr_symbol":   r'(?:pr|pull request|拉取请求)\s*#?(\d+)',
     "code_platform_symbol_pr": r'[!#](\d+)',
     "github_issue":       r'(?:issue|问题|议题)\s*#?(\d+)',
-    "github_repo":        r'(?:github\.com/)?([\w.-]+/[\w.-]+)',
+    "github_repo":        r'github\.com/([\w.-]+/[\w.-]+)',
     "gitlab_repo":        r'gitlab\.com/([\w.-]+/[\w.-]+)',
     "gitlab_mr":          r'gitlab\.com/[\w.-]+/[\w.-]+/-/merge_requests/(\d+)',
     "gitlab_issue":       r'gitlab\.com/[\w.-]+/[\w.-]+/-/issues/(\d+)',
@@ -97,7 +97,7 @@ PATTERNS = {
     "patent":             r'\b((?:us|cn|wo|ep|jp|kr)\d{6,12}(?:b\d|a\d)?)',
     "ietf_draft":         r'(draft-(?:ietf-)?[\w-]+-\d{2})',
     "docker_image":       r'(?:pull|run|拉取|运行|启动)\s+(?:--[\w.=-]+\s+)*[\'\"]?([\w.-]+(?:/[\w.-]+)?)',
-    "spdx_license":       r'(?:licensed\s+under|使用|采用|许可证|license[d]?\s+under|released\s+under)\s+[\'\"]?([a-za-z0-9.\-+]+)',
+    "spdx_license":       r'(?:licensed\s+under|license[d]?\s+under|released\s+under|许可证)\s*[为：:|]?\s*[\'\"]?([a-za-z0-9.\-+]+)',
     "git_tag":            r'(v?\d[\w.]{1,30})',
 }
 
