@@ -22,3 +22,15 @@ See resolution comment: https://github.com/peachest/skills/issues/20#issuecommen
 - Time trends include advanced analysis: decay weighting, week-over-week, trajectory, anomaly detection
 - Compaction entity: reuse pi's CompactionEntry type (not redefine)
 - Key discovery: pi already exports SessionManager + parseSessionEntries + all types — base layer reuses these
+
+## API Interface (from #21)
+
+See resolution comment: https://github.com/peachest/skills/issues/21#issuecomment-5165910302
+
+### Key decisions:
+- CLI: 分域子命令 + all (sessions / tools / usage / trends / all)
+- Library API: 纯函数 (scanSessions, scanChildSessions, parseSession, aggregate.*)
+- Extension points: 暴露原始 FileEntry[] via parseSession(), 无 hook 机制
+- Child session: opt-in (--include-children flag, scanChildSessions(parentId))
+- CLI flags: --sessions, --limit, --project, --include-children; trends: --bucket, --days
+- Output: JSON to stdout (consistent with pi-insight / guardrail-optimizer)
