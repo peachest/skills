@@ -117,7 +117,7 @@ Step-by-step agent instructions for the 8-phase pipeline.
 3. Each claim now has `route`, `matched_verifier`, `matched_rule` fields.
 4. Unmatched claims get LLM fallback based on `expected_verifier`.
 
-**Output:** claims.json updated with routing fields.
+**Output:** claims.json updated in-place with routing fields (`route`, `matched_verifier`, `matched_rule`). Script also prints stats JSON to stdout.
 
 ---
 

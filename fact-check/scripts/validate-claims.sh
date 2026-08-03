@@ -53,9 +53,9 @@ VALID_TYPES = {
     "authority", "numerical", "temporal", "factual", "causal",
     "comparative", "code-api", "citation", "existence", "interpretation",
     "file_path", "attribution",
-    # extension
+    # extension (must match references/schema.md extension layer)
     "legal-med-fin", "pricing", "licensing", "compliance",
-    "route", "port", "retry", "timeout",
+    "capability", "date", "architecture", "status",
 }
 
 VALID_DECOMPOSITION_MODES = {
