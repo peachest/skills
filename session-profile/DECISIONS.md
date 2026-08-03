@@ -34,3 +34,13 @@ See resolution comment: https://github.com/peachest/skills/issues/21#issuecommen
 - Child session: opt-in (--include-children flag, scanChildSessions(parentId))
 - CLI flags: --sessions, --limit, --project, --include-children; trends: --bucket, --days
 - Output: JSON to stdout (consistent with pi-insight / guardrail-optimizer)
+
+## Prototype Stub (from #22)
+
+See resolution comment: https://github.com/peachest/skills/issues/22#issuecomment-5166339357
+Prototype branch: `session-profile-prototype-22` (throwaway, not merged to main)
+
+### Key findings:
+- API design from #21 is viable — all 5 subcommands + library import patterns work
+- 7 pain points discovered (cwd not in entries, ESM require, package import, etc.)
+- Recommendations for real impl: package.json, zod schemas, child session index, diff parsing
