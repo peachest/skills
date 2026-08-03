@@ -1,7 +1,8 @@
 #!/bin/bash
 # route-claims.sh — Phase 2 deterministic regex routing (DD-06, run-output.md)
 # Usage: bash route-claims.sh <claims.json> <regex-rules.json>
-# Output: stdout JSON { claims: [...], stats: {...} }
+# Output: stdout JSON { stats: {...}, claims_updated: N }
+#          claims.json is updated in-place (consistent with rule-engine.sh)
 #
 # Dual-field matching: claim_text + normalized_claim against 30 rules
 # Priority: authority (25) → judgment (3) → interpretation (2) → fallback
@@ -246,6 +247,9 @@ for claim in claims:
             claim["matched_rule"] = "llm_fallback"
             stats["unmatched"] += 1
 
-result = {"claims": claims, "stats": stats}
-print(json.dumps(result, ensure_ascii=False))
+# Update claims.json in-place (consistent with rule-engine.sh behavior)
+with open(CLAIMS_FILE, "w") as f:
+    json.dump(claims, f, ensure_ascii=False, indent=2)
+
+print(json.dumps({"stats": stats, "claims_updated": len(claims)}, ensure_ascii=False))
 PYEOF

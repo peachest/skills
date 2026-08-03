@@ -24,15 +24,16 @@
 规则：
 - claim_text 必须逐字来自原文档，不改写
 - 拆解复合声明为原子 claim（按 catalog 7 种模式）
-- source_location 使用三模式格式（doc:line / doc:line-line / doc:line:col-col）
-- 不输出 content_hash（校验器会算）
+- 不输出 source_location（由 locate-claim.sh 定位计算）
+- 不输出 content_hash（由 validate-claims.sh 校验计算）
+- 不输出 claim_id（在合并阶段分配）
 - 不提取纯 opinional 内容（"这个方案更好" 之类）
 
 输出：JSON array（格式见 schema.md），写为 <output_file>。
 只输出 JSON，不要夹杂解释文字。
 ```
 
-**Output:** `claims-<doc_key>.json` — JSON array of claim objects (不含 `content_hash`)
+**Output:** `claims-<doc_key>.json` — JSON array of claim objects (不含 `source_location`、`content_hash`、`claim_id`，这些由后续阶段填充)
 
 **Failure:** 单个 worker 超时或格式错误 → 标记该文档为 extraction_failed，其他文档继续
 
