@@ -33,11 +33,11 @@ Synthesize the terrain into a **bearing** — a compact grounding summary the ne
 
 | Section | Holds |
 |---------|-------|
-| **Terms** | Glossary vocabulary relevant to the requirement, each with its agreed meaning. |
-| **Constraints** | ADRs that bound the decision space, each gist'd to its ruling. |
-| **Seams** | Codebase structure, interfaces, and patterns the work lands on. |
-| **Gaps** | What the terrain doesn't cover but the requirement needs — undefined terms, missing decisions, undocumented areas. The first questions a grilling or wayfinding session should raise. |
+| **Terms** | Glossary vocabulary relevant to the requirement, each with its agreed meaning and **source** — the file and section it was read from. |
+| **Constraints** | ADRs that bound the decision space, each gist'd to its ruling and **source** — the ADR file or doc section that locks it. |
+| **Seams** | Codebase structure, interfaces, and patterns the work lands on, each with its **source** — the file and symbol or line range. |
+| **Gaps** | What the terrain doesn't cover but the requirement needs — undefined terms, missing decisions, undocumented areas. Each gap names what's missing and **where you looked** for it. The first questions a grilling or wayfinding session should raise. |
 
 The bearing lives in the session context and carries into the next skill. If wayfinding, feed the bearing's terms and constraints into the map's **Notes**; let the gaps seed the first grilling.
 
-- [ ] Bearing produced: terms, constraints, seams, gaps each covered.
+- [ ] Bearing produced: terms, constraints, seams, gaps each covered, every item carrying its source.
