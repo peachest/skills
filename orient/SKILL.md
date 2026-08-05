@@ -1,12 +1,10 @@
 ---
 name: orient
-description: Orient before you wayfind — read the project's glossary, ADRs, docs, and codebase to establish where "here" is, so planning starts grounded in what already exists.
+description: Orient before you wayfind — read the project's terrain so planning starts grounded in what already exists.
 disable-model-invocation: true
 ---
 
 Before you **wayfind**, **orient**. Wayfinding charts a way from *here* to a destination, but you can't chart from here if you don't know where here is. **Orienting** reads the **terrain** the requirement lands on, so every subsequent plan is grounded in what already exists.
-
-The pull to jump straight to planning is the signal to orient. A requirement that feels ready to decompose usually isn't — the ADRs that constrain it, the glossary terms that must be precise, the conventions it must follow, the seams it should use haven't been read yet.
 
 ## Read the terrain
 
@@ -22,11 +20,11 @@ The requirement is your compass — it points the direction. Survey the terrain 
 
 5. **Codebase.** Survey the code the requirement will touch. Use `codegraph` for fast symbol search where available; otherwise read directory structure and key files. Map the **seams** — existing interfaces, modules, and patterns the work should follow rather than invent.
 
-A terrain layer that doesn't exist — no `CONTEXT.md`, no ADRs, no docs, no conventions — is itself a gap; note it. Don't create anything; that's `/skill:domain-modeling`'s job, reached when grilling resolves a term or decision.
+A terrain layer that doesn't exist — no `CONTEXT.md`, no ADRs, no docs, no conventions — is itself a gap; note it. This skill is read-only; `/skill:domain-modeling` handles creation, reached when grilling resolves a term or decision.
 
 - [ ] Glossary read; ubiquitous language extracted; gaps flagged.
 - [ ] ADRs read; relevant constraints extracted.
-- [ ] Docs read; area-specific knowledge extracted.
+- [ ] Docs read; existing area documentation extracted.
 - [ ] Conventions read; development rules extracted.
 - [ ] Codebase surveyed; seams mapped.
 
