@@ -1,5 +1,54 @@
 # Glossary
 
+## Navigation Metaphor
+
+The shared metaphor system spanning orient, wayfinder, review-spec, project-wiki, and hail. Every skill name is itself a navigation action: survey → orient → wayfind → inspect → traverse → hail.
+
+- **Terrain**: The project's current state — code, tests, docs, decisions, conventions. What orient reads and what wayfinder navigates through.
+_Avoid_: codebase (too generic), project state
+
+- **Compass**: The requirement — it points the direction but is not the map. Can be wrong about the terrain.
+_Avoid_: spec, requirement (use when discussing the metaphor)
+
+- **Bearing**: The compact grounding summary orient produces from reading terrain. Carries terms, constraints, conventions, seams, landmarks, waymarks, gaps, and calibration. Consumed by wayfinder as the basis for charting the map.
+_Avoid_: summary, context, overview
+
+- **Map**: The shared artifact wayfinder creates on the issue tracker — an index of decisions made and pointers to tickets that hold their detail. An index, not a store.
+_Avoid_: plan, checklist
+
+- **Chart**: The codebase survey artifact project-wiki produces — a structured map of modules and files with SHA-based drift detection. The persistent form of terrain that orient reads from instead of surveying blindly.
+_Avoid_: wiki, documentation
+
+- **Destination**: What reaching the end of a wayfinder map looks like — a spec, a decision, or a change. Fixes the scope.
+_Avoid_: goal, objective, milestone
+
+- **Frontier**: The open, unblocked, unclaimed tickets on a wayfinder map — the edge of the known. What's takeable now.
+_Avoid_: backlog, queue
+
+- **Fog of war**: Decisions you can sense coming but can't yet pin down sharply enough to ticket. Lives in the map's "Not yet specified" section. Graduates into tickets as the frontier advances.
+_Avoid_: unknown unknowns, uncertainty
+
+- **Seam**: An existing interface, module, or pattern in the codebase that the work should follow rather than invent. Recorded in orient's bearing.
+_Avoid_: boundary (overloaded with DDD's bounded context), API
+
+- **Landmark**: An existing implementation whose semantics the requirement can migrate from. Not a seam to follow but a point to navigate by — its code encodes behavior more precisely than prose.
+_Avoid_: reference (too generic), example
+
+- **Waymark**: A test file — a marker left by previous travelers on the terrain, indicating paths that pass and boundaries that hold. A test named `test_old_user_compatibility` reveals hidden constraints no README documents.
+_Avoid_: test (use when discussing the metaphor), fixture
+
+- **Gap**: What the terrain doesn't cover but the requirement needs. Either **surveyed but empty** (you looked and found nothing — seeds the first grilling) or **beyond survey** (you didn't look because it wasn't in scope — flows into fog of war).
+_Avoid_: missing piece, unknown
+
+- **Calibration**: Orient's assessment of the requirement against the terrain — where the requirement **over-specifies** (terrain already handles it; extra instruction only binds the agent) and where it **under-specifies** (terrain is complex but the requirement passes over it in a phrase — likely the gap that matters most).
+_Avoid_: review, validation
+
+- **Route**: The spec — the planned path through the terrain. What review-spec inspects before handing off to implement for traversal.
+_Avoid_: spec, plan
+
+- **Distress signal**: What hail produces when the agent is off-route, looping, or failing to make progress. Captures routes attempted, estimated position, off-route cause, and rescue needed.
+_Avoid_: error report, stuck report
+
 ## Guardrail Optimizer
 
 - **Outside-cwd path**: An absolute path that falls outside the session's working directory (`cwd`). Pi-guardrails' path-access extension intercepts tool calls targeting such paths and prompts the user to allow or deny. Synonym: "outside-workspace path" (the term used in the guardrail TUI prompt).
