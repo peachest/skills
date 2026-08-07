@@ -33,7 +33,7 @@ If CC subtitles are available, they are saved directly and ASR is skipped.
 ### Step 2: Transcribe
 
 ```bash
-WHISPER_ENDPOINT=http://your-asr:8000/openai/v1 \
+WHISPER_ENDPOINT=http://your-asr:8000/v1 \
 WHISPER_MODEL=whisper-large-v3 \
 WHISPER_LANG=zh \
 bash .agent/skills/bilibili-transcriber/scripts/transcribe.sh <workspace-dir>/
@@ -41,6 +41,14 @@ bash .agent/skills/bilibili-transcriber/scripts/transcribe.sh <workspace-dir>/
 
 Where `<workspace-dir>` is the output directory from fetch-article
 (use the `raw_path` field from the JSON output).
+
+> **Finding the right endpoint and model name**: Query the service first with
+> `curl http://host:port/v1/models` to discover the model ID. vllm-based
+> services use `/v1` (not `/openai/v1`). The model ID may differ from the
+> model name (e.g. `atom` instead of `whisper-large-v3`).
+>
+> **Proxy**: if the ASR service is on an internal IP, add it to `no_proxy`
+> or use `curl --noproxy '*'` to avoid the HTTP proxy refusing the connection.
 
 ### Step 3: Clean the Transcript (Manual)
 
@@ -59,8 +67,8 @@ guide below.
 
 | Variable | Required | Default | Description |
 | ---------- | ---------- | --------- | ------------- |
-| `WHISPER_ENDPOINT` | Yes | — | API base URL, e.g. `http://host:8000/openai/v1` |
-| `WHISPER_MODEL` | Yes | — | Model name, e.g. `whisper-large-v3` |
+| `WHISPER_ENDPOINT` | Yes | — | API base URL, e.g. `http://host:8000/v1` |
+| `WHISPER_MODEL` | Yes | — | Model ID (query `/v1/models` to discover), e.g. `whisper-large-v3` |
 | `WHISPER_LANG` | No | `zh` | Language hint |
 | `METHOD` | No | `faster-whisper` | Intermediate subdirectory name |
 
@@ -68,7 +76,8 @@ guide below.
 
 ```text
 <workspace-dir>/                    ← from fetch-article
-├── raw/audio.mp4                   ← downloaded audio
+├── audio.mp4                       ← downloaded audio
+├── metadata.json                  ← video metadata (title, bvid, etc.)
 ├── $METHOD/                        ← intermediate ASR output
 │   ├── audio.wav                   ← transcoding cache
 │   ├── transcript.md               ← raw ASR (metadata + text)
@@ -105,7 +114,7 @@ The raw ASR output is continuous text. You must manually clean it.
 ## Full Pipeline (one-liner)
 
 ```bash
-WHISPER_ENDPOINT=http://your-asr:8000/openai/v1 \
+WHISPER_ENDPOINT=http://your-asr:8000/v1 \
 WHISPER_MODEL=whisper-large-v3 \
 BVID="BV1xx..." && \
 OUT=$(python3 .agent/skills/fetch-article/scripts/fetch.py \
