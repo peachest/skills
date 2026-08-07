@@ -9,8 +9,9 @@
 #   Raw ASR output + metrics     → <workspace-dir>/<method>/                          (intermediate)
 #
 # Environment variables:
-#   WHISPER_ENDPOINT  — API base URL (REQUIRED, e.g. http://host:port/openai/v1)
+#   WHISPER_ENDPOINT  — API base URL (REQUIRED, e.g. http://host:port/v1)
 #   WHISPER_MODEL     — model name (REQUIRED, e.g. whisper-large-v3)
+#                         Query ${WHISPER_ENDPOINT}/models first if unsure.
 #   WHISPER_LANG      — language hint (default: zh)
 #   METHOD            — intermediate subdirectory (default: faster-whisper)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -36,7 +37,14 @@ fi
 WORK_DIR="$1"
 RAW_DIR="${WORK_DIR}/raw"
 OUT_DIR="${WORK_DIR}/${METHOD}"
+
+# ── Locate audio file ──
+# fetch-article saves to {workspace}/audio.mp4;
+# legacy layout uses {workspace}/raw/audio.mp4.
 AUDIO_MP4="${RAW_DIR}/audio.mp4"
+if [ ! -f "$AUDIO_MP4" ]; then
+  AUDIO_MP4="${WORK_DIR}/audio.mp4"
+fi
 
 # Validate
 if [ ! -d "$WORK_DIR" ]; then
@@ -44,29 +52,38 @@ if [ ! -d "$WORK_DIR" ]; then
   exit 1
 fi
 if [ ! -f "$AUDIO_MP4" ]; then
-  echo "✗ Audio file not found: $AUDIO_MP4"
-  echo "  Run dl.py first to download the audio."
+  echo "✗ Audio file not found in $WORK_DIR (checked raw/audio.mp4 and audio.mp4)"
+  echo "  Run fetch-article first to download the audio."
   exit 1
 fi
 
-# ── Parse workspace dir name for source/date/title/id ──
-# We need the BV number from workspace dir (named {BV}-{title}).
-# Derive it for the reference path; fallback to a unique timestamp dir.
-WORK_BASENAME="$(basename "$WORK_DIR")"
-# Extract leading BV-like pattern (e.g., "BV1ahVr6gERA" from "BV1ahVr6gERA-...")
-BV_ID=""
-if [[ "$WORK_BASENAME" =~ ^(BV[a-zA-Z0-9]+) ]]; then
-  BV_ID="${BASH_REMATCH[1]}"
-fi
-
-# Read title from metadata if available
-META_PATH="${WORK_DIR}/metadata.md"
+# ── Determine source and date for reference path ──
+# fetch-article writes metadata.json; legacy layout uses metadata.md.
 TITLE_SLUG="unknown"
-if [ -f "$META_PATH" ]; then
-  TITLE_LINE=$(grep "^| 标题" "$META_PATH" | head -1 || true)
+META_JSON="${WORK_DIR}/metadata.json"
+META_MD="${WORK_DIR}/metadata.md"
+if [ -f "$META_JSON" ]; then
+  RAW_TITLE=$(python3 -c "import json; print(json.load(open('$META_JSON')).get('title',''))" 2>/dev/null || true)
+  if [ -n "$RAW_TITLE" ]; then
+    TITLE_SLUG=$(echo "$RAW_TITLE" | sed 's/[\\/:*?"<>|]/_/g' | head -c 60)
+  fi
+elif [ -f "$META_MD" ]; then
+  TITLE_LINE=$(grep "^| 标题" "$META_MD" | head -1 || true)
   if [ -n "$TITLE_LINE" ]; then
     RAW_TITLE=$(echo "$TITLE_LINE" | sed 's/.*| //; s/ |$//')
     TITLE_SLUG=$(echo "$RAW_TITLE" | sed 's/[\\/:*?"<>|]/_/g' | head -c 60)
+  fi
+fi
+
+# ── Extract BV id from metadata.json or workspace dir name ──
+BV_ID=""
+if [ -f "$META_JSON" ]; then
+  BV_ID=$(python3 -c "import json; print(json.load(open('$META_JSON')).get('bvid',''))" 2>/dev/null || true)
+fi
+if [ -z "$BV_ID" ]; then
+  WORK_BASENAME="$(basename "$WORK_DIR")"
+  if [[ "$WORK_BASENAME" =~ ^(BV[a-zA-Z0-9]+) ]]; then
+    BV_ID="${BASH_REMATCH[1]}"
   fi
 fi
 
