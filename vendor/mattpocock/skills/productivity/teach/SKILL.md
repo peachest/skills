@@ -27,7 +27,7 @@ To learn at a deep level, the user needs three things:
 - **Skills**, acquired through highly-relevant interactive lessons devised by you, based on the knowledge
 - **Wisdom**, which comes from interacting with other learners and practitioners
 
-Before the `RESOURCES.md` is well-populated, your focus should be to find high-quality resources which will help the user acquire knowledge. Never trust your parametric knowledge.
+Before the `RESOURCES.md` is well-populated, your focus should be to find high-quality resources which will help the user acquire knowledge.
 
 Some topics may require more skills than knowledge. Learning more about theoretical physics might be more knowledge-based. For yoga, more skills-based.
 
@@ -52,8 +52,6 @@ A lesson should be **beautiful** — clean, readable typography and layout — s
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development.
 
-If possible, open the lesson file for the user by running a CLI command.
-
 Each lesson should link via HTML anchors to other lessons and reference documents.
 
 Each lesson should recommend a primary source for the user to read or watch. This should be the most high-quality, high-trust resource you found on the topic.
@@ -64,9 +62,11 @@ Each lesson should contain a reminder to ask followup questions to the agent. Th
 
 Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse.
 
-Reuse is the default, not the exception. Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — never inline code a future lesson would duplicate.
+Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — keep inline code to things no future lesson would duplicate.
 
 A shared stylesheet is the first component every workspace earns: every lesson links it, so the lessons look like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
+
+When creating or styling HTML (lessons or reference documents), follow the [CSS Conventions](./CSS-CONVENTIONS.md) — component catalog, CSS variables, dark mode, and reference document styling.
 
 ## The Mission
 
