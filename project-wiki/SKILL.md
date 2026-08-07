@@ -1,13 +1,14 @@
 ---
 name: project-wiki
-description: Generate and maintain a three-level project wiki with SHA-based drift detection.
+description: Survey the codebase terrain once, keep the chart current with SHA-based drift detection, so orienting starts from a map instead of a blank.
 disable-model-invocation: true
 ---
 
 # project-wiki
 
-A self-maintaining codebase map that lets any AI session or new teammate
-orient in seconds instead of grep-ing blindly.
+A self-maintaining codebase **chart** that lets any AI session or new teammate
+**orient** in seconds instead of surveying blindly. Survey the terrain once,
+keep the chart current, and every subsequent orient begins from a map.
 
 > **Path convention**: `<SKILL_DIR>` is this skill's directory (holds
 > `scripts/`, `references/`, `CONTEXT.md`, and the machine-specific
@@ -23,7 +24,7 @@ docs/project_wiki/
 ├── <module-b>.md          # L2: file registration table for module-b
 ├── ...
 ├── .review_cache.json     # SHA baseline (gitignored, not committed)
-└── (optional)             # L3: semantic bridges — hand-curated by the user
+└── (optional)             # L3: legend — hand-curated by the user
     ├── glossary.md
     ├── api_mapping.md
     └── design_token_mapping.md
@@ -32,16 +33,16 @@ docs/project_wiki/
 ## The three levels
 
 - **L1 — Overview** (`overview.md`): module index table, one line per
-  module. Loaded into every AI context window; kept under 5 KB.
-- **L2 — Module wikis** (`<module>.md`): file registration table per
+  module. The master chart, loaded into every AI context window; kept under 5 KB.
+- **L2 — Module charts** (`<module>.md`): file registration table per
   module — every source file with a one-line responsibility.
-- **L3 — Semantic bridges** (optional): mappings from external
-  vocabularies (design tokens, API fields, product terms) to code.
+- **L3 — Legend** (optional): mappings from external
+  vocabularies (design tokens, API fields, product terms) to code symbols.
   Hand-curated by the user; this skill generates L1 and L2 only.
   If a `CONTEXT.md` (domain glossary) or `docs/adr/` (architectural
   decisions) exist at the project root — typically produced by the
   `/skill:domain-modeling` skill — `init` auto-detects them and links
-  them from `overview.md` as the L3 domain-language layer.
+  them from `overview.md` as the L3 legend layer.
 
 Full format spec with examples: [references/wiki_format.md](./references/wiki_format.md).
 
@@ -59,16 +60,16 @@ path; detection is the fallback). `--root` defaults to the current
 directory; pass `--root <PROJECT_DIR>` to run from elsewhere.
 
 ```bash
-# Initialize: scan project, detect modules, generate wiki skeleton
+# Survey: scan project, detect modules, generate chart skeleton
 <cmd> init [--root <PROJECT_DIR>] [--lang auto]
 
-# Check: report drift (new / deleted / modified files since last review)
+# Resurvey: report drift (new / deleted / modified files since last survey)
 <cmd> check [--root <PROJECT_DIR>] [--fail-on-stale]
 
-# Update: refresh SHA baseline after wiki has been reviewed/edited
+# Re-baseline: refresh SHA baseline after chart has been reviewed/edited
 <cmd> update [--root <PROJECT_DIR>]
 
-# Status: show coverage summary
+# Coverage: show chart coverage summary
 <cmd> status [--root <PROJECT_DIR>]
 ```
 
@@ -131,7 +132,7 @@ syntax:
 
 ## Workflow
 
-### 1. Initialize the wiki
+### 1. Survey the terrain
 
 ```bash
 <cmd> init --root <PROJECT_DIR>
@@ -150,7 +151,7 @@ After `init`, **every file entry has a `<describe ...>` placeholder**.
 table listing all source files in that module; `overview.md` lists every
 module.
 
-### 2. Fill in descriptions (AI-assisted)
+### 2. Fill in the chart (AI-assisted)
 
 For each module wiki:
 
@@ -176,16 +177,16 @@ For each module wiki:
 **Completion criterion**: zero placeholder descriptions remain across all
 module wikis and `overview.md`.
 
-### 3. Ongoing maintenance — drift detection
+### 3. Ongoing maintenance — survey drift
 
 As code changes, the wiki goes stale. The `check` command detects three
 types of file drift plus L3 domain-language connectivity drift:
 
 | Signal | Meaning | Action | Color |
 | ------ | ------- | ------ | ----- |
-| **NEW** | File in code, not in wiki/baseline | Register it in the module wiki | 🟡 |
-| **DELETED** | File in wiki/baseline, gone from code | Remove its row from the module wiki | 🔴 |
-| **MODIFIED** | SHA changed since last review | Update description if responsibility changed; else just re-`update` | 🟠 |
+| **NEW** | File in code, not on the chart | Register it in the module chart | 🟡 |
+| **DELETED** | File on the chart, gone from code | Remove its row from the module chart | 🔴 |
+| **MODIFIED** | SHA changed since last survey | Update description if responsibility changed; else just re-`update` | 🟠 |
 | **L3 DRIFT** | CONTEXT.md or ADRs exist but overview.md doesn't link (or vice versa) | Run `update` to re-link | 🔵 |
 
 ```bash
@@ -200,7 +201,7 @@ After resolving all stale signals, re-register the baseline:
 
 **Completion criterion**: `check` reports zero stale signals.
 
-### 4. Periodic audit
+### 4. Periodic resurvey
 
 ```bash
 <cmd> status --root <PROJECT_DIR>
@@ -211,14 +212,14 @@ files, last-updated timestamp.
 
 ## When to use this skill
 
-- **New project / codebase**: run `init` to generate the skeleton, then
-  fill in descriptions.
-- **Existing project without wiki**: same — `init` + fill.
+- **New project / codebase**: run `init` to survey the terrain, then
+  fill in the chart.
+- **Existing project without a chart**: same — `init` + fill.
 - **Onboarding**: point new teammates (or AI sessions) at `overview.md`
   first, then the relevant `<module>.md`.
-- **Before a big refactor**: ensure wiki is up to date so the AI has an
-  accurate map.
-- **After merging a large feature**: run `check`, update wiki for new
+- **Before a big refactor**: ensure the chart is current so orienting
+  starts from accurate terrain.
+- **After merging a large feature**: run `check`, update the chart for new
   files, run `update`.
 - **CI integration**: `check --fail-on-stale` returns exit code 1 on
   drift, suitable for CI pipelines or git hooks (user-configured).
