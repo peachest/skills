@@ -1,0 +1,108 @@
+@page {
+    margin: 2cm 1.5cm;
+    @bottom-center {
+        content: counter(page);
+        font-family: "Maple Mono NF CN", sans-serif;
+        font-size: 9pt;
+        color: #999;
+    }
+}
+body {
+    font-family: "Maple Mono NF CN", "WenQuanYi Zen Hei", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.7;
+    color: #2b2b2b;
+    max-width: 100%;
+}
+h1 {
+    font-size: 20pt;
+    color: #1a1a1a;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 6px;
+    margin-top: 0;
+}
+h2 {
+    font-size: 15pt;
+    color: #1f1f1f;
+    margin-top: 1.4em;
+    border-left: 4px solid #4a90d9;
+    padding-left: 10px;
+}
+h3 {
+    font-size: 12.5pt;
+    color: #333;
+    margin-top: 1.1em;
+}
+h4 { font-size: 11pt; color: #444; }
+
+p { margin: 0.6em 0; }
+
+a {
+    color: #4a90d9;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+code {
+    font-family: "Maple Mono NF CN", monospace;
+    background: #f4f6f8;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9.5pt;
+    color: #c7254e;
+}
+
+pre {
+    background: #f8f8fa;
+    border: 1px solid #e8e8e8;
+    border-radius: 5px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.5;
+    font-size: 9.5pt;
+}
+pre code {
+    background: none;
+    padding: 0;
+    color: #333;
+    font-size: 9.5pt;
+}
+
+blockquote {
+    border-left: 4px solid #4a90d9;
+    background: #f7faff;
+    margin: 0.8em 0;
+    padding: 8px 14px;
+    color: #555;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 9.5pt;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+}
+th {
+    background: #f0f4f8;
+    font-weight: bold;
+}
+tr:nth-child(even) { background: #fafafa; }
+
+img { max-width: 100%; height: auto; }
+
+hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 1.5em 0;
+}
+
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.3em 0; }
+
+/* 行内公式/数学符号微调 */
+.math { font-family: "Maple Mono NF CN", serif; font-size: 10.5pt; }
