@@ -28,12 +28,11 @@ HEADERS = {
 }
 
 # ── Path setup ─────────────────────────────────────────────────────────────
-# This script lives in .agent/skills/bilibili-transcriber/scripts/dl.py
-# Project root is 4 levels up from the scripts/ dir, but we detect at runtime.
+# This script lives in <SKILL_DIR>/scripts/dl.py (default: ~/.pi/agent/skills/bilibili-transcriber/scripts/).
+# Output dirs are relative to CWD (project root), not the skill directory.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPT_DIR)        # …/bilibili-transcriber/
-AGENT_DIR = os.path.dirname(SKILL_DIR)          # …/.agent/
-PROJECT_ROOT = os.path.dirname(AGENT_DIR)       # …/ai-age-defensive-programming/
+PROJECT_ROOT = os.getcwd()                      # project root (CWD)
 VIDEO_DIR = os.path.join(PROJECT_ROOT, "video")  # workspace: raw audio + ASR comparisons
 TRANSCRIPT_DIR = os.path.join(PROJECT_ROOT, "references/transcripts")  # final output
 os.makedirs(VIDEO_DIR, exist_ok=True)

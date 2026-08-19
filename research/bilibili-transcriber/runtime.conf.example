@@ -1,0 +1,18 @@
+# bilibili-transcriber Runtime Configuration
+# Copy this file to runtime.conf and fill in your ASR service details.
+#
+# How to discover the ASR service on a Kubernetes cluster:
+#   1. Find the service:
+#      sudo kubectl get svc --all-namespaces | grep -i whisper
+#   2. Get the NodePort and Node IP:
+#      sudo kubectl get svc <name> -o jsonpath='{.spec.ports[0].nodePort}'
+#      sudo kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
+#   3. Verify the endpoint and discover the model ID:
+#      curl --noproxy '*' http://<node-ip>:<node-port>/v1/models
+#   4. Fill in the values below.
+#
+# If the ASR service is not on Kubernetes, just set WHISPER_ENDPOINT
+# to the service URL directly (e.g. http://localhost:8000/v1).
+WHISPER_ENDPOINT=http://<node-ip>:<node-port>/v1
+WHISPER_MODEL=<model-id>
+WHISPER_LANG=zh
