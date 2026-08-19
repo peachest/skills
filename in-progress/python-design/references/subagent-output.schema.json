@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Subagent Findings Output",
+  "description": "Wrapper for subagent pattern findings output. Forces structured JSON output.",
+  "type": "object",
+  "required": [
+    "findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "description": "Array of pattern findings",
+      "items": {
+        "description": "Schema for subagent output — an array of these objects. Self-contained: does not use $ref to root $defs.",
+        "type": "object",
+        "required": [
+          "matched_pattern_id",
+          "is_new"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "matched_pattern_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^P\\d{3}$",
+            "description": "Existing pattern ID if matching, null if discovering new"
+          },
+          "is_new": {
+            "type": "boolean"
+          },
+          "variation_notes": {
+            "type": "string",
+            "description": "How this project's usage differs from the original pattern"
+          },
+          "occurrence": {
+            "type": "object",
+            "required": [
+              "project",
+              "ref",
+              "file",
+              "lines",
+              "snippet"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "string"
+              },
+              "snippet": {
+                "type": "string"
+              }
+            }
+          },
+          "new_pattern": {
+            "type": "object",
+            "description": "Present when is_new is true and matched_pattern_id is null",
+            "required": [
+              "name",
+              "dimension",
+              "description",
+              "rationale",
+              "occurrence"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 3
+              },
+              "dimension": {
+                "type": "string",
+                "enum": [
+                  "data-modeling",
+                  "validation",
+                  "error-strategy",
+                  "pipeline-composition",
+                  "interface-design",
+                  "module-organization",
+                  "plugin-architecture",
+                  "config-management",
+                  "serialization",
+                  "sync-async",
+                  "state-context"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 10
+              },
+              "occurrence": {
+                "type": "object",
+                "required": [
+                  "project",
+                  "ref",
+                  "file",
+                  "lines",
+                  "snippet"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "ref": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "lines": {
+                    "type": "string"
+                  },
+                  "snippet": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "is_new": {
+                  "const": false
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "occurrence"
+              ],
+              "properties": {
+                "new_pattern": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "is_new": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "new_pattern"
+              ],
+              "properties": {
+                "occurrence": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
