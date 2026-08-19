@@ -10,12 +10,19 @@ disable-model-invocation: true
 
 ## Prerequisites
 
-- This skill's extension must be installed (provides `/insight-dump` command)
+- This skill's extension must be installed (provides `/insight-dump` and `/insight-dump-session` commands)
 - Python3 available（helper script is stdlib-only）
 
 ## Key constraint
 
 System prompt 是**全局共享**的，受 `~/.pi/agent/settings.json` 控制，**不会记录在 session JSONL 中**。因此 prompt 分析必须通过 `/insight-dump` 命令获取当前 system prompt。
+
+## Commands
+
+| Command | Output | Description |
+|---------|--------|-------------|
+| `/insight-dump` | `~/.pi/agent/insight/system-prompt-dump.txt` | System prompt 文本 only |
+| `/insight-dump-session` | `~/.pi/agent/insight/session-dump.json` | 完整 session 上下文：system prompt + structured prompt options + all entries + active branch entries + LLM messages array |
 
 ## Reference
 
