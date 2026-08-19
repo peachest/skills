@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skills.local/python-design/patterns-db.schema.json",
+  "title": "Python Design Patterns Database",
+  "description": "Schema for patterns-db.json — the structured backend of the python-design skill.",
+  "type": "object",
+  "required": [
+    "version",
+    "last_updated",
+    "dimensions",
+    "patterns",
+    "projects"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version, e.g. 1.0"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date of last modification"
+    },
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The 10 design dimensions",
+      "minItems": 10,
+      "uniqueItems": true
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/project"
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pattern"
+      }
+    }
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "required": [
+        "name",
+        "source",
+        "ref",
+        "explored"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Project name, used as key in occurrences"
+        },
+        "source": {
+          "type": "string",
+          "description": "e.g. github.com/pydantic/pydantic"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Pinned version: tag name or commit:<short-hash>"
+        },
+        "explored": {
+          "type": "boolean",
+          "description": "Whether this project has been explored"
+        }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "dimension",
+        "description",
+        "is_new",
+        "occurrences"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^P\\d{3}$",
+          "description": "Pattern ID, e.g. P001"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "dimension": {
+          "type": "string",
+          "description": "Primary dimension — must be one of the dimensions array",
+          "enum": [
+            "data-modeling",
+            "validation",
+            "error-strategy",
+            "pipeline-composition",
+            "interface-design",
+            "module-organization",
+            "plugin-architecture",
+            "config-management",
+            "serialization",
+            "sync-async",
+            "state-context"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What this pattern is"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this design choice — what problem it solves. Required for new patterns."
+        },
+        "is_new": {
+          "type": "boolean",
+          "description": "True if discovered after initial 10-project exploration"
+        },
+        "occurrences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/occurrence"
+          },
+          "minItems": 1,
+          "description": "All known instances of this pattern across projects"
+        }
+      }
+    },
+    "occurrence": {
+      "type": "object",
+      "required": [
+        "project",
+        "ref",
+        "file",
+        "lines",
+        "snippet"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "Must match a project name in the projects array"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Pinned version: tag name or commit:<short-hash>"
+        },
+        "file": {
+          "type": "string",
+          "description": "Path relative to repo root"
+        },
+        "lines": {
+          "type": "string",
+          "description": "Line range e.g. 75-100, or empty string if whole file"
+        },
+        "snippet": {
+          "type": "string",
+          "description": "Real source code excerpt, trimmed of imports and irrelevant branches"
+        }
+      }
+    },
+    "subagent_finding": {
+      "description": "Schema for subagent output — an array of these objects. Self-contained: does not use $ref to root $defs.",
+      "type": "object",
+      "required": [
+        "matched_pattern_id",
+        "is_new"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "matched_pattern_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^P\\d{3}$",
+          "description": "Existing pattern ID if matching, null if discovering new"
+        },
+        "is_new": {
+          "type": "boolean"
+        },
+        "variation_notes": {
+          "type": "string",
+          "description": "How this project's usage differs from the original pattern"
+        },
+        "occurrence": {
+          "type": "object",
+          "required": [
+            "project",
+            "ref",
+            "file",
+            "lines",
+            "snippet"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "project": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "lines": {
+              "type": "string"
+            },
+            "snippet": {
+              "type": "string"
+            }
+          }
+        },
+        "new_pattern": {
+          "type": "object",
+          "description": "Present when is_new is true and matched_pattern_id is null",
+          "required": [
+            "name",
+            "dimension",
+            "description",
+            "rationale",
+            "occurrence"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 3
+            },
+            "dimension": {
+              "type": "string",
+              "enum": [
+                "data-modeling",
+                "validation",
+                "error-strategy",
+                "pipeline-composition",
+                "interface-design",
+                "module-organization",
+                "plugin-architecture",
+                "config-management",
+                "serialization",
+                "sync-async",
+                "state-context"
+              ]
+            },
+            "description": {
+              "type": "string",
+              "minLength": 10
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 10
+            },
+            "occurrence": {
+              "type": "object",
+              "required": [
+                "project",
+                "ref",
+                "file",
+                "lines",
+                "snippet"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "lines": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "is_new": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "occurrence"
+            ],
+            "properties": {
+              "new_pattern": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "is_new": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "new_pattern"
+            ],
+            "properties": {
+              "occurrence": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
