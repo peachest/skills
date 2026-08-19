@@ -1,7 +1,6 @@
 ---
 name: orient
 description: Orient before you wayfind — read the project's terrain so planning starts grounded in what already exists.
-disable-model-invocation: true
 ---
 
 Before you **wayfind**, **orient**. Wayfinding charts a way from *here* to a destination, but you can't chart from here if you don't know where here is. **Orienting** reads the **terrain** the requirement lands on, so every subsequent plan is grounded in what already exists.
