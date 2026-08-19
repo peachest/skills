@@ -2,51 +2,76 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # transcribe.sh — Transcribe audio via a whisper-asr service.
 #
-# Usage: bash scripts/transcribe.sh <workspace-dir>
+# Usage: bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>
+#
+# Features:
+#   - Loads ASR config from <SKILL_DIR>/runtime.conf (falls back to env vars)
+#   - Auto-chunks large WAV files at silence boundaries (no overlap needed)
+#   - Parallel chunk transcription (falls back to serial)
+#   - verbose_json output with confidence metadata (avg_logprob, compression_ratio)
 #
 # Outputs:
-#   Transcript (*cleaned* final) → references/transcripts/<source>/<date>-<title>-<id>/transcript.md
-#   Raw ASR output + metrics     → <workspace-dir>/<method>/                          (intermediate)
+#   Transcript (uncleaned final) → references/transcripts/<source>/<date>-<title>-<id>/transcript.md
+#   Raw ASR output + metrics     → <workspace-dir>/<method>/  (intermediate)
 #
-# Environment variables:
-#   WHISPER_ENDPOINT  — API base URL (REQUIRED, e.g. http://host:port/v1)
-#   WHISPER_MODEL     — model name (REQUIRED, e.g. whisper-large-v3)
-#                         Query ${WHISPER_ENDPOINT}/models first if unsure.
+# Environment variables (override runtime.conf):
+#   WHISPER_ENDPOINT  — API base URL (e.g. http://host:30567/v1)
+#   WHISPER_MODEL     — model ID (e.g. atom)
 #   WHISPER_LANG      — language hint (default: zh)
 #   METHOD            — intermediate subdirectory (default: faster-whisper)
+#   CHUNK_SEC         — target chunk duration in seconds (default: 600)
+#   SILENCE_DB        — silence detection threshold in dB (default: -30)
+#   SILENCE_MIN_DUR   — min silence duration for detection in seconds (default: 0.5)
+#   TOLERANCE         — search window for silence boundary (default: 60)
+#   STRATEGY          — chunking strategy: dp|greedy|weighted|threshold (default: dp)
+#   MIN_SILENCE_SCORE — min silence duration for threshold strategy (default: 1.5)
+#   MAX_FILESIZE_MB   — WAV size threshold for chunking in MB (default: 25)
+#   PARALLEL          — max parallel transcription requests (default: 4)
 # ──────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
-AGENT_DIR="$(dirname "$SKILL_DIR")"
-PROJECT_ROOT="$(dirname "$AGENT_DIR")"
+
+# References go to the project root (CWD), not the skill directory
+PROJECT_ROOT="$(pwd)"
 TRANSCRIPT_DIR="${PROJECT_ROOT}/references/transcripts"
 
-WHISPER_ENDPOINT="${WHISPER_ENDPOINT:?}"
-WHISPER_MODEL="${WHISPER_MODEL:?}"
+# ── Load runtime.conf if it exists ──
+RUNTIME_CONF="${SKILL_DIR}/runtime.conf"
+if [ -f "$RUNTIME_CONF" ]; then
+  # shellcheck source=/dev/null
+  source "$RUNTIME_CONF"
+fi
+
+WHISPER_ENDPOINT="${WHISPER_ENDPOINT:?WHISPER_ENDPOINT not set. Configure in runtime.conf or set as env var.}"
+WHISPER_MODEL="${WHISPER_MODEL:?WHISPER_MODEL not set. Configure in runtime.conf or set as env var.}"
 WHISPER_LANG="${WHISPER_LANG:-zh}"
 METHOD="${METHOD:-faster-whisper}"
+CHUNK_SEC="${CHUNK_SEC:-600}"
+SILENCE_DB="${SILENCE_DB:--30}"
+SILENCE_MIN_DUR="${SILENCE_MIN_DUR:-0.5}"
+TOLERANCE="${TOLERANCE:-60}"
+STRATEGY="${STRATEGY:-dp}"
+MIN_SILENCE_SCORE="${MIN_SILENCE_SCORE:-1.5}"
+MAX_FILESIZE_MB="${MAX_FILESIZE_MB:-25}"
+PARALLEL="${PARALLEL:-4}"
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <workspace-dir>"
-  echo "  e.g. $0 video/BV1ahVr6gERA-your-title/"
+  echo "  e.g. $0 /tmp/fetch-article-xxx/"
   exit 1
 fi
 
 WORK_DIR="$1"
-RAW_DIR="${WORK_DIR}/raw"
 OUT_DIR="${WORK_DIR}/${METHOD}"
 
 # ── Locate audio file ──
-# fetch-article saves to {workspace}/audio.mp4;
-# legacy layout uses {workspace}/raw/audio.mp4.
-AUDIO_MP4="${RAW_DIR}/audio.mp4"
+AUDIO_MP4="${WORK_DIR}/raw/audio.mp4"
 if [ ! -f "$AUDIO_MP4" ]; then
   AUDIO_MP4="${WORK_DIR}/audio.mp4"
 fi
 
-# Validate
 if [ ! -d "$WORK_DIR" ]; then
   echo "✗ Workspace not found: $WORK_DIR"
   exit 1
@@ -57,8 +82,7 @@ if [ ! -f "$AUDIO_MP4" ]; then
   exit 1
 fi
 
-# ── Determine source and date for reference path ──
-# fetch-article writes metadata.json; legacy layout uses metadata.md.
+# ── Determine title and BV id for reference path ──
 TITLE_SLUG="unknown"
 META_JSON="${WORK_DIR}/metadata.json"
 META_MD="${WORK_DIR}/metadata.md"
@@ -75,7 +99,6 @@ elif [ -f "$META_MD" ]; then
   fi
 fi
 
-# ── Extract BV id from metadata.json or workspace dir name ──
 BV_ID=""
 if [ -f "$META_JSON" ]; then
   BV_ID=$(python3 -c "import json; print(json.load(open('$META_JSON')).get('bvid',''))" 2>/dev/null || true)
@@ -88,10 +111,7 @@ if [ -z "$BV_ID" ]; then
 fi
 
 TODAY="$(date +%Y%m%d)"
-# Determine source from metadata
 SOURCE="bilibili"
-
-# Build reference dir: references/transcripts/<source>/<date>-<title>-<id>/
 REF_DIR="${TRANSCRIPT_DIR}/${SOURCE}/${TODAY}-${TITLE_SLUG}-${BV_ID}"
 mkdir -p "$OUT_DIR" "$REF_DIR"
 
@@ -103,49 +123,91 @@ ffmpeg -y -i "$AUDIO_MP4" -ac 1 -ar 16000 -sample_fmt s16 "$WAV_PATH" -loglevel 
 T1=$(date +%s%N)
 TRANSCODE_S=$(echo "scale=3; ($T1 - $T0) / 1000000000" | bc)
 WAV_SIZE=$(stat -c%s "$WAV_PATH" 2>/dev/null)
-echo "  → $((WAV_SIZE / 1048576))MB, transcode ${TRANSCODE_S}s"
+WAV_SIZE_MB=$(echo "scale=1; $WAV_SIZE / 1048576" | bc)
+echo "  → ${WAV_SIZE_MB}MB, transcode ${TRANSCODE_S}s"
 
-# Get audio duration (ffprobe or fallback to ffmpeg parse)
+# Get duration (ffprobe preferred, ffmpeg fallback)
 DURATION=""
 if command -v ffprobe &>/dev/null; then
   DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$WAV_PATH" 2>/dev/null || true)
 fi
 if [ -z "$DURATION" ]; then
-  RAW=$(ffmpeg -i "$WAV_PATH" 2>&1 | grep -oP 'Duration: \K[0-9:.]+' || true)
-  DURATION=$(echo "$RAW" | awk -F: '{ print ($1*3600)+($2*60)+$3 }')
+  RAW_DUR=$(ffmpeg -i "$WAV_PATH" 2>&1 | grep -oP 'Duration: \K[0-9:.]+' || true)
+  DURATION=$(echo "$RAW_DUR" | awk -F: '{ print ($1*3600)+($2*60)+$3 }')
 fi
 DURATION=$(printf "%.1f" "$DURATION")
 echo "  duration: ${DURATION}s"
 
-# ── Step 2: Whisper ASR ──
-echo "[2/3] Transcribing via whisper-asr (${WHISPER_ENDPOINT})…"
+# ── Step 2: Transcribe (direct or silence-aware chunked) ──
+echo "[2/3] Transcribing via whisper-asr (${WHISPER_ENDPOINT}, model=${WHISPER_MODEL})…"
+
 T2=$(date +%s%N)
-RESPONSE=$(curl -s --noproxy '*' \
-  -X POST "${WHISPER_ENDPOINT}/audio/transcriptions" \
-  -F "file=@$WAV_PATH" \
-  -F "model=${WHISPER_MODEL}" \
-  -F "language=${WHISPER_LANG}" \
-  -F "response_format=json")
+
+NEEDS_CHUNK=0
+if [ "$(echo "$WAV_SIZE_MB > $MAX_FILESIZE_MB" | bc)" -eq 1 ]; then
+  NEEDS_CHUNK=1
+fi
+
+RAW_TEXT_PATH="${OUT_DIR}/transcript_raw.txt"
+
+if [ "$NEEDS_CHUNK" -eq 1 ]; then
+  echo "  WAV ${WAV_SIZE_MB}MB > ${MAX_FILESIZE_MB}MB → silence-aware chunking"
+  echo "  chunk=${CHUNK_SEC}s, silence_db=${SILENCE_DB}, tolerance=${TOLERANCE}s, parallel=${PARALLEL}"
+
+  CHUNK_DIR="${OUT_DIR}/chunks"
+  python3 "${SCRIPT_DIR}/chunk_transcribe.py" \
+    --wav "$WAV_PATH" \
+    --endpoint "$WHISPER_ENDPOINT" \
+    --model "$WHISPER_MODEL" \
+    --lang "$WHISPER_LANG" \
+    --chunk-sec "$CHUNK_SEC" \
+    --silence-db "$SILENCE_DB" \
+    --silence-min-dur "$SILENCE_MIN_DUR" \
+    --tolerance "$TOLERANCE" \
+    --strategy "$STRATEGY" \
+    --min-silence-score "$MIN_SILENCE_SCORE" \
+    --max-filesize-mb "$MAX_FILESIZE_MB" \
+    --parallel "$PARALLEL" \
+    --output "$RAW_TEXT_PATH" \
+    --chunk-dir "$CHUNK_DIR"
+
+  if [ ! -f "$RAW_TEXT_PATH" ] || [ ! -s "$RAW_TEXT_PATH" ]; then
+    echo "  Chunked transcription produced no output, falling back to direct"
+    NEEDS_CHUNK=0
+  fi
+fi
+
+if [ "$NEEDS_CHUNK" -eq 0 ]; then
+  echo "  Direct transcription (WAV ${WAV_SIZE_MB}MB ≤ ${MAX_FILESIZE_MB}MB)"
+  RESPONSE=$(curl -s --noproxy '*' \
+    -X POST "${WHISPER_ENDPOINT}/audio/transcriptions" \
+    -F "file=@$WAV_PATH" \
+    -F "model=${WHISPER_MODEL}" \
+    -F "language=${WHISPER_LANG}" \
+    -F "response_format=verbose_json")
+
+  TEXT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text',''))" 2>/dev/null)
+  if [ -z "$TEXT" ]; then
+    echo "✗ ASR failed. Response:"
+    echo "$RESPONSE" | head -5
+    exit 1
+  fi
+  echo "$TEXT" > "$RAW_TEXT_PATH"
+fi
+
 T3=$(date +%s%N)
 ASR_S=$(echo "scale=3; ($T3 - $T2) / 1000000000" | bc)
 
-# Parse response
-TEXT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text',''))" 2>/dev/null)
-STATUS=$?
-if [ $STATUS -ne 0 ] || [ -z "$TEXT" ]; then
-  echo "✗ ASR failed. Response:"
-  echo "$RESPONSE" | head -5
-  exit 1
-fi
-
+TEXT=$(cat "$RAW_TEXT_PATH")
 CHAR_COUNT=$(echo -n "$TEXT" | wc -c | tr -d ' ')
 RTF=$(echo "scale=4; $ASR_S / $DURATION" | bc)
 TOTAL_S=$(echo "scale=3; ($T3 - $T0) / 1000000000" | bc)
-echo "  ASR ${ASR_S}s, total ${TOTAL_S}s, RTF ${RTF}, ${CHAR_COUNT} chars"
+CHUNK_INFO=$([ "$NEEDS_CHUNK" -eq 1 ] && echo "silence-aware" || echo "direct")
+
+echo "  ASR ${ASR_S}s, total ${TOTAL_S}s, RTF ${RTF}, ${CHAR_COUNT} chars, mode=${CHUNK_INFO}"
 
 # ── Step 3: Save outputs ──
 
-# 3a. Raw ASR output → workspace (intermediate)
 RAW_TRANSCRIPT_PATH="${OUT_DIR}/transcript.md"
 cat > "$RAW_TRANSCRIPT_PATH" << EOF
 # 转录结果
@@ -160,13 +222,13 @@ cat > "$RAW_TRANSCRIPT_PATH" << EOF
 | 推理耗时 | ${ASR_S}s |
 | RTF | ${RTF} |
 | 字符数 | ${CHAR_COUNT} |
+| 转录模式 | ${CHUNK_INFO} |
 
 ---
 
 ${TEXT}
 EOF
 
-# Metrics → workspace
 METRICS_PATH="${OUT_DIR}/metrics.md"
 cat > "$METRICS_PATH" << EOF
 # 性能指标
@@ -178,15 +240,19 @@ cat > "$METRICS_PATH" << EOF
 | 音频 | ${AUDIO_MP4} |
 | 音频时长 | ${DURATION}s |
 | 原始大小 | $(echo "scale=2; $(stat -c%s "$AUDIO_MP4" 2>/dev/null || echo 0) / 1048576" | bc)MB |
-| WAV 大小 | $(echo "scale=2; $WAV_SIZE / 1048576" | bc)MB |
+| WAV 大小 | ${WAV_SIZE_MB}MB |
 | 转码耗时 | ${TRANSCODE_S}s |
 | 推理耗时 | ${ASR_S}s |
 | 总耗时 | ${TOTAL_S}s |
 | RTF | ${RTF} |
 | 字符数 | ${CHAR_COUNT} |
+| 转录模式 | ${CHUNK_INFO} |
+| 分片策略 | ${STRATEGY} |
+| 分片大小 | ${CHUNK_SEC}s |
+| 静音阈值 | ${SILENCE_DB}dB |
+| 并行度 | ${PARALLEL} |
 EOF
 
-# 3b. Final transcript → references (to be cleaned)
 FINAL_TRANSCRIPT_PATH="${REF_DIR}/transcript.md"
 cp "$RAW_TRANSCRIPT_PATH" "$FINAL_TRANSCRIPT_PATH"
 

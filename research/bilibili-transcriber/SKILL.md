@@ -1,124 +1,85 @@
 ---
 name: bilibili-transcriber
 description: |
-  Transcribe Bilibili video audio to text via a whisper-asr service. Use
-  when the user has a Bilibili video and wants its content as text for
-  technique extraction. The audio download step is now handled by the
-  fetch-article skill — this skill only does the transcription.
+  Transcribe Bilibili video audio to text. Use when the user has a Bilibili
+  video URL and wants its spoken content as a readable transcript.
 ---
 
 # Bilibili Video Transcription
 
-Transcribe Bilibili video audio via any OpenAI-compatible whisper-asr service.
-
 ## Pipeline
 
 ```text
-fetch-article (download audio) → this skill (transcribe)
+fetch-article (download audio) → this skill (transcribe) → LLM (clean)
 ```
 
-### Step 1: Download Audio (via fetch-article)
+### Step 1: Download Audio
 
 ```bash
-python3 .agent/skills/fetch-article/scripts/fetch.py \
-  "https://www.bilibili.com/video/BV1xx/" \
-  --json
+python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
+  "https://www.bilibili.com/video/BV1xx/" --json
 ```
 
-This saves audio to a temp directory and outputs JSON with `audio_path`,
-`title`, `author`, `duration_sec`, and `has_cc_subtitles`.
-
-If CC subtitles are available, they are saved directly and ASR is skipped.
+Done when: JSON output contains `raw_path` pointing to a workspace dir
+with `audio.mp4` and `metadata.json`.
 
 ### Step 2: Transcribe
 
 ```bash
-WHISPER_ENDPOINT=http://your-asr:8000/v1 \
-WHISPER_MODEL=whisper-large-v3 \
-WHISPER_LANG=zh \
-bash .agent/skills/bilibili-transcriber/scripts/transcribe.sh <workspace-dir>/
+bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>/
 ```
 
-Where `<workspace-dir>` is the output directory from fetch-article
-(use the `raw_path` field from the JSON output).
+`<workspace-dir>` is the `raw_path` from Step 1. The script loads
+`<SKILL_DIR>/runtime.conf` for endpoint/model automatically; if absent,
+set `WHISPER_ENDPOINT` and `WHISPER_MODEL` env vars
+(see [Service Discovery](#service-discovery)).
 
-> **Finding the right endpoint and model name**: Query the service first with
-> `curl http://host:port/v1/models` to discover the model ID. vllm-based
-> services use `/v1` (not `/openai/v1`). The model ID may differ from the
-> model name (e.g. `atom` instead of `whisper-large-v3`).
->
-> **Proxy**: if the ASR service is on an internal IP, add it to `no_proxy`
-> or use `curl --noproxy '*'` to avoid the HTTP proxy refusing the connection.
+The script transcodes MP4 → 16kHz WAV, then either transcribes directly
+(WAV ≤ 25MB) or uses **silence-aware chunking**: detects natural pause
+boundaries via ffmpeg `silencedetect`, partitions at those points
+(DP by default), transcribes chunks in parallel, and concatenates
+directly — no overlap, no dedup. Output uses `verbose_json` to capture
+per-segment `avg_logprob` and `compression_ratio`.
 
-### Step 3: Clean the Transcript (Manual)
+Done when: `references/transcripts/bilibili/{date}-{title}-{BV}/transcript.md`
+exists with raw ASR text, and the console reports chunk boundaries and
+any low-confidence segments (`avg_logprob < -1.0`).
 
-The raw transcript is continuous text without punctuation. You must manually
-add paragraph breaks and fix homophone ASR errors. See the detailed cleaning
-guide below.
+### Step 3: Clean the Transcript (LLM)
 
-## Prerequisites
+The raw transcript is continuous text without punctuation. Feed it to an
+LLM for homophone correction, punctuation, and paragraph segmentation.
+See [`references/llm-cleanup.md`](references/llm-cleanup.md) for the
+prompt template and pre-marking low-confidence segments.
 
-- `ffmpeg` in PATH
-- Network access to `api.bilibili.com`
-- A running whisper-asr service with OpenAI-compatible endpoint
-- `curl` for API calls
+Done when: transcript has paragraph breaks, punctuation, and corrected
+homophones — every raw ASR segment accounted for.
 
-## Environment Variables for transcribe.sh
+## Service Discovery
 
-| Variable | Required | Default | Description |
-| ---------- | ---------- | --------- | ------------- |
-| `WHISPER_ENDPOINT` | Yes | — | API base URL, e.g. `http://host:8000/v1` |
-| `WHISPER_MODEL` | Yes | — | Model ID (query `/v1/models` to discover), e.g. `whisper-large-v3` |
-| `WHISPER_LANG` | No | `zh` | Language hint |
-| `METHOD` | No | `faster-whisper` | Intermediate subdirectory name |
+If `<SKILL_DIR>/runtime.conf` exists, `transcribe.sh` sources it — no
+env vars needed. To create it, see `runtime.conf.example` for Kubernetes
+discovery steps (`kubectl get svc`, NodePort, `curl /v1/models`).
 
-## Output
+For non-Kubernetes: set `WHISPER_ENDPOINT` to the service URL and
+`WHISPER_MODEL` to the model ID (query `/v1/models` to discover — vLLM
+uses `/v1`, not `/openai/v1`; the model ID may differ from the name,
+e.g. `atom` instead of `whisper-large-v3`).
 
-```text
-<workspace-dir>/                    ← from fetch-article
-├── audio.mp4                       ← downloaded audio
-├── metadata.json                  ← video metadata (title, bvid, etc.)
-├── $METHOD/                        ← intermediate ASR output
-│   ├── audio.wav                   ← transcoding cache
-│   ├── transcript.md               ← raw ASR (metadata + text)
-│   └── metrics.md                  ← performance metrics
+## Chunking Configuration
 
-references/transcripts/
-└── bilibili/
-    └── {date}-{title}-{BV}/
-        └── transcript.md           ← ← edit this one
-```
-
-## Cleaning the Transcript
-
-The raw ASR output is continuous text. You must manually clean it.
-
-### Common Issues
-
-| Issue | Example | Fix |
-| ------- | --------- | ----- |
-| No paragraph breaks | `...防线建好先建立全景认知...` | Add `\n\n` at topic boundaries |
-| Missing punctuation | `模型滥用供应链攻击成本攻击` | Add `、` between list items |
-| Wrong characters (ASR hallucination) | `Swift Modeling` → `Threat Modeling` | Correct based on context |
-| Wrong characters (homophone) | `转印` → 转义, `托命` → 脱敏 | Correct based on context |
-| Garbage transcription | `等下摄影19000...` | **Keep**, annotate with `[音频不清]` |
-| Stuck/repeated phrases | Model repeating the same fragment | Deduplicate |
-
-### Workflow
-
-1. Read through the full text while skimming the video at 2x
-2. Insert `\n\n` at each topic boundary
-3. For wrong terms: hallucination → `[音频不清]`, homophone → correct, proper noun mangled → correct
-4. For a 10-minute tech talk, expect ~15-20 minutes of cleaning
+`STRATEGY` selects the partition algorithm — see
+[`references/chunking.md`](references/chunking.md) for comparison.
+Remaining defaults (`CHUNK_SEC=600`, `SILENCE_DB=-30`, `TOLERANCE=60`,
+`MAX_FILESIZE_MB=25`, `PARALLEL=4`) are sensible for 60-120 minute
+Mandarin tech talks. Override via env vars or `transcribe.sh` flags.
 
 ## Full Pipeline (one-liner)
 
 ```bash
-WHISPER_ENDPOINT=http://your-asr:8000/v1 \
-WHISPER_MODEL=whisper-large-v3 \
 BVID="BV1xx..." && \
-OUT=$(python3 .agent/skills/fetch-article/scripts/fetch.py \
+OUT=$(python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
   "https://www.bilibili.com/video/$BVID/" \
   --json | python3 -c "import sys,json; print(json.load(sys.stdin)['raw_path'])") && \
-bash .agent/skills/bilibili-transcriber/scripts/transcribe.sh "$OUT"
+bash <SKILL_DIR>/scripts/transcribe.sh "$OUT"
 ```
