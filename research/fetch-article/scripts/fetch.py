@@ -19,7 +19,6 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.resolve()
 SKILL_DIR = SCRIPT_DIR.parent
 ADAPTERS_DIR = SCRIPT_DIR / "adapters"
-PROJECT_ROOT = SKILL_DIR.parent.parent.parent  # .agent/skills/ → project root
 
 sys.path.insert(0, str(ADAPTERS_DIR))
 sys.path.insert(0, str(SCRIPT_DIR))

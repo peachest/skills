@@ -16,17 +16,17 @@ mechanisms.
 
 ```bash
 # Fetch a WeChat article → Markdown JSON
-python3 .agent/skills/fetch-article/scripts/fetch.py \
+python3 <SKILL_DIR>/scripts/fetch.py \
   "https://mp.weixin.qq.com/s/xxx" \
   --json
 
 # Fetch a generic webpage
-python3 .agent/skills/fetch-article/scripts/fetch.py \
+python3 <SKILL_DIR>/scripts/fetch.py \
   "https://example.com/article" \
   --json
 
 # Just get body Markdown (no JSON wrapper)
-python3 .agent/skills/fetch-article/scripts/fetch.py \
+python3 <SKILL_DIR>/scripts/fetch.py \
   "https://example.com/article" \
   --text
 ```
@@ -90,7 +90,7 @@ Requires: `pip install "scrapling[all]"`
 The `to_md.py` script is a reusable HTML→Markdown converter:
 
 ```bash
-python3 .agent/skills/fetch-article/scripts/to_md.py /path/to/article.html --images
+python3 <SKILL_DIR>/scripts/to_md.py /path/to/article.html --images
 ```
 
 It uses `markitdown` CLI for body conversion and `beautifulsoup4` for
