@@ -161,11 +161,28 @@ def main():
             patterns_by_id[pid]["occurrences"].append(occ)
             occ_added += 1
 
-    # Merge new: assign IDs and add
+    # Merge new: assign IDs and add — check for duplicate names first
     max_id = max(int(p["id"][1:]) for p in db["patterns"])
+    existing_names = {p["name"] for p in db["patterns"]}
+    existing_by_name = {p["name"]: p for p in db["patterns"]}
     new_added = 0
+    new_merged_into_existing = 0
     for f in new:
         np = f["new_pattern"]
+        if np["name"] in existing_names:
+            # Same name already exists — merge occurrence into existing pattern
+            target = existing_by_name[np["name"]]
+            occ = np["occurrence"]
+            is_dup = any(
+                o["project"] == occ["project"]
+                and o["file"] == occ["file"]
+                and o["lines"] == occ["lines"]
+                for o in target["occurrences"]
+            )
+            if not is_dup:
+                target["occurrences"].append(occ)
+            new_merged_into_existing += 1
+            continue
         max_id += 1
         new_pattern = {
             "id": f"P{max_id:03d}",
@@ -177,7 +194,12 @@ def main():
             "occurrences": [np["occurrence"]],
         }
         db["patterns"].append(new_pattern)
+        existing_names.add(np["name"])
+        existing_by_name[np["name"]] = new_pattern
         new_added += 1
+
+    if new_merged_into_existing:
+        print(f"  New patterns merged into existing (same name): {new_merged_into_existing}", file=sys.stderr)
 
     db["last_updated"] = str(date.today())
 
