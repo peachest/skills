@@ -11,7 +11,7 @@ A route has arrived — decisions locked, map charted — about to guide `/skill
 1. **Locate the route.** A file path, a tracker issue, or content the user supplies. Read it fully.
 2. **Gather the terrain data.** The wayfinder map and its tickets — closed decisions, research outputs, prototype results. The project's ADRs, `CONTEXT.md`, and the codebase the route proposes to traverse. Fetch ticket bodies and resolution comments; read prototype outputs and research docs the route cites or depends on. **Done when**: every source the route cites or depends on is read, and its path is listed for the sub-agents.
 3. **Spawn five sub-agents in parallel** — one per check below. Each sub-agent gets: the route (path or full text), every terrain-source path it should cross-check against, and the check's body as its brief. Use `runs.all` with five children, `context: 'fresh'` each. List every terrain-source path explicitly in each sub-agent's task text — sub-agents have `context: 'fresh'` and see only what you pass them, so a bare "the terrain sources" with no paths leaves them blind.
-4. **Aggregate** the five reports. Present each check's report under its own heading, verbatim or lightly cleaned — the five axes are separate, so each stays on its own heading.
+4. **Aggregate** the five reports. Present each check's report under its own heading, verbatim or lightly cleaned — the five axes are separate, so each stays on its own heading. The `runs.all` return value already carries each child's `.output` — read it directly from the resolved array; do not `find`/`read` sub-agent session files to locate outputs.
 5. **Classify every gap** by the wayfinder ticket type it routes to (see [Gap classification](#gap-classification)).
 6. **Report** per check, then the classification table, then a verdict. If gaps exist, ask the user which to route — see [Routing](#routing).
 
@@ -90,11 +90,11 @@ Present the five check reports under five headings (`## 1 — Ground truth`, etc
 
 Then a **classification table** — one row per gap:
 
-| # | Check | Gap (short) | Type | Routes to |
-|---|-------|-------------|------|-----------|
-| 1 | Ground truth | Claim "X supports Y" — source says no | research | `/skill:research` |
-| 2 | Route feasibility | "add error handling" — hard-error vs fallback undecided | grilling | `/skill:grill-with-docs` |
-| … | | | | |
+| # | Check | Gap (short) | Type |
+|---|-------|-------------|------|
+| 1 | Ground truth | Claim "X supports Y" — source says no | research |
+| 2 | Route feasibility | "add error handling" — hard-error vs fallback undecided | grilling |
+| … | | | |
 
 End with a verdict:
 
