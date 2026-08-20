@@ -11,11 +11,74 @@ Remote: `github.internal.example.com/org/repo.git`
 - **列出 issue**：`gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`，配合 `--label` 和 `--state` 过滤。
 - **评论 issue**：`gh issue comment <number> --body "..."`。
 - **添加/移除标签**：`gh issue edit <number> --add-label "..."` / `--remove-label "..."`。多个标签用逗号分隔：`--add-label "wayfinder:map,triage"`。
-- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push 到默认分支后 GitHub 自动 close。关闭前通过 `gh issue edit <number> --remove-label "in-progress,ready-for-agent"` 清理工作流标签。**唯一例外**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。
+- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push 到默认分支后 GitHub 自动 close。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。**例外 2**：PR merge 后 GitHub 未自动关闭 Map（漏写 `Closes #<map>` 或 GitHub 未触发），agent 手动 `gh issue close <map>`（先 comment 记录原因）。详见 PR 约定段的「merge 后验证」。
 - **更新 issue body**：`gh issue edit <number> --body "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--body "$(cat <<'EOF'\n...\nEOF\n)"`。
 - **Pull Request**：使用 `gh pr create`、`gh pr view`、`gh pr comment` 等。
 
 `gh` 在仓库中运行时自动推断项目（通过 `git remote`）。
+
+## 状态管理
+
+Ticket 执行状态用 `status::` 前缀 label 管理。三个状态：
+
+| Label | 含义 | 配色 |
+|-------|------|------|
+| `status::open` | 已创建，未认领 | `#00aa00` 绿 |
+| `status::claimed` | 已认领，执行中 | `#ffaa00` 黄 |
+| `status::resolved` | 工作完成，待 commit close | `#6699cc` 蓝 |
+
+`wontfix` 是 triage 维度的扁平 label，不属于 `status::`。Map issue 不打 status——其状态由子 ticket 聚合，关闭靠 GitHub 原生 closed。
+
+> **注意**：GitHub label 无 scoped 互斥（不像 GitLab）。状态转换必须显式 `--remove-label` 旧状态 + `--add-label` 新状态，不能只加不删。
+
+### Setup（每个项目执行一次）
+
+```bash
+gh label create "status::open"    --color 00aa00
+gh label create "status::claimed"  --color ffaa00
+gh label create "status::resolved" --color 6699cc
+```
+
+### 状态转换
+
+**创建 ticket → `status::open`**：创建时即打。
+
+**认领（open → claimed）**：assignee + `status::claimed` 同时设——assignee 管归属，label 管状态。同时显式移除 `status::open`。
+
+```bash
+gh issue edit <n> --add-assignee "@me" --add-label "status::claimed" --remove-label "status::open"
+```
+
+**解决（claimed → resolved）**：工作完成时设置。顺序：comment 记录答案 → 设 `status::resolved`（移除 `status::claimed`）→ commit `Closes #n`。
+
+```bash
+gh issue comment <n> --body "<answer>"
+gh issue edit <n> --add-label "status::resolved" --remove-label "status::claimed"
+# 然后 git commit -m "...\n\nCloses #n"
+```
+
+`status::resolved` 在 commit 创建时即设，填补「工作完成 → push/merge 关闭」之间的可见性盲区。issue 被 GitHub 自动关闭后 `status::resolved` 残留不清除——closed 是终态。
+
+### Frontier 查询
+
+Frontier = `status::open` + 未认领（无 assignee） + 未阻塞（`Blocked by` 行无开放 issue）。
+
+```bash
+gh issue list --label "status::open" --state open --json number,title,assignees,body
+# 再过滤：无 assignee + body 中 Blocked by 行无开放 issue
+```
+
+### 废弃 in-progress
+
+旧的扁平 `in-progress` label 已被 `status::claimed` 取代。迁移存量 issue 后删除该 label：
+
+```bash
+# 查找所有打了 in-progress 的 open issue
+gh issue list --label in-progress --state open --json number --jq '.[].number'
+# 逐个替换
+gh issue edit <n> --add-label "status::claimed" --remove-label "in-progress"
+gh label delete in-progress --yes
+```
 
 ## PR 作为 triage 来源
 
@@ -72,14 +135,14 @@ Remote: `github.internal.example.com/org/repo.git`
 
   实际操作中，路径 1（body 文本搜索）是**最可靠的**主路径，因为 `Part of #<map>` 是所有子 ticket body 的约定首行。
 
-- **Frontier 查询**：列出 map 的子 ticket（通过上述查询路径），排除 `Blocked by` 行中仍有开放 issue 的 ticket，或已分配人的 issue。
-- **领取**：`gh issue edit <n> --add-assignee "@me"`。
-- **解决**：先 `gh issue comment <n> --body "<answer>"` 记录结果，然后通过 commit message（`Closes #n`）关闭，最后将上下文指针追加到 map 的 Decisions-so-far。禁止直接调用 `gh issue close`，必须走 git commit 方式关闭。
+- **Frontier 查询**：`gh issue list --label "status::open" --state open`，再过滤无 assignee + 未阻塞。详见「状态管理」段。
+- **领取**：`gh issue edit <n> --add-assignee "@me" --add-label "status::claimed" --remove-label "status::open"`。详见「状态管理」段。
+- **解决**：先 `gh issue comment <n> --body "<answer>"` 记录结果，再 `gh issue edit <n> --add-label "status::resolved" --remove-label "status::claimed"` 标记完成，然后通过 commit message（`Closes #n`）关闭，最后将上下文指针追加到 map 的 Decisions-so-far。禁止直接调用 `gh issue close`，必须走 git commit 方式关闭。详见「状态管理」段。
 
 ## 实现操作 — Used by /skill:implement
 
 - **前置检查**：实现任何 ticket 前，必须先加载 `/skill:tdd` skill 并评估是否适用。若 ticket 涉及非 trivial 逻辑（分支、循环、parser、money/security 路径），必须走 TDD 流程。仅纯声明式代码（常量定义、类型别名、纯转发方法）可跳过。
-- **实现节奏**：一 ticket → 一 commit → 一 `Closes #n`。禁止一个 commit 关闭多个 ticket，也禁止一个 ticket 代码分散在多个 commit 中不打标。
+- **实现节奏**：一 ticket → comment → `status::resolved` → 一 commit `Closes #n`。禁止一个 commit 关闭多个 ticket，也禁止一个 ticket 代码分散在多个 commit 中不打标。状态转换详见「状态管理」段。
 - **测试门槛**：即使 ticket AC 只写了"编译通过"，也必须按 seams 写至少一个测试。AC 弱不代表不需要测试——没有测试的代码是债务，不因 AC 省略而豁免。
 
 ## 发券操作 — Used by /skill:to-tickets
@@ -96,6 +159,7 @@ Agent 不主动创建 PR。用户说"提交 PR"或"创建 pull request"时，按
 - **命令**：`gh pr create --title "<map title>" --body "$(cat <<'EOF'\n参见 #<map>。\n\n子 ticket：\n- #<n> <title>\n- #<m> <title>\n\nCloses #<map>\nEOF\n)" --base main`。
 - **确认**：创建前必须向用户展示 PR 描述并等待确认。
 - **关闭 Map**：merge 后 GitHub 根据 PR description 中的 `Closes #<map>` 自动关闭。
+- **merge 后验证**：merge 完成后，agent 必须运行 `gh issue view <map_number> --json state --jq '.state'` 确认 Map 已 closed。若仍为 open（PR description 漏写 `Closes #<map>` 或 GitHub 未触发自动关闭），则手动关闭：先 `gh issue comment <map> --body "..."` 记录原因，再 `gh issue close <map>`。此为 `gh issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
 
 ## Issue 模板
 
