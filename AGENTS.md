@@ -8,7 +8,7 @@
 
 ## 安装
 
-见 `docs/agents/install-skills.md`。
+安装或同步 skill 到全局 agent 时，必须用 `npx skills add -g ./<path> -a pi -y`，禁止手动 `cp`。完整规范见 `docs/agents/install-skills.md`。
 
 ## Agent skills
 
@@ -19,10 +19,6 @@ Issues live in GitHub Issues on `github.com/peachest/skills`. See `docs/agents/i
 ### Triage labels
 
 The five canonical triage roles use default label strings. See `docs/agents/triage-labels.md`.
-
-### Install skills
-
-See `docs/agents/install-skills.md`.
 
 ### Domain docs
 
