@@ -15,56 +15,30 @@ Mutation testing mutates production code and checks whether tests fail — **sur
 
 ## Pipeline
 
-1. **Detect language** — inspect the target directory for language markers.
-2. **Run mutation tool** — apply AST-level mutations, run tests per mutation.
-3. **Parse survivors** — collect mutations where tests did NOT fail.
-4. **Report blind spots** — markdown report grouped by file, with original vs mutated code.
+1. **Detect language** — inspect the target directory for language markers (below).
+2. **Load the language reference** — read the matching `references/<lang>.md` for tool choice, install, and run commands.
+3. **Run mutation tool** — apply mutations, run tests per mutation.
+4. **Parse survivors** — collect mutations where tests did NOT fail.
+5. **Report blind spots** — markdown report grouped by file, with original vs mutated code.
 
-## Language adapters
+## Detect language
 
-| Language | Tool | How to run |
-|----------|------|-----------|
-| Go | `<SKILL_DIR>/scripts/go-mutation.go` | `go run <SKILL_DIR>/scripts/go-mutation.go -dir <pkg> -timeout 30` |
-| Python | _(future ticket — `mutmut`)_ | — |
-| TypeScript | _(future ticket — `Stryker`)_ | — |
+Pick the reference by what the target directory contains:
 
-Only Go is implemented in this first slice. Python and TypeScript adapters are follow-up tickets.
+| Markers in target dir | Language | Reference |
+|-----------------------|----------|-----------|
+| `go.mod` | Go | [references/go.md](references/go.md) |
+| `pyproject.toml` or `setup.py` or `setup.cfg` + `.py` files | Python | [references/python.md](references/python.md) |
+| `package.json` + `.ts`/`.tsx`/`.js`/`.jsx` files | TypeScript / JavaScript | [references/typescript.md](references/typescript.md) |
 
-## Running on Go
-
-```bash
-go run <SKILL_DIR>/scripts/go-mutation.go -dir ./internal/myPackage -timeout 30
-```
-
-The script:
-
-- Parses non-test `.go` files in the target dir (skips `vendor/`, `testdata/`, hidden dirs).
-- Applies 8 operator-swap mutations (see [references/mutation-operators.md](references/mutation-operators.md)).
-- For each mutation: reprints the file with the swap, runs `go test ./...`, restores original.
-- Outputs JSON to stdout (array of mutations with `file`, `line`, `operator`, `original`, `mutated`, `status`).
-- Outputs human-readable progress + summary to stderr (mutation score %).
-
-### Flags
-
-- `-dir` — target Go package directory (default `.`).
-- `-timeout` — per-mutation test timeout in seconds (default `30`).
-- `-parallel` — parallel test runs via temp copies (default `1`; >1 is slower per-mutation but higher throughput — use only if tests are fast and side-effect-free).
-
-### Status taxonomy
-
-| Status | Meaning |
-|--------|---------|
-| `killed` | Tests failed → test caught the mutation ✅ |
-| `survived` | Tests passed → **test blind spot** ⚠️ |
-| `timeout` | Test exceeded timeout — test too slow or mutation caused infinite loop 🔧 |
-| `compile-error` | Mutation didn't compile (e.g. `+`→`-` on strings) — ignore ℹ️ |
+If the target is a monorepo with mixed languages, run the matching reference per sub-directory. If no markers match, ask the user which language the target is.
 
 ## What to do with survivors
 
-Each `survived` mutation is a finding: the test suite does not catch this change. For each survivor:
+Each surviving mutant is a finding: the test suite does not catch this change. For each survivor:
 
 1. **Read the mutation** — what operator was flipped, where.
-2. **Write a test** that would fail if the mutation were applied (i.e., a test that exercises the mutated condition with input that distinguishes original from mutated).
+2. **Write a test** that would fail if the mutation were applied.
 3. **Re-run mutation testing** to confirm the mutant is now killed.
 
 Optionally, feed survivors into `/skill:fix` as findings — the `fix` skill's verify→grill→fix loop can work through them systematically.
@@ -72,13 +46,7 @@ Optionally, feed survivors into `/skill:fix` as findings — the `fix` skill's v
 ## Glossary
 
 - **Mutant** — a mutated copy of production code (one operator swap applied).
-- **Surviving mutant** — a mutation that tests did NOT catch = a test blind spot.
+- **Surviving mutant** (aka **lived**) — a mutation that tests did NOT catch = a test blind spot.
 - **Killed mutant** — a mutation that caused a test failure = test caught it.
-- **Mutation score** — `killed / (killed + survived) × 100%`. `compile-error` and `timeout` excluded from denominator.
-
-## Limitations (first slice)
-
-- **Go only.** Python (mutmut) and TypeScript (Stryker) adapters are follow-up tickets.
-- **8 operator swaps** (comparison + arithmetic). Boolean flips, constant mutation, and statement removal are not yet implemented — see [references/mutation-operators.md](references/mutation-operators.md) for rationale.
-- **In-place mutation** with `-parallel 1` (default). The original file is briefly modified during each test run; the script restores it immediately after. Do not edit the file while mutation testing is running.
-- **No `.gitignore` awareness.** The script mutates files in place; ensure you have no uncommitted changes to the target files before running (or `git stash` first).
+- **Not covered** — a mutation at a code location no test executes at all (gremlins distinguishes this from lived).
+- **Mutation score** / **efficacy** — `killed / (killed + survived) × 100%`. Tool-specific terms vary; see each reference.
