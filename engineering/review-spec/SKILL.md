@@ -1,7 +1,13 @@
 ---
 name: review-spec
-description: Inspect a spec or a set of tickets before handing off to the next skill (to-tickets or implement) — find the gaps and route each to the skill that closes it.
-disable-model-invocation: true
+description: >-
+  Inspect a route before traverse. Two branches: a spec about to guide
+  /skill:to-tickets, or a set of frontier tickets about to guide
+  /skill:implement. Finds gaps — claims that drift from ground truth,
+  unreconciled contradictions, missing waymark coverage, dropped decisions,
+  under-specified passages — and routes each to the skill that closes it
+  (research, prototype, grilling, task). At most two inspect rounds, then
+  traverse. Re-runs on each new frontier in the review-implement cycle.
 ---
 
 A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set of **tickets** about to guide `/skill:implement` — through the terrain. Before anyone traverses it, **inspect** the route. A route that reads complete rarely is: claims drift from their **ground truth**, sources contradict each other silently, and acceptance criteria cover three dimensions when the traverse will touch five. This skill finds those **gaps** and forces them closed.
@@ -9,8 +15,15 @@ A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set 
 ## Process
 
 1. **Locate the route.** A file path, a tracker issue, or content the user supplies. Read it fully. Identify the **route type**: a spec (traverse = `/skill:to-tickets`) or a set of tickets (traverse = `/skill:implement`). The type shifts Check 3 and Check 5; Checks 1, 2, 4 are route-agnostic.
+
+   **Ticket routes: review only the frontier.** The frontier is the open, unblocked (all blockers closed), unclaimed tickets — the edge ready to implement now. Blocked tickets' content may change before they become implementable, so reviewing them wastes the inspect round on a route that will shift. If the frontier is a single ticket, inspect that one; if several, inspect them together as one route.
 2. **Gather the terrain data.** The wayfinder map and its tickets — closed decisions, research outputs, prototype results. The project's ADRs, `CONTEXT.md`, and the codebase the route proposes to traverse. Fetch ticket bodies and resolution comments; read prototype outputs and research docs the route cites or depends on. **Done when**: every source the route cites or depends on is read, and its path is listed for the sub-agents.
-3. **Spawn five sub-agents in parallel** — one per check below. Each sub-agent gets: the route (path or full text), the **route type**, every terrain-source path it should cross-check against, and the check's body as its brief. For Check 3 and Check 5, pass only the branch matching the route type. Use `runs.all` with five children, `context: 'fresh'` each. List every terrain-source path explicitly in each sub-agent's task text — sub-agents have `context: 'fresh'` and see only what you pass them, so a bare "the terrain sources" with no paths leaves them blind.
+3. **Verify the review agent, then spawn five sub-agents in parallel.** Before spawning, confirm the agent you will use actually exists and fits a document-review task (not a code-diff review task):
+   - Run `subagent({ action: "list" })` to confirm `doc-reviewer` is registered. Agents get added, renamed, or reconfigured between sessions — confirm fresh each run.
+   - Read `doc-reviewer`'s config (`~/.pi/agent/agents/doc-reviewer.md`) and verify its `acceptance` is disabled and its tools read-only. A code-review agent's `checked` acceptance gates forever on a document route that produces no diffs.
+   - If `doc-reviewer` is missing or misconfigured, fall back to `delegate` (no default acceptance), noted in the report — `reviewer` is code-diff-only and will be acceptance-gated, so it is never a valid fallback here.
+
+   Each sub-agent gets: the route (path or full text), the **route type**, every terrain-source path it should cross-check against, and the check's body as its brief. For Check 3 and Check 5, pass only the branch matching the route type. Use `runs.all` with five children, `agent: "doc-reviewer"`, `context: 'fresh'` each. List every terrain-source path explicitly in each sub-agent's task text — sub-agents have `context: 'fresh'` and see only what you pass them, so a bare "the terrain sources" with no paths leaves them blind.
 4. **Aggregate** the five reports. Present each check's report under its own heading, verbatim or lightly cleaned — the five axes are separate, so each stays on its own heading. The `runs.all` return value already carries each child's `.output` — read it directly from the resolved array; do not `find`/`read` sub-agent session files to locate outputs.
 5. **Classify every gap** by the wayfinder ticket type it routes to (see [Gap classification](#gap-classification)).
 6. **Report** per check, then the classification table, then a verdict. If gaps exist, ask the user which to route — see [Routing](#routing).
@@ -124,7 +137,11 @@ Ask the user to confirm the routing, grouped by type:
 > - task (L gaps) → fix inline or manual checklist: #4, #6, #8
 > Confirm to proceed, or adjust the plan.
 
-**After any routed gap is resolved, re-inspect** the revised route — a gap closed by research may surface a new gap in feasibility; only a clean re-inspect clears the route to traverse.
+**Re-inspect at most once, then traverse.** This skill inspects a route at most **twice**: the initial round, plus one re-inspect after routed gaps are closed. A gap closed by research may surface a new gap in feasibility — that is what the single re-inspect catches. But indefinite re-inspection has diminishing returns: each round finds smaller gaps, and the traverse itself (to-tickets or implement) will surface real issues faster than speculative inspection. **After the second inspect round, traverse regardless of residual gaps** — note them as residual risk in the report and hand off. The next skill owns them:
+   - Spec route → `/skill:to-tickets`
+   - Ticket route → `/skill:implement`
+
+   Count rounds explicitly in the report ("Inspect round 1/2", "Inspect round 2/2 — final, traversing").
 
 **Execution rules** (the parent session follows these after the user confirms):
 
@@ -134,3 +151,15 @@ Ask the user to confirm the routing, grouped by type:
 - **task** → fix inline directly (the agent writes the missing content into the route) or hand the user a precise checklist (HITL). Feed any resulting facts back into the route.
 
 This skill inspects, classifies, and routes. The pressure of the report — every gap named, every claim held to its ground truth, every gap tagged with the skill that closes it — is what forces the route to improve. Closing the gaps is the follow-up skills' job, not this skill's.
+
+## Review-implement cycle
+
+A ticket route is not reviewed once and done. The map's frontier advances as tickets close — implementing one ticket often unblocks or reshapes the next. Reviewing the entire map up front is both impossible (blocked tickets aren't sharp yet) and wasteful (their content will shift). But implementing a ticket that was never inspected risks re-opening decisions the inspect would have caught. The cycle that balances these:
+
+1. **Review the current frontier** with this skill (frontier tickets only — see Step 1).
+2. **Implement the frontier** via `/skill:implement`.
+3. **After implement completes, recompute the frontier.** Implementing a ticket may close blockers, graduate fog, or surface new decisions — the frontier is now different.
+4. **If the new frontier is non-empty, run this skill again on it before implementing.** Every implement round must be preceded by a review of the tickets about to be implemented. Re-review each new frontier fresh — the implementation just changed the terrain the review cross-checked against. Each re-invocation starts a fresh 2-round budget (the cap in [Routing](#routing) is per invocation, not across the cycle).
+5. Repeat until the map's frontier is empty (destination reached).
+
+The principle: **review per implement round, not per map.** One review cannot cover the whole journey because the later route doesn't exist sharply yet; but every implement round must enter with an inspected route. This keeps the feedback loop tight — each implement round surfaces real issues that sharpen the next frontier's review, instead of speculating about tickets that may never take their current shape.
