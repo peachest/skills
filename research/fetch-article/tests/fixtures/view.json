@@ -1,0 +1,22 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "bvid": "BV1TestBVID01",
+    "cid": 41083143650,
+    "title": "Test Video Title",
+    "duration": 3400,
+    "pubdate": 1787189906,
+    "owner": {
+      "name": "Test UP"
+    },
+    "pages": [
+      {
+        "cid": 41083143650,
+        "duration": 3400,
+        "part": "Page 1"
+      }
+    ]
+  }
+}
