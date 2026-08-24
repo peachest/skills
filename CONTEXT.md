@@ -103,3 +103,22 @@ _Avoid_: Client, user (reserved for the human)
 
 - **Raw entries**: The unparsed `FileEntry[]` returned by `parseSession()`, delegated to pi's `SessionManager.open().getEntries()`. Supplementary to the session scan result — consumers needing non-tool entry types (custom events, compaction entries, branch summaries) call this directly. Most consumers should not need it.
 _Avoid_: Session entries (ambiguous with parsed entries), JSONL lines
+
+## Mutation Testing
+
+The test-quality validation layer between `tdd` (tests exist) and `code-review` (code conforms). Mutation testing mutates production code and checks whether tests fail — a surviving mutant is a test blind spot that coverage metrics cannot detect.
+
+- **Mutant**: A mutated copy of production code with one operator swap applied (e.g. `==` → `!=`, `+` → `-`). The unit of mutation testing — each mutant is tested independently against the suite.
+_Avoid_: mutation (the process), variant
+
+- **Killed**: A mutant whose application caused at least one test to fail — the test suite caught the change. The desired outcome.
+_Avoid_: detected, caught (use "killed" for the mutant status)
+
+- **Surviving mutant** (aka **lived**): A mutant whose application left all tests passing — the test suite did NOT catch the change. A test blind spot: the test either doesn't exercise this code or doesn't assert the behavior that distinguishes original from mutated.
+_Avoid_: false positive, escaped (use "survived" or "lived" for the mutant status)
+
+- **Not covered**: A mutant at a code location no test executes at all. Gremlins distinguishes this from `lived` — a `lived` mutant is reached by tests but not caught; a `not covered` mutant is never reached. The self-rolled Go mutator and mutmut conflate both as `survived`, which understates the true test quality.
+_Avoid_: untested, uncovered (use "not covered" for the gremlins-specific status)
+
+- **Mutation score** (aka **efficacy**): `killed / (killed + survived) × 100%`. Measures how good tests are at catching mutations they *could* catch. `compile-error` and `timeout` are excluded from the denominator. Gremlins additionally reports **mutator coverage** — `(killed + lived) / total` — which measures how much mutated code tests reach at all. A high efficacy + low coverage means tests are good where they exist but don't exercise enough code.
+_Avoid_: coverage (that's line coverage, a different and weaker metric), test quality score
