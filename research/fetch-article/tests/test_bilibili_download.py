@@ -399,3 +399,64 @@ class TestStreamSelection:
         with open(meta_path) as f:
             meta = json.load(f)
         assert meta["stream_type"] == "dash_audio"
+
+
+class TestMultiPageSelection:
+    """Test ?p=N page selection and per-page cid/duration."""
+
+    def test_default_selects_page_1(self, tmp_path):
+        """No ?p= → defaults to page 1, duration_sec = page-1 duration (not sum)."""
+        output_dir = str(tmp_path)
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert result["duration_sec"] == 991  # page-1 duration, not 2130 (sum)
+        assert result["page"] == 1
+        assert result["page_count"] == 2
+
+    def test_p2_selects_page_2(self, tmp_path):
+        """?p=2 → selects page 2's cid and duration."""
+        output_dir = str(tmp_path)
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/?p=2",
+                output_dir=output_dir)
+
+        assert result["duration_sec"] == 1139  # page-2 duration
+        assert result["page"] == 2
+        assert result["page_count"] == 2
+
+    def test_page_fields_in_metadata(self, tmp_path):
+        """metadata.json contains page and page_count fields."""
+        output_dir = str(tmp_path)
+        fake_size = 500
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/?p=2",
+                output_dir=output_dir)
+
+        meta_path = os.path.join(output_dir, "metadata.json")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        assert meta["page"] == 2
+        assert meta["page_count"] == 2
+        assert meta["duration_sec"] == 1139
