@@ -42,12 +42,12 @@ class _FakeResponse:
         pass
 
 
-def _make_mock_session():
+def _make_mock_session(playurl_fixture="playurl.json"):
     """Create a mock requests.Session that returns fixture data for API calls."""
     session = MagicMock()
     nav = _load_fixture("nav.json")
     view = _load_fixture("view.json")
-    playurl = _load_fixture("playurl.json")
+    playurl = _load_fixture(playurl_fixture)
     player_v2 = _load_fixture("player_v2.json")
 
     def get_side_effect(url, *args, **kwargs):
@@ -74,6 +74,29 @@ def _make_mock_subprocess_success(payload_size: int):
     mock = MagicMock()
 
     def fake_run(args, **kwargs):
+        # Detect aria2c calls (have -d and -o) vs ffmpeg calls (have -f concat)
+        if "-f" in args and "concat" in args:
+            # ffmpeg concat: read list.txt, concatenate segment files
+            list_idx = args.index("-i") + 1
+            list_path = args[list_idx]
+            out_idx = args.index("-c")  # -c copy <output> comes after -c
+            # output is the last arg
+            out_path = args[-1]
+            with open(list_path) as f:
+                lines = f.read().strip().split("\n")
+            seg_dir = os.path.dirname(list_path)
+            combined = b""
+            for line in lines:
+                # parse file 'segment_X.m4s'
+                seg_name = line.split("'")[1]
+                seg_path = os.path.join(seg_dir, seg_name)
+                with open(seg_path, "rb") as sf:
+                    combined += sf.read()
+            with open(out_path, "wb") as f:
+                f.write(combined)
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="", stderr="")
+        # aria2c call
         dir_idx = args.index("-d") + 1
         out_dir = args[dir_idx]
         name_idx = args.index("-o") + 1
@@ -256,3 +279,123 @@ class TestAria2cDownload:
         args = mock_subprocess.run.call_args[0][0]
         assert any("Referer: https://www.bilibili.com/" in a for a in args)
         assert any("User-Agent:" in a for a in args)
+
+
+class TestStreamSelection:
+    """Test DASH-first stream selection, durl fallback, and stream_type metadata."""
+
+    def test_dash_audio_selected_first(self, tmp_path):
+        """Fixture with both durl and dash.audio → picks DASH (lowest bandwidth)."""
+        output_dir = str(tmp_path)
+        fake_size = 5000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert result["stream_type"] == "dash_audio"
+        # Verify aria2c got the lowest-bandwidth DASH URL (bandwidth=65553)
+        aria2c_calls = [c for c in mock_subprocess.run.call_args_list
+                        if "-d" in c[0][0]]
+        assert len(aria2c_calls) == 1
+        url = aria2c_calls[0][0][0][-1]
+        assert "test-dash-low" in url
+
+    def test_playurl_params_include_fnval_and_pc(self, tmp_path):
+        """Playurl request params must include fnval=16, platform=pc."""
+        output_dir = str(tmp_path)
+        fake_size = 100
+
+        mock_session = _make_mock_session()
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=mock_session), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        # Find the playurl call in mock session.get calls
+        playurl_call = None
+        for call in mock_session.get.call_args_list:
+            url = call[0][0] if call[0] else call[1].get("url", "")
+            if "playurl" in str(url):
+                playurl_call = call
+                break
+        assert playurl_call is not None, "playurl API call not found"
+        params = playurl_call[1].get("params", {})
+        assert params.get("fnval") == 16
+        assert params.get("platform") == "pc"
+        assert params.get("qn") == 0
+
+    def test_durl_fallback_when_no_dash(self, tmp_path):
+        """Fixture with only durl (no dash) → downloads durl, stream_type=durl_video."""
+        output_dir = str(tmp_path)
+        fake_size = 3000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session("playurl_durl_only.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert result["stream_type"] == "durl_video"
+        # Only one aria2c call (single durl segment)
+        aria2c_calls = [c for c in mock_subprocess.run.call_args_list
+                        if "-d" in c[0][0]]
+        assert len(aria2c_calls) == 1
+
+    def test_multi_segment_durl_concat(self, tmp_path):
+        """Fixture with 2 durl segments → downloaded, concatenated via ffmpeg."""
+        output_dir = str(tmp_path)
+        fake_size = 2000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session("playurl_multi.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert result["stream_type"] == "durl_video"
+        # 2 aria2c calls (2 segments) + 1 ffmpeg concat call
+        aria2c_calls = [c for c in mock_subprocess.run.call_args_list
+                        if "-d" in c[0][0]]
+        ffmpeg_calls = [c for c in mock_subprocess.run.call_args_list
+                        if "-f" in c[0][0] and "concat" in c[0][0]]
+        assert len(aria2c_calls) == 2
+        assert len(ffmpeg_calls) == 1
+        # Final audio.mp4 should exist and be non-empty (2 segments × fake_size)
+        assert os.path.getsize(result["audio_path"]) == fake_size * 2
+        # Segments and list.txt should be cleaned up
+        assert not os.path.exists(os.path.join(output_dir, "segment_0.m4s"))
+        assert not os.path.exists(os.path.join(output_dir, "list.txt"))
+
+    def test_stream_type_in_metadata_json(self, tmp_path):
+        """metadata.json contains stream_type field."""
+        output_dir = str(tmp_path)
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        meta_path = os.path.join(output_dir, "metadata.json")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        assert meta["stream_type"] == "dash_audio"

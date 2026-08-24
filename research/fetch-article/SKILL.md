@@ -68,7 +68,7 @@ extract metadata (title, author, publish_time, images).
 
 Downloads audio via WBI-signed API. Only downloads — does NOT transcribe.
 If CC subtitles are available, saves them directly (skip ASR).
-Output includes `duration_sec` and `subs_available` fields.
+Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
 
 See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR.
 
