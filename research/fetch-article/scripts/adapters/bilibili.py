@@ -190,23 +190,56 @@ def fetch(url: str, output_dir: str = None) -> dict:
     # ── Step 4: Get audio URL and download ──
     print(f"  [4/4] Getting audio URL…", file=sys.stderr)
     play = wbi_get("https://api.bilibili.com/x/player/wbi/playurl",
-                   {"bvid": bvid, "cid": cid, "qn": 16, "platform": "web"})
-    durl = play.get("durl", [])
-    if not durl:
-        audio_ = play.get("dash", {}).get("audio", [])
-        if audio_:
-            durl = [{"url": audio_[0].get("baseUrl", audio_[0].get("base_url", "")),
-                     "size": audio_[0].get("size", 0)}]
-    if not durl:
-        raise RuntimeError("No audio URL found")
+                   {"bvid": bvid, "cid": cid,
+                    "fnval": 16, "fnver": 0, "qn": 0, "platform": "pc"})
 
-    audio_url = durl[0]["url"]
-    audio_size = durl[0].get("size", 0)
-    print(f"  Audio URL obtained ({audio_size / 1_048_576:.1f} MB)", file=sys.stderr)
-
-    # Download via aria2c (replaces requests.stream)
     audio_path = os.path.join(output_dir, "audio.mp4")
-    _download_with_aria2c(audio_url, audio_path, output_dir)
+    stream_type = None
+
+    # DASH audio first (lowest bandwidth); durl fallback only when no DASH audio
+    dash = play.get("dash") or {}
+    dash_audio = dash.get("audio", [])
+    if dash_audio:
+        best = min(dash_audio, key=lambda a: a.get("bandwidth", 0))
+        audio_url = best.get("baseUrl", best.get("base_url", ""))
+        bandwidth = best.get("bandwidth", 0)
+        print(f"  Audio URL obtained (DASH, bandwidth={bandwidth})", file=sys.stderr)
+        _download_with_aria2c(audio_url, audio_path, output_dir)
+        stream_type = "dash_audio"
+    else:
+        durl = play.get("durl", [])
+        if not durl:
+            raise RuntimeError("No audio URL found")
+        if len(durl) == 1:
+            audio_url = durl[0]["url"]
+            print(f"  Audio URL obtained (durl, {durl[0].get('size', 0) / 1_048_576:.1f} MB)",
+                  file=sys.stderr)
+            _download_with_aria2c(audio_url, audio_path, output_dir)
+        else:
+            # Multi-segment durl: download each, then ffmpeg concat
+            print(f"  Audio URL obtained (durl, {len(durl)} segments)", file=sys.stderr)
+            segment_paths = []
+            for i, seg in enumerate(durl):
+                seg_path = os.path.join(output_dir, f"segment_{i}.m4s")
+                _download_with_aria2c(seg["url"], seg_path, output_dir)
+                segment_paths.append(seg_path)
+            # Generate list.txt for ffmpeg concat
+            list_path = os.path.join(output_dir, "list.txt")
+            with open(list_path, "w") as f:
+                for sp in segment_paths:
+                    f.write(f"file '{os.path.basename(sp)}'\n")
+            # ffmpeg concat
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", list_path, "-c", "copy", audio_path],
+                capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg concat failed: {result.stderr[-500:]}")
+            # Clean up segments
+            for sp in segment_paths:
+                os.remove(sp)
+            os.remove(list_path)
+        stream_type = "durl_video"
 
     content_length = os.path.getsize(audio_path)
     if content_length == 0:
@@ -223,6 +256,7 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "has_cc_subtitles": has_subs,
         "audio_path": audio_path,
         "content_length": content_length,
+        "stream_type": stream_type,
     }
     meta_path = os.path.join(output_dir, "metadata.json")
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -240,4 +274,5 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "audio_path": audio_path,
         "has_cc_subtitles": has_subs,
         "content_length": content_length,
+        "stream_type": stream_type,
     }

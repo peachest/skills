@@ -1,0 +1,20 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "durl": [
+      {
+        "url": "https://upos-sz-mirrorcosov.bilivideo.com/test-multi-seg0.m4s",
+        "size": 3000000,
+        "length": 3000000
+      },
+      {
+        "url": "https://upos-sz-mirrorcosov.bilivideo.com/test-multi-seg1.m4s",
+        "size": 2000000,
+        "length": 2000000
+      }
+    ],
+    "dash": null
+  }
+}
