@@ -1,0 +1,25 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "durl": [
+      {
+        "url": "https://upos-sz-mirrorcosov.bilivideo.com/test-audio.m4s",
+        "size": 27862695,
+        "length": 27862695
+      }
+    ],
+    "dash": {
+      "audio": [
+        {
+          "id": 30216,
+          "baseUrl": "https://upos-sz-mirrorcosov.bilivideo.com/test-dash-audio.m4s",
+          "bandwidth": 65553,
+          "mimeType": "audio/mp4",
+          "codecs": "mp4a.40.2"
+        }
+      ]
+    }
+  }
+}

@@ -13,17 +13,57 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
+
+
+def _find_aria2c() -> str:
+    """Locate aria2c binary: PATH first, then ~/scripts/aria2c."""
+    path = shutil.which("aria2c")
+    if path:
+        return path
+    fallback = Path.home() / "scripts" / "aria2c"
+    if fallback.is_file() and os.access(fallback, os.X_OK):
+        return str(fallback)
+    raise RuntimeError("aria2c not found in PATH or ~/scripts/aria2c")
+
+
+def _download_with_aria2c(url: str, output_path: str, output_dir: str):
+    """Download a URL via aria2c subprocess.
+
+    Uses --continue for cross-call resumption via .aria2 control file.
+    Raises RuntimeError on non-zero exit.
+    """
+    aria2c = _find_aria2c()
+    args = [
+        aria2c,
+        "-d", output_dir,
+        "-o", os.path.basename(output_path),
+        "--continue=true",
+        "--max-tries=3",
+        "--retry-wait=2",
+        "--header=Referer: https://www.bilibili.com/",
+        "--header=User-Agent: " + HEADERS["User-Agent"],
+    ]
+    proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY")
+    if proxy:
+        args.append(f"--all-proxy={proxy}")
+    args.append(url)
+
+    result = subprocess.run(args, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        stderr_excerpt = (result.stderr or result.stdout or "")[-500:]
+        raise RuntimeError(
+            f"aria2c download failed (exit {result.returncode}): {stderr_excerpt}")
 
 MIXIN_KEY_ENC_TAB = [
     46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
@@ -85,7 +125,9 @@ def fetch(url: str, output_dir: str = None) -> dict:
     session = _make_session()
 
     if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix="fetch-bilibili-")
+        output_dir = os.path.join(
+            os.path.expanduser("~/.cache/fetch-bilibili"), bvid)
+        os.makedirs(output_dir, exist_ok=True)
     else:
         os.makedirs(output_dir, exist_ok=True)
 
@@ -162,37 +204,14 @@ def fetch(url: str, output_dir: str = None) -> dict:
     audio_size = durl[0].get("size", 0)
     print(f"  Audio URL obtained ({audio_size / 1_048_576:.1f} MB)", file=sys.stderr)
 
-    # Download
+    # Download via aria2c (replaces requests.stream)
     audio_path = os.path.join(output_dir, "audio.mp4")
-    max_attempts = 3
-    downloaded = 0
-    for attempt in range(1, max_attempts + 1):
-        headers = HEADERS.copy()
-        existing = os.path.getsize(audio_path) if os.path.exists(audio_path) else 0
-        if existing > 0 and existing < audio_size:
-            headers["Range"] = f"bytes={existing}-"
-        else:
-            existing = 0
+    _download_with_aria2c(audio_url, audio_path, output_dir)
 
-        try:
-            r = session.get(audio_url, headers=headers, stream=True,
-                          timeout=(10, 30))
-            r.raise_for_status()
-            mode = "ab" if existing > 0 else "wb"
-            with open(audio_path, mode) as f:
-                for chunk in r.iter_content(chunk_size=65536):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded = existing + f.tell()
-            total = os.path.getsize(audio_path)
-            if total >= audio_size:
-                print(f"  Downloaded {total / 1_048_576:.1f} MB", file=sys.stderr)
-                break
-        except Exception as e:
-            print(f"  Download error (attempt {attempt}): {e}", file=sys.stderr)
-            if attempt == max_attempts:
-                raise
-            time.sleep(2 ** attempt)
+    content_length = os.path.getsize(audio_path)
+    if content_length == 0:
+        raise RuntimeError("Downloaded file is empty")
+    print(f"  Downloaded {content_length / 1_048_576:.1f} MB", file=sys.stderr)
 
     # Write metadata
     meta = {
@@ -203,6 +222,7 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "duration_sec": duration,
         "has_cc_subtitles": has_subs,
         "audio_path": audio_path,
+        "content_length": content_length,
     }
     meta_path = os.path.join(output_dir, "metadata.json")
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -219,4 +239,5 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "duration_sec": duration,
         "audio_path": audio_path,
         "has_cc_subtitles": has_subs,
+        "content_length": content_length,
     }
