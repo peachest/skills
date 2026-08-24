@@ -6,16 +6,21 @@
     "bvid": "BV1TestBVID01",
     "cid": 41083143650,
     "title": "Test Video Title",
-    "duration": 3400,
+    "duration": 2130,
     "pubdate": 1787189906,
     "owner": {
       "name": "Test UP"
     },
     "pages": [
       {
-        "cid": 41083143650,
-        "duration": 3400,
-        "part": "Page 1"
+        "cid": 99100001,
+        "duration": 991,
+        "part": "Page 1 - Dub"
+      },
+      {
+        "cid": 113900002,
+        "duration": 1139,
+        "part": "Page 2 - Original"
       }
     ]
   }
