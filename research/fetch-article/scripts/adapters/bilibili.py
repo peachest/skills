@@ -112,6 +112,19 @@ def _extract_bvid(url: str) -> str:
     raise ValueError(f"Cannot extract BV id from URL: {url}")
 
 
+def _extract_page(url: str) -> int:
+    """Extract ?p=N page parameter from URL (1-based). Returns 1 if absent."""
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    p = params.get("p", ["1"])[0]
+    try:
+        page = int(p)
+        return max(1, page)
+    except ValueError:
+        return 1
+
+
 def fetch(url: str, output_dir: str = None) -> dict:
     """
     Download Bilibili video audio via WBI-signed API.
@@ -122,6 +135,8 @@ def fetch(url: str, output_dir: str = None) -> dict:
     Does NOT transcribe — use bilibili-transcriber for ASR.
     """
     bvid = _extract_bvid(url)
+    page_num = _extract_page(url)  # 1-based
+    page_index = page_num - 1      # 0-based array index
     session = _make_session()
 
     if output_dir is None:
@@ -153,12 +168,22 @@ def fetch(url: str, output_dir: str = None) -> dict:
     print(f"  [2/4] Getting video info…", file=sys.stderr)
     info = wbi_get("https://api.bilibili.com/x/web-interface/wbi/view", {"bvid": bvid})
     title = info.get("title", "").strip()
-    cid = str(info.get("cid", ""))
-    if not cid and info.get("pages"):
-        cid = str(info["pages"][0]["cid"])
-    duration = info.get("duration", 0)
+    pages = info.get("pages", [])
+    page_count = len(pages) if pages else 1
+    if pages:
+        if page_index >= len(pages):
+            raise RuntimeError(
+                f"Page {page_num} out of range (video has {len(pages)} pages)")
+        page_info = pages[page_index]
+        cid = str(page_info.get("cid", ""))
+        duration = page_info.get("duration", 0)
+    else:
+        cid = str(info.get("cid", ""))
+        duration = info.get("duration", 0)
     owner = info.get("owner", {}).get("name", "")
     pubdate = info.get("pubdate", 0)
+    print(f"  Page {page_num}/{page_count}, cid={cid}, duration={duration}s",
+          file=sys.stderr)
 
     # ── Step 3: Check for CC subtitles ──
     print(f"  [3/4] Checking CC subtitles…", file=sys.stderr)
@@ -257,6 +282,8 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "audio_path": audio_path,
         "content_length": content_length,
         "stream_type": stream_type,
+        "page": page_num,
+        "page_count": page_count,
     }
     meta_path = os.path.join(output_dir, "metadata.json")
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -275,4 +302,6 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "has_cc_subtitles": has_subs,
         "content_length": content_length,
         "stream_type": stream_type,
+        "page": page_num,
+        "page_count": page_count,
     }
