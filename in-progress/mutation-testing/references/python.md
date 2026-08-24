@@ -92,4 +92,20 @@ Mutation score: `killed / (killed + survived) × 100%`.
 - **Fork support required** — mutmut uses multiprocessing fork; doesn't work on Windows without WSL.
 - **Slow first run** — mutmut runs the full test suite per mutation. Use `--use-coverage` to skip uncovered code (run `pytest --cov` first to generate `.coverage`).
 - **Test runner must be fast** — if the suite takes 30s, and there are 200 mutants, that's 100 minutes. Keep the suite tight or scope mutations to one module.
-- **Caching** — `.mutmut-cache` persists; `mutmut run` resumes. Delete the cache to force a fresh run.
+- **Caching** — mutmut v3 stores results in `mutants/` (not `.mutmut-cache`). `mutmut run` resumes; delete `mutants/` to force a fresh run.
+
+### Non-standard source layout (source NOT in `./`, `src/`, or `source/`)
+
+mutmut v3 auto-adds `./`, `src/`, and `source/` to `sys.path` to resolve module paths. If your project uses a different source root (e.g. `scripts/`, `lib/`, `app/`), mutmut generates mutant keys from the file path relative to CWD, but tests import via the project's `pythonpath` config — causing a **key mismatch** that prevents any mutant from being killed (0% score, all "survived").
+
+**Symptoms**:
+- Error: `Stopping early, because tests recorded trampoline hits but none match any mutant key.`
+- `mutmut results` shows all mutants as `survived` or `not checked`.
+- `Recorded keys` (e.g. `transform.X`) ≠ `Expected keys` (e.g. `scripts.transform.X`).
+
+**Fixes** (pick one):
+1. **Run mutmut from the source root** — `cd scripts/` so file paths match module paths. BUT: if a parent `pyproject.toml` has `testpaths`/`pythonpath` config, pytest may fail to find tests from the subdirectory. Create a local `pytest.ini` overriding `testpaths` and `pythonpath`.
+2. **Symlink** — `ln -s scripts src` so mutmut's default `src/` resolution works.
+3. **Move source to `src/`** — the cleanest fix for new projects.
+
+**Known incompatible layout**: source in `scripts/` with `pythonpath = ["scripts"]` in `pyproject.toml` (common in data/analysis projects). The `scripts/` directory is not in mutmut's auto-discovery list, and running from `scripts/` breaks pytest's config inheritance.
