@@ -1,0 +1,258 @@
+"""Seam 1 tests: fetch-article bilibili adapter download engine.
+
+Mocks requests.Session (API calls) and subprocess.run (aria2c download).
+No live network calls.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+# Add scripts dir to path for adapter import
+import sys
+sys.path.insert(0, str(SCRIPTS_DIR))
+
+from adapters import bilibili
+
+
+def _load_fixture(name: str) -> dict:
+    with open(FIXTURES_DIR / name) as f:
+        return json.load(f)
+
+
+class _FakeResponse:
+    """Fake requests.Response for mocking session.get."""
+
+    def __init__(self, json_data):
+        self._json = json_data
+
+    def json(self):
+        return self._json
+
+    def raise_for_status(self):
+        pass
+
+
+def _make_mock_session():
+    """Create a mock requests.Session that returns fixture data for API calls."""
+    session = MagicMock()
+    nav = _load_fixture("nav.json")
+    view = _load_fixture("view.json")
+    playurl = _load_fixture("playurl.json")
+    player_v2 = _load_fixture("player_v2.json")
+
+    def get_side_effect(url, *args, **kwargs):
+        if "nav" in url:
+            return _FakeResponse(nav)
+        if "view" in url:
+            return _FakeResponse(view)
+        if "playurl" in url:
+            return _FakeResponse(playurl)
+        if "player" in url:
+            return _FakeResponse(player_v2)
+        return _FakeResponse({})
+
+    session.get.side_effect = get_side_effect
+    return session
+
+
+def _make_mock_subprocess_success(payload_size: int):
+    """Return a MagicMock replacing the subprocess module.
+
+    .run writes a fake payload to the output path and returns exit 0.
+    .CompletedProcess is preserved for constructing return values.
+    """
+    mock = MagicMock()
+
+    def fake_run(args, **kwargs):
+        dir_idx = args.index("-d") + 1
+        out_dir = args[dir_idx]
+        name_idx = args.index("-o") + 1
+        out_name = args[name_idx]
+        out_path = os.path.join(out_dir, out_name)
+        with open(out_path, "wb") as f:
+            f.write(b"\x00" * payload_size)
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="", stderr="")
+
+    mock.run = MagicMock(side_effect=fake_run)
+    mock.CompletedProcess = subprocess.CompletedProcess
+    return mock
+
+
+class TestAria2cDownload:
+    """Test aria2c download engine, completeness, and workspace."""
+
+    def test_successful_download_writes_content_length(self, tmp_path):
+        """aria2c writes N bytes + exits 0 → content_length == N."""
+        output_dir = str(tmp_path)
+        fake_size = 27862695
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert result["content_length"] == fake_size
+        audio_path = os.path.join(output_dir, "audio.mp4")
+        assert os.path.getsize(audio_path) == fake_size
+
+    def test_aria2c_failure_raises_error(self, tmp_path):
+        """aria2c exits non-zero → adapter raises RuntimeError."""
+        output_dir = str(tmp_path)
+
+        mock_subprocess = MagicMock()
+        mock_subprocess.run = MagicMock(return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="Download failed"))
+        mock_subprocess.CompletedProcess = subprocess.CompletedProcess
+
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            with pytest.raises(RuntimeError, match="aria2c download failed"):
+                bilibili.fetch(
+                    "https://www.bilibili.com/video/BV1TestBVID01/",
+                    output_dir=output_dir)
+
+    def test_empty_download_raises_error(self, tmp_path):
+        """aria2c exits 0 but writes 0 bytes → adapter raises RuntimeError."""
+        output_dir = str(tmp_path)
+
+        mock_subprocess = _make_mock_subprocess_success(0)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            with pytest.raises(RuntimeError, match="Downloaded file is empty"):
+                bilibili.fetch(
+                    "https://www.bilibili.com/video/BV1TestBVID01/",
+                    output_dir=output_dir)
+
+    def test_deterministic_workspace_same_bvid(self, tmp_path, monkeypatch):
+        """Two fetch() calls for same BVID (no output_dir) → same workspace."""
+        # Redirect ~/.cache to tmp_path
+        monkeypatch.setenv("HOME", str(tmp_path))
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bvid = "BV1TestBVID01"
+            result1 = bilibili.fetch(
+                f"https://www.bilibili.com/video/{bvid}/")
+            audio_path1 = result1["audio_path"]
+
+            result2 = bilibili.fetch(
+                f"https://www.bilibili.com/video/{bvid}/")
+            audio_path2 = result2["audio_path"]
+
+        assert audio_path1 == audio_path2
+        # Verify aria2c was called with --continue=true both times
+        assert mock_subprocess.run.call_count == 2
+        for call in mock_subprocess.run.call_args_list:
+            args = call[0][0]
+            assert "--continue=true" in args
+
+    def test_different_bvid_different_workspace(self, tmp_path, monkeypatch):
+        """Different BVID → different workspace directory."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result1 = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/")
+            result2 = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1OtherBVID2/")
+
+        assert result1["audio_path"] != result2["audio_path"]
+        # Different parent directories
+        assert Path(result1["audio_path"]).parent != Path(result2["audio_path"]).parent
+
+    def test_metadata_json_has_content_length(self, tmp_path):
+        """metadata.json contains content_length field."""
+        output_dir = str(tmp_path)
+        fake_size = 5000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        meta_path = os.path.join(output_dir, "metadata.json")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        assert meta["content_length"] == fake_size
+        # Existing fields preserved
+        assert "bvid" in meta
+        assert "title" in meta
+        assert "audio_path" in meta
+
+    def test_proxy_passed_when_set(self, tmp_path, monkeypatch):
+        """https_proxy env var → --all-proxy in aria2c args."""
+        output_dir = str(tmp_path)
+        monkeypatch.setenv("https_proxy", "http://INTERNAL_PROXY_IP:3128")
+        fake_size = 100
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        args = mock_subprocess.run.call_args[0][0]
+        assert "--all-proxy=http://INTERNAL_PROXY_IP:3128" in args
+
+    def test_proxy_omitted_when_unset(self, tmp_path, monkeypatch):
+        """No https_proxy → no --all-proxy in aria2c args."""
+        output_dir = str(tmp_path)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        fake_size = 100
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        args = mock_subprocess.run.call_args[0][0]
+        assert not any(a.startswith("--all-proxy") for a in args)
+
+    def test_aria2c_args_include_referer_and_ua(self, tmp_path):
+        """aria2c args must include Referer and User-Agent headers."""
+        output_dir = str(tmp_path)
+        fake_size = 100
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session", return_value=_make_mock_session()), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        args = mock_subprocess.run.call_args[0][0]
+        assert any("Referer: https://www.bilibili.com/" in a for a in args)
+        assert any("User-Agent:" in a for a in args)
