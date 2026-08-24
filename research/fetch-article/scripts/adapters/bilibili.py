@@ -212,6 +212,41 @@ def fetch(url: str, output_dir: str = None) -> dict:
             f.write(body_text)
         print(f"  Transcript saved → {tpath}", file=sys.stderr)
 
+        # CC subtitles available — skip audio download entirely
+        meta = {
+            "bvid": bvid,
+            "title": title,
+            "uploader": owner,
+            "publish_date": str(pubdate),
+            "duration_sec": duration,
+            "has_cc_subtitles": True,
+            "audio_path": None,
+            "content_length": None,
+            "stream_type": "cc_subtitle_only",
+            "page": page_num,
+            "page_count": page_count,
+        }
+        meta_path = os.path.join(output_dir, "metadata.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        print(f"  Metadata → {meta_path} (CC subtitles, audio download skipped)",
+              file=sys.stderr)
+
+        return {
+            "title": title,
+            "author": owner,
+            "publish_time": str(pubdate),
+            "body_text": body_text,
+            "images": [],
+            "duration_sec": duration,
+            "audio_path": None,
+            "has_cc_subtitles": True,
+            "content_length": None,
+            "stream_type": "cc_subtitle_only",
+            "page": page_num,
+            "page_count": page_count,
+        }
+
     # ── Step 4: Get audio URL and download ──
     print(f"  [4/4] Getting audio URL…", file=sys.stderr)
     play = wbi_get("https://api.bilibili.com/x/player/wbi/playurl",
