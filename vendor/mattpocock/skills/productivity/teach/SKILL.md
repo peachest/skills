@@ -167,6 +167,20 @@ Lessons containing structural diagrams (`.drawio` — architecture, dependency g
 
 Mechanical checks are more reliable than asking an LLM to "look at" a diagram. Simple KaTeX formulas (already handled by `base.css`) do not need this check.
 
+## Animation
+
+Some concepts are **processes** — states that evolve over time. A sorting algorithm moves elements, a matrix multiplication transforms values cell by cell, a KV cache fills token by token. CSS step-reveal handles static structure (flowcharts, layer highlights, code line-by-line); it hits a ceiling when objects move through space across many steps. Manim animations fill that gap.
+
+Use manim when the visualization needs **spatial motion across ≥ 5 steps**: elements physically moving, values transforming, structures building incrementally. Use CSS for structure reveal, highlighting, and comparison — anything that stays put.
+
+When a lesson needs an animation:
+
+1. Write the manim Scene as `./animations/<name>.py`. Animation syntax and patterns are in the **manim skill** — load its `SKILL.md` for the API; do not reproduce manim syntax here.
+2. Render to MP4: `bash ./animations/render.sh <name>.py <SceneClass> [output_name]`. The script handles quality (`-ql`) and output path. Requires `manim` (ManimCE) on PATH — the script checks and prints install guidance if missing. Output lands in `./animations/media/`.
+3. Embed in the lesson: `<video src="../animations/media/..." controls></video>` — use the exact path `render.sh` prints after rendering.
+
+The lesson loses single-file self-containment (MP4 is an external file). This is an intentional trade: animation quality and render controllability over portability. Reference the source `.py` in the lesson so the learner can study and re-render it.
+
 ## Acquiring Wisdom
 
 Wisdom comes from true real-world interaction - testing your skills outside the learning environment.
