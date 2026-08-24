@@ -42,13 +42,16 @@ class _FakeResponse:
         pass
 
 
-def _make_mock_session(playurl_fixture="playurl.json"):
+def _make_mock_session(playurl_fixture="playurl.json",
+                         player_fixture="player_v2.json"):
     """Create a mock requests.Session that returns fixture data for API calls."""
     session = MagicMock()
     nav = _load_fixture("nav.json")
     view = _load_fixture("view.json")
     playurl = _load_fixture(playurl_fixture)
-    player_v2 = _load_fixture("player_v2.json")
+    player_v2 = _load_fixture(player_fixture)
+    # CC subtitle body (returned when fetching the subtitle_url)
+    cc_body = {"body": [{"content": "Hello world, this is a test subtitle."}]}
 
     def get_side_effect(url, *args, **kwargs):
         if "nav" in url:
@@ -59,6 +62,8 @@ def _make_mock_session(playurl_fixture="playurl.json"):
             return _FakeResponse(playurl)
         if "player" in url:
             return _FakeResponse(player_v2)
+        if "subtitle" in url or "hdslb" in url:
+            return _FakeResponse(cc_body)
         return _FakeResponse({})
 
     session.get.side_effect = get_side_effect
@@ -460,3 +465,67 @@ class TestMultiPageSelection:
         assert meta["page"] == 2
         assert meta["page_count"] == 2
         assert meta["duration_sec"] == 1139
+
+
+class TestCCSubtitleSkip:
+    """Test CC subtitle detection skips audio download."""
+
+    def test_cc_subtitles_skip_audio_download(self, tmp_path):
+        """CC subtitles found → transcript.md saved, no aria2c call, stream_type=cc_subtitle_only."""
+        output_dir = str(tmp_path)
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session(
+                              player_fixture="player_v2_with_subs.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        # stream_type and fields
+        assert result["stream_type"] == "cc_subtitle_only"
+        assert result["audio_path"] is None
+        assert result["content_length"] is None
+        assert result["has_cc_subtitles"] is True
+        assert "test subtitle" in result["body_text"]
+
+        # No aria2c subprocess call was made
+        assert mock_subprocess.run.call_count == 0
+
+        # transcript.md was saved
+        transcript_path = os.path.join(output_dir, "transcript.md")
+        assert os.path.exists(transcript_path)
+        with open(transcript_path) as f:
+            assert "test subtitle" in f.read()
+
+        # metadata.json has correct fields
+        meta_path = os.path.join(output_dir, "metadata.json")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        assert meta["stream_type"] == "cc_subtitle_only"
+        assert meta["audio_path"] is None
+        assert meta["content_length"] is None
+
+    def test_no_cc_subtitles_proceeds_with_download(self, tmp_path):
+        """No CC subtitles → audio download proceeds normally (existing behavior)."""
+        output_dir = str(tmp_path)
+        fake_size = 2000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session(
+                              player_fixture="player_v2.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        # Audio was downloaded (not skipped)
+        assert mock_subprocess.run.call_count > 0
+        assert result["stream_type"] == "dash_audio"
+        assert result["audio_path"] is not None
+        assert result["has_cc_subtitles"] is False

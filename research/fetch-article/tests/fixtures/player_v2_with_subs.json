@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "subtitle": {
+      "subtitles": [
+        {
+          "subtitle_url": "//i0.hdslb.com/bfs/subtitle/test-cc.json",
+          "lan": "zh-CN",
+          "lan_doc": "中文（简体）"
+        }
+      ]
+    }
+  }
+}
