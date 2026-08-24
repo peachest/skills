@@ -13,8 +13,15 @@
     "dash": {
       "audio": [
         {
+          "id": 30280,
+          "baseUrl": "https://upos-sz-mirrorcosov.bilivideo.com/test-dash-high.m4s",
+          "bandwidth": 92543,
+          "mimeType": "audio/mp4",
+          "codecs": "mp4a.40.2"
+        },
+        {
           "id": 30216,
-          "baseUrl": "https://upos-sz-mirrorcosov.bilivideo.com/test-dash-audio.m4s",
+          "baseUrl": "https://upos-sz-mirrorcosov.bilivideo.com/test-dash-low.m4s",
           "bandwidth": 65553,
           "mimeType": "audio/mp4",
           "codecs": "mp4a.40.2"

@@ -1,0 +1,15 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "durl": [
+      {
+        "url": "https://upos-sz-mirrorcosov.bilivideo.com/test-durl-seg0.m4s",
+        "size": 5000000,
+        "length": 5000000
+      }
+    ],
+    "dash": null
+  }
+}
