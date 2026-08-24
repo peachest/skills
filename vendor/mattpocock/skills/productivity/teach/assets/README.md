@@ -20,6 +20,7 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 | `auto-render.min.js` | KaTeX 自动扫描渲染 | #6 | 可选(有公式时) |
 | `render.js` | KaTeX 定界符配置($ 和 $$) | #6 | 可选(有公式时) |
 | `fonts/*.woff2` | KaTeX 字体(20 个 woff2) | #6 | 可选(有公式时) |
+| `animations/render.sh` | manim 动画渲染封装脚本 (`-ql` + 环境检测 + 安装提示) | — | 可选(有动画时,复制到工作区 `./animations/`) |
 
 ## CSS 统一策略 (#7)
 
