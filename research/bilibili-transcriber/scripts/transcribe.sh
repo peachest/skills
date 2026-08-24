@@ -67,17 +67,14 @@ WORK_DIR="$1"
 OUT_DIR="${WORK_DIR}/${METHOD}"
 
 # ── Locate audio file ──
-AUDIO_MP4="${WORK_DIR}/raw/audio.mp4"
-if [ ! -f "$AUDIO_MP4" ]; then
-  AUDIO_MP4="${WORK_DIR}/audio.mp4"
-fi
+AUDIO_MP4="${WORK_DIR}/audio.mp4"
 
 if [ ! -d "$WORK_DIR" ]; then
   echo "✗ Workspace not found: $WORK_DIR"
   exit 1
 fi
 if [ ! -f "$AUDIO_MP4" ]; then
-  echo "✗ Audio file not found in $WORK_DIR (checked raw/audio.mp4 and audio.mp4)"
+  echo "✗ Audio file not found: $WORK_DIR/audio.mp4"
   echo "  Run fetch-article first to download the audio."
   exit 1
 fi
@@ -118,24 +115,13 @@ mkdir -p "$OUT_DIR" "$REF_DIR"
 # ── Step 1: Transcode ──
 WAV_PATH="${OUT_DIR}/audio.wav"
 echo "[1/3] Transcoding MP4 → 16kHz WAV"
-T0=$(date +%s%N)
-ffmpeg -y -i "$AUDIO_MP4" -ac 1 -ar 16000 -sample_fmt s16 "$WAV_PATH" -loglevel error
-T1=$(date +%s%N)
-TRANSCODE_S=$(echo "scale=3; ($T1 - $T0) / 1000000000" | bc)
-WAV_SIZE=$(stat -c%s "$WAV_PATH" 2>/dev/null)
+# Delegate to transcode.sh (includes -vn to ignore video streams)
+TRANSCODE_OUT=$(bash "${SCRIPT_DIR}/transcode.sh" "$AUDIO_MP4" "$WAV_PATH")
+TRANSCODE_S=$(echo "$TRANSCODE_OUT" | sed -n '1p')
+WAV_SIZE=$(echo "$TRANSCODE_OUT" | sed -n '2p')
+DURATION=$(echo "$TRANSCODE_OUT" | sed -n '3p')
 WAV_SIZE_MB=$(echo "scale=1; $WAV_SIZE / 1048576" | bc)
 echo "  → ${WAV_SIZE_MB}MB, transcode ${TRANSCODE_S}s"
-
-# Get duration (ffprobe preferred, ffmpeg fallback)
-DURATION=""
-if command -v ffprobe &>/dev/null; then
-  DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$WAV_PATH" 2>/dev/null || true)
-fi
-if [ -z "$DURATION" ]; then
-  RAW_DUR=$(ffmpeg -i "$WAV_PATH" 2>&1 | grep -oP 'Duration: \K[0-9:.]+' || true)
-  DURATION=$(echo "$RAW_DUR" | awk -F: '{ print ($1*3600)+($2*60)+$3 }')
-fi
-DURATION=$(printf "%.1f" "$DURATION")
 echo "  duration: ${DURATION}s"
 
 # ── Step 2: Transcribe (direct or silence-aware chunked) ──
