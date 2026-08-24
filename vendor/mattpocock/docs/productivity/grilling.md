@@ -2,7 +2,7 @@
 
 `grilling` is the interview loop that stress-tests a plan, a decision, or an idea before anyone acts on it. It maps the subject as a **design tree** — every decision branches into the decisions that hang off it — and interviews you branch by branch until nothing is left silently assumed.
 
-It does not ask one question at a time, and it does not ask everything at once. Each **round** asks the whole **frontier**: every decision whose prerequisites are already settled, and nothing else. Two questions never share a round if one depends on the other — a question that hinges on an answer still open belongs to a later round. Your answers settle decisions, the frontier moves outward, and the next round asks what that unblocked. Thirteen questions typically land in about three rounds rather than thirteen.
+It does not ask one question at a time, and it does not ask everything at once. Each **round** asks a slice of the **frontier**: every decision whose prerequisites are already settled is eligible, but only the most critical 2–3 are carried into the round — the rest wait for the next round. Two questions never share a round if one depends on the other — a question that hinges on an answer still open belongs to a later round. Your answers settle decisions, the frontier moves outward, and the next round asks what that unblocked. Thirteen questions typically land in about five or six rounds rather than thirteen, because each round stays short enough to answer without scrolling.
 
 ## When to reach for it
 
@@ -22,7 +22,7 @@ Typing `/skill:grilling` directly gets you the plain interview and nothing else.
 
 Three ideas carry the whole skill.
 
-The **design tree** is the model of the subject: decisions with decisions hanging off them. The **frontier** is the set of decisions whose prerequisites are all settled — the only questions that can honestly be asked yet. A **round** is one frontier, asked in full and answered in full.
+The **design tree** is the model of the subject: decisions with decisions hanging off them. The **frontier** is the set of decisions whose prerequisites are all settled — the only questions that can honestly be asked yet. A **round** is a 2–3 question slice of the frontier, asked and answered before the next slice.
 
 Inside a round every question arrives in a fixed shape: numbered and titled behind a `❓`, then the body, then the agent's recommended answer alone on a `➡️` line. That is what makes a round answerable by number — "1 yes, 2 the second option, 3 no, here's why" — instead of by quoting questions back. The format has one known rough edge: the recommendation sometimes argues *against* the question as it was worded, so agreeing with the recommendation means answering "no" to the question. When that happens, answer the recommendation and say so.
 
@@ -43,13 +43,13 @@ This page covers the mechanism. The things people most often want are documented
 ## Common questions
 
 **Can I go back to one question at a time?**
-Yes, and a large part of the audience does. Add this to your global `CLAUDE.md`:
+Yes. Add this to your global `CLAUDE.md`:
 
 ```
 When grilling, ask one question at a time.
 ```
 
-The round-based default is genuinely contested. Practitioners who read slowly, who work in a second language, or who use the sequential format as focus scaffolding all report the one-at-a-time rhythm is better for them, and the opt-out is supported rather than tolerated.
+The round-based default is genuinely contested. Practitioners who read slowly, who work in a second language, or who use the sequential format as focus scaffolding all report the one-at-a-time rhythm is better for them, and the opt-out is supported rather than tolerated. The default caps each round at 2–3 questions for the same reason — a long numbered list forces scrolling between each question and the answer being typed, and a wall of open questions breeds anxiety. One-at-a-time is the strict version of the same instinct.
 
 **Where did `/batch-grill-me` go?**
 Into this skill. Round-based questioning shipped briefly as a separate skill, then moved into `grilling` itself, so everything built on the primitive — `grill-me`, `grill-with-docs`, `triage`, `wayfinder` — got it at once. There is no `batch-grill-me` to install, and no separate sequential skill either; the `CLAUDE.md` line above is the way back to one-at-a-time.
@@ -64,7 +64,7 @@ A confirmation gate exists precisely for this: the skill is not finished when th
 That is a bug in the run, not the intended behaviour, and it was the reason facts and decisions were separated in the skill's text. It shows up most when another skill runs `grilling` inside a resolve-this-ticket frame, where the surrounding task reads as licence to keep moving. The same constraint is why there is no async mode: people have asked for a variant that reads a GitHub issue and posts one consolidated decision memo, and that is a different skill, because a grilling session that nobody answers has produced the agent's opinion rather than yours.
 
 **Can I cap the number of questions?**
-No, and a cap is deliberately out of scope. Some plans need three questions and some need fifty; a fixed ceiling either truncates the hard case or feels arbitrary on the easy one. Steering in plain language is the intended control — tell it to wrap up, or stop and accept the plan where it stands. If a session is running very long, the cause is usually that the scope was too big; break the work up and grill the pieces.
+There is no cap on the *total* questions a session may ask — some plans need three and some need fifty, and a fixed ceiling either truncates the hard case or feels arbitrary on the easy one. There *is* a cap on how many land in one round: 2–3, so the user can hold the round in their head and answer without scrolling. Steering in plain language is the other control — tell it to wrap up, or stop and accept the plan where it stands. If a session is running very long, the cause is usually that the scope was too big; break the work up and grill the pieces.
 
 **I installed `grill-me` on its own and nothing happens.**
 `grill-me` is a one-line skill whose whole body is "run a `/skill:grilling` session", so it needs this skill installed too. The same is true of `grill-with-docs`, which additionally needs [domain-modeling](https://aihero.dev/skills-domain-modeling). Installing the whole set avoids the problem; installing selectively means installing the primitives as well.
@@ -80,7 +80,7 @@ A real and unfixed rough edge, reported across [harnesses](https://www.aihero.de
 - It goes and looks facts up — reading files, dispatching a sub-agent — rather than asking you something it could have found out.
 - Research running in the background does not stall the round; only the questions that depend on it wait.
 - It stops at the end and asks you to confirm the understanding is shared, instead of starting work.
-- Question count stays high while round count stays low.
+- Each round carries 2–3 questions — never a wall — while later rounds ask things the first round could not have asked.
 
 ## Where it fits
 
