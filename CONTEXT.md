@@ -122,3 +122,22 @@ _Avoid_: untested, uncovered (use "not covered" for the gremlins-specific status
 
 - **Mutation score** (aka **efficacy**): `killed / (killed + survived) × 100%`. Measures how good tests are at catching mutations they *could* catch. `compile-error` and `timeout` are excluded from the denominator. Gremlins additionally reports **mutator coverage** — `(killed + lived) / total` — which measures how much mutated code tests reach at all. A high efficacy + low coverage means tests are good where they exist but don't exercise enough code.
 _Avoid_: coverage (that's line coverage, a different and weaker metric), test quality score
+
+## Research Pipeline
+
+The multi-direction research workflow (`/skill:research`): grill → survey directions → parallel per-direction subagents → synthesize. Artifacts live under `~/research/<topic-slug>/`.
+
+- **Direction**: A sub-topic of the research question, researched independently by one subagent. Each direction maps to one report and one subagent (separation of concerns).
+_Avoid_: thread, facet, branch
+
+- **Direction report**: The per-direction output, `NN-slug.md` — What + How + key findings only, every claim cited to its source. Deliberately stops before So What / Now What.
+_Avoid_: section report, per-topic note
+
+- **Synthesis**: The cross-direction merge, `00-summary.md` — all four layers (What / How / So What / Now What), contradictions reconciled, opening with a direction index that doubles as the topic's index.
+_Avoid_: summary, rollup, digest
+
+- **Synthesize subagent** (aka **synthesizer**): The single subagent that merges direction reports into the synthesis. Forks the main session's context to ground So What / Now What, but is explicitly not the main session — cannot spawn subagents, cannot grill, only synthesizes.
+_Avoid_: merge agent, summary agent
+
+- **topic-slug**: The directory name under `~/research/` holding one research topic's reports. Chosen by the main session during file layout.
+_Avoid_: topic name, folder name, project name

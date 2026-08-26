@@ -1,6 +1,6 @@
 # RESOURCES.md Format
 
-`RESOURCES.md` is the curated set of trusted sources for this topic. Knowledge for explainers should be drawn from here, not from parametric guesses. Wisdom comes from the communities listed here.
+`RESOURCES.md` is the single interface into OKB for this topic. **Knowledge** entries point into OKB notes (`gold/` when available, `silver/` otherwise) — knowledge for lessons is drawn from those notes, not from parametric guesses. **Wisdom** entries keep community links.
 
 ## Structure
 
@@ -9,10 +9,10 @@
 
 ## Knowledge
 
-- [Book: _The Science and Practice of Strength Training_ — Zatsiorsky & Kraemer](https://example.com)
-  Foundational text on programming and adaptation. Use for: anything to do with periodisation, recovery, intensity zones.
-- [Article: "How Much Should I Train?" — Greg Nuckols (Stronger By Science)](https://example.com)
-  Evidence-based review of volume landmarks. Use for: weekly set targets per muscle group.
+- [Periodisation fundamentals](../../okb/gold/strength-training/periodisation.md)
+  How programming and adaptation interact. Use for: periodisation, recovery, intensity zones.
+- [Volume landmarks](../../okb/gold/strength-training/volume-landmarks.md)
+  Weekly set targets per muscle group, from the evidence. Use for: programme design.
 
 ## Wisdom (Communities)
 
@@ -24,9 +24,10 @@
 
 ## Rules
 
-- **High-trust only.** Prefer primary sources, recognised experts, peer-reviewed work, and communities with strong moderation. If a resource is marketing dressed as education, leave it out.
-- **Annotate every entry.** A bare link is useless in three months. Add one line: what it covers and when to reach for it.
-- **Group by Knowledge / Wisdom.** Mirrors the philosophy in [SKILL.md](./SKILL.md). It is fine for a resource to appear in only one group.
-- **Surface gaps explicitly.** If no good resource exists for an area the mission needs, write a `## Gaps` section listing what is missing. This drives future search.
-- **Prune ruthlessly.** A resource that turned out to be wrong, shallow, or off-mission should be removed, not buried. Better five sharp sources than thirty mediocre ones.
+- **Knowledge points into OKB.** Each Knowledge entry is a relative pointer to an OKB note (`okb/gold/...` when verified, `okb/silver/...` otherwise). The note carries sources and verification; the pointer carries one line on what it covers and when to reach for it.
+- **Wisdom stays high-trust.** Prefer communities with strong moderation. If a community is marketing dressed as education, leave it out.
+- **Annotate every entry.** A bare pointer is useless in three months. Add one line: what it covers and when to reach for it.
+- **Group by Knowledge / Wisdom.** Knowledge = OKB pointers; Wisdom = community links. It is fine for a resource to appear in only one group.
+- **Surface gaps explicitly.** When a mission needs knowledge that OKB does not yet hold, write a `## Gaps` section listing it, then run OKB curation to fill it and point at the new note.
+- **Prune ruthlessly.** A note that turned out wrong, shallow, or off-mission should be removed from OKB, and its pointer dropped here. Better five sharp notes than thirty mediocre ones.
 - **Record community preferences.** If the user has opted out of joining communities, note it here so future sessions don't keep proposing them.
