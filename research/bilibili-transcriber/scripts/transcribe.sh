@@ -86,13 +86,13 @@ META_MD="${WORK_DIR}/metadata.md"
 if [ -f "$META_JSON" ]; then
   RAW_TITLE=$(python3 -c "import json; print(json.load(open('$META_JSON')).get('title',''))" 2>/dev/null || true)
   if [ -n "$RAW_TITLE" ]; then
-    TITLE_SLUG=$(echo "$RAW_TITLE" | sed 's/[\\/:*?"<>|]/_/g' | head -c 60)
+    TITLE_SLUG=$(printf '%s' "$RAW_TITLE" | python3 "${SCRIPT_DIR}/slugify.py" 2>/dev/null || true)
   fi
 elif [ -f "$META_MD" ]; then
   TITLE_LINE=$(grep "^| 标题" "$META_MD" | head -1 || true)
   if [ -n "$TITLE_LINE" ]; then
     RAW_TITLE=$(echo "$TITLE_LINE" | sed 's/.*| //; s/ |$//')
-    TITLE_SLUG=$(echo "$RAW_TITLE" | sed 's/[\\/:*?"<>|]/_/g' | head -c 60)
+    TITLE_SLUG=$(printf '%s' "$RAW_TITLE" | python3 "${SCRIPT_DIR}/slugify.py" 2>/dev/null || true)
   fi
 fi
 
@@ -115,6 +115,7 @@ mkdir -p "$OUT_DIR" "$REF_DIR"
 # ── Step 1: Transcode ──
 WAV_PATH="${OUT_DIR}/audio.wav"
 echo "[1/3] Transcoding MP4 → 16kHz WAV"
+T0=$(date +%s%N)
 # Delegate to transcode.sh (includes -vn to ignore video streams)
 TRANSCODE_OUT=$(bash "${SCRIPT_DIR}/transcode.sh" "$AUDIO_MP4" "$WAV_PATH")
 TRANSCODE_S=$(echo "$TRANSCODE_OUT" | sed -n '1p')
