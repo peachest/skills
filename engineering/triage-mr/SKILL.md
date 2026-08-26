@@ -29,6 +29,11 @@ GitLab and GitHub are both supported. The platform is auto-detected from `git re
 
 Override with `OCR_PLATFORM=gitlab|github` env var.
 
+The GitLab host, scheme (http/https), and token are derived automatically from the
+git remote + glab config, so self-hosted instances (e.g. `gitlab.transwarp.io`)
+work without extra env vars. The OCR bot login is instance-specific — set
+`OCR_BOT_LOGIN` when the bot isn't `gitblue.bot` (see the GitLab reference).
+
 Platform-specific commands, API endpoints, and data formats:
 
 - [GitLab reference](../mr-review-triage/reference/gitlab.md)
@@ -37,7 +42,10 @@ Platform-specific commands, API endpoints, and data formats:
 ## Prerequisites
 
 - MR/PR exists, CI pipeline has completed
-- Platform CLI authenticated (GitLab: `glab`; GitHub: `gh`)
+- Platform CLI authenticated (GitLab: `glab`; GitHub: `gh`). For GitLab with
+  multiple configured instances, confirm the target host is authenticated first:
+  `glab auth status` — the scripts derive host + token from `git remote get-url
+  origin` + glab config, and a wrong-instance token will 401.
 - Current branch matches the MR/PR source branch
 - `/skill:fix` skill installed
 
