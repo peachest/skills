@@ -3,11 +3,17 @@
 Provides a single `curl()` function that handles token resolution,
 subprocess curl invocation, -i header/body parsing, JSON decoding,
 and retry with jitter + Retry-After support on transient failures.
+
+Multi-instance aware: the GitLab host is derived from `git remote get-url origin`
+(not hardcoded), the token is read from glab config for that host, and the `glab`
+fallback passes `--hostname <host>` so self-hosted instances resolve correctly
+(e.g. `gitlab.transwarp.io` alongside `gitblue.transwarp.io`).
 """
 
 import json
 import os
 import random
+import re
 import subprocess
 import time
 
@@ -15,12 +21,120 @@ import time
 MAX_RETRY_DELAY = 60.0
 
 _PROJECT_ID_CACHE = None
+_CONTEXT_CACHE = None
+
+
+def _git_remote_url():
+    """Return the origin remote URL, or '' on failure."""
+    try:
+        r = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _parse_host(url):
+    """Derive (host, scheme) from a git remote or API URL.
+
+    Handles:
+      https://gitlab.transwarp.io/ns/proj.git          -> ('gitlab.transwarp.io', 'https')
+      http://gitlab.transwarp.io/ns/proj.git           -> ('gitlab.transwarp.io', 'http')
+      git@gitlab.transwarp.io:ns/proj.git              -> ('gitlab.transwarp.io', None)
+      ssh://git@gitlab.transwarp.io:10022/ns/proj.git  -> ('gitlab.transwarp.io', None)
+
+    The ssh port is dropped (the API host never carries the ssh port); the
+    scheme is None for ssh remotes and is filled from glab config later.
+    """
+    url = (url or "").strip()
+    if not url:
+        return None, None
+    m = re.match(r"^(https?)://([^/:]+)(?::\d+)?(?:/|$)", url)
+    if m:
+        return m.group(2), m.group(1)
+    m = re.match(r"^(?:ssh://)?[^@/]+@([^/:]+)(?::\d+)?", url)
+    if m:
+        return m.group(1), None
+    return None, None
+
+
+def _glab_config():
+    """Load glab CLI config YAML (hosts -> {token, api_host, api_protocol})."""
+    try:
+        import yaml  # PyYAML — used for multi-instance token resolution
+    except ImportError:
+        return {}
+    for path in (
+        os.path.expanduser("~/.config/glab-cli/config.yml"),
+        os.path.expanduser("~/.config/glab-cli/config.yaml"),
+    ):
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    cfg = yaml.safe_load(f)
+                return cfg if isinstance(cfg, dict) else {}
+            except Exception:
+                return {}
+    return {}
+
+
+def resolve_gitlab_context():
+    """Resolve (base_url, host, token, header_name) for the GitLab instance.
+
+    Multi-instance aware. Priority:
+      1. CI_SERVER_URL env (explicit override; host parsed from it)
+      2. git remote host, with scheme / api_host / token read from glab config
+         for that host — glab config is the canonical token source when several
+         GitLab instances are configured (a stale generic env token from a
+         different instance would otherwise 401)
+      3. env token fallback (GITLAB__PERSONAL_ACCESS_TOKEN > GITLAB_API_TOKEN > CI_JOB_TOKEN)
+
+    Cached in module-level _CONTEXT_CACHE.
+    """
+    global _CONTEXT_CACHE
+    if _CONTEXT_CACHE is not None:
+        return _CONTEXT_CACHE
+
+    glab = _glab_config()
+    hosts = glab.get("hosts", {}) or {}
+
+    env_url = os.environ.get("CI_SERVER_URL", "").strip()
+    if env_url:
+        host, scheme = _parse_host(env_url)
+        base_url = env_url.rstrip("/")
+    else:
+        host, scheme = _parse_host(_git_remote_url())
+        if not host:
+            host = "gitlab.com"
+        hcfg = hosts.get(host)
+        hcfg = hcfg if isinstance(hcfg, dict) else {}
+        api_host = hcfg.get("api_host") or host
+        if scheme is None:
+            scheme = hcfg.get("api_protocol") or "https"
+        base_url = f"{scheme}://{api_host}"
+
+    # Token: prefer the glab config token for the specific host.
+    hcfg = hosts.get(host)
+    hcfg = hcfg if isinstance(hcfg, dict) else {}
+    token = hcfg.get("token", "")
+    header_name = "PRIVATE-TOKEN"
+    if not token:
+        env_pat = os.environ.get("GITLAB__PERSONAL_ACCESS_TOKEN") \
+            or os.environ.get("GITLAB_API_TOKEN")
+        token = env_pat or os.environ.get("CI_JOB_TOKEN", "")
+        if token and not env_pat:
+            header_name = "JOB-TOKEN"
+
+    _CONTEXT_CACHE = (base_url, host, token, header_name)
+    return _CONTEXT_CACHE
 
 
 def get_project_id():
     """Resolve GitLab project ID.
 
-    Priority: CI_PROJECT_ID > glab from git remote.
+    Priority: CI_PROJECT_ID > glab from git remote (with --hostname).
     Result cached in module-level _PROJECT_ID_CACHE.
     """
     global _PROJECT_ID_CACHE
@@ -32,31 +146,30 @@ def get_project_id():
         _PROJECT_ID_CACHE = pid
         return pid
 
+    _base_url, host, _token, _header = resolve_gitlab_context()
+
     # Local fallback: parse namespace/project from git remote, resolve via glab
     try:
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=10,
-        )
-        url = r.stdout.strip()
+        url = _git_remote_url()
         # Parse path from git URL. Handles:
-        #   git@host:ns/proj.git  → ns/proj
-        #   ssh://git@host:port/ns/proj.git → ns/proj
-        #   https://host/ns/proj.git → ns/proj
+        #   git@host:ns/proj.git              → ns/proj
+        #   ssh://git@host:port/ns/proj.git   → ns/proj
+        #   https://host/ns/proj.git          → ns/proj
         from urllib.parse import urlparse, quote_plus
-        parsed = urlparse(url)
-        path = parsed.path  # e.g. /llm/llmops/hami/ppu-device-plugin.git
-        if not path:
-            # git@host:ns/proj.git — urlparse puts everything in .path
+        if "://" in url:
+            path = urlparse(url).path
+        else:
             path = url.split(":", 1)[-1]
         path = path.strip("/").removesuffix(".git")
         if "/" in path:
             # Encode namespace/project for API: llm/llmops/hami/ppu-device-plugin → llm%2Fllmops%2Fhami%2Fppu-device-plugin
             encoded = quote_plus(path, safe="")
-            r2 = subprocess.run(
-                ["glab", "api", f"projects/{encoded}"],
-                capture_output=True, text=True, timeout=15,
-            )
+            cmd = ["glab", "api", f"projects/{encoded}"]
+            if host:
+                # --hostname is required for self-hosted instances; without it
+                # glab defaults to gitlab.com and the lookup fails.
+                cmd += ["--hostname", host]
+            r2 = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if r2.returncode == 0:
                 try:
                     project = json.loads(r2.stdout)
@@ -71,20 +184,6 @@ def get_project_id():
 
     _PROJECT_ID_CACHE = ""
     return ""
-
-
-def _resolve_auth():
-    """Resolve GitLab API token and auth header.
-
-    Priority: GITLAB__PERSONAL_ACCESS_TOKEN (CI + local) > GITLAB_API_TOKEN (legacy) > CI_JOB_TOKEN
-    """
-    token = os.environ.get("GITLAB__PERSONAL_ACCESS_TOKEN") \
-         or os.environ.get("GITLAB_API_TOKEN") \
-         or os.environ.get("CI_JOB_TOKEN", "")
-    # PAT uses PRIVATE-TOKEN header; CI_JOB_TOKEN uses JOB-TOKEN
-    use_pat = bool(os.environ.get("GITLAB__PERSONAL_ACCESS_TOKEN") or os.environ.get("GITLAB_API_TOKEN"))
-    header_name = "PRIVATE-TOKEN" if use_pat else "JOB-TOKEN"
-    return token, header_name
 
 
 def _parse_headers_and_body(raw_output):
@@ -155,11 +254,10 @@ def curl(endpoint, *, method="GET", data=None, retries=2):
         body=None → JSON decode failure (including empty response)
         headers keys are always lowercase
     """
-    token, auth_header = _resolve_auth()
-    gitlab_url = os.environ.get("CI_SERVER_URL", "http://gitblue.transwarp.io")
+    base_url, _host, token, auth_header = resolve_gitlab_context()
 
     for attempt in range(retries + 1):
-        url = endpoint if endpoint.startswith("http") else f"{gitlab_url}/api/v4{endpoint}"
+        url = endpoint if endpoint.startswith("http") else f"{base_url}/api/v4{endpoint}"
         cmd = ["curl", "-s", "-i", "--max-time", "30",
                "-H", f"{auth_header}: {token}",
                "-H", "Content-Type: application/json"]
