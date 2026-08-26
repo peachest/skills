@@ -4,6 +4,15 @@
 
 A report that dumps findings without structure forces the reader to do the synthesis themselves. The four layers move the reader from understanding → capability → relevance → action. Not every report needs all four at full depth — a tool survey leans on _How_, a cost model on _What_ — but every report touches all four. A missing layer is a gap to flag, not a section to skip silently; match depth to the question, never drop a layer without a one-line reason.
 
+## Two report kinds
+
+The research skill produces two kinds of report:
+
+- **Direction report** (`NN-slug.md`) — one per research direction. Covers only **What**, **How**, and key findings, each claim cited to its source. It stops before **So What** / **Now What**: those layers need the commissioning context (audience, constraints, success criteria) that only the main session holds, and a direction subagent writing them in isolation would hallucinate.
+- **Synthesis** (`00-summary.md`) — one per research topic. Covers **all four layers**, reconciling contradictions across directions, and opens with a direction index.
+
+The four layers below apply in full to the synthesis; a direction report touches the first two and flags findings without leaping to team impact or action.
+
 ---
 
 ## 1. What — model & modeling
