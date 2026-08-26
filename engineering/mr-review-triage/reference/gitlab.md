@@ -4,26 +4,50 @@ GitLab 平台的具体命令、API 端点和数据格式。
 
 ## 平台检测
 
-远程地址含 `gitlab.com` 或自建 GitLab 实例（如 `internal.example.com`）时判定为 GitLab。
+远程地址含 `gitlab.com` 或自建 GitLab 实例（如 `internal.example.com`、`internal.example.com`）时判定为 GitLab。
 
 ```bash
 git remote get-url origin
-# git@gitlab.com:ns/proj.git          → GitLab
-# git@internal.example.com:ns/proj.git → GitLab (self-hosted)
+# git@gitlab.com:ns/proj.git              → GitLab
+# git@internal.example.com:ns/proj.git    → GitLab (self-hosted)
+# http://internal.example.com/ns/proj.git  → GitLab (self-hosted)
 ```
+
+GitLab 实例（host）、协议（http/https）、token 均由脚本自动从 `git remote get-url origin` + glab config 推导，无需手动设置环境变量。
 
 ## CLI 工具
 
-使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。`glab` 在仓库中运行时自动推断项目。
+使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。多实例环境下 `glab` 必须带 `--hostname <host>` 指定实例，否则默认走 `gitlab.com`（导致返回空或 401）。
 
-认证要求：`glab auth login` 或设置 `GITLAB__PERSONAL_ACCESS_TOKEN` + `CI_SERVER_URL` 环境变量。
+```bash
+glab auth status   # 检查已配置的实例和认证状态
+```
+
+## 多实例认证（重要）
+
+同一台机器可能配置多个 GitLab 实例（如 `gitlab.com`、`internal.example.com`、`internal.example.com`）。脚本按以下优先级解析实例上下文：
+
+1. `CI_SERVER_URL` 环境变量（显式覆盖）
+2. `git remote get-url origin` 的 host + glab config `hosts.<host>`（token、api_protocol、api_host）
+3. 环境变量 token 兜底（`GITLAB__PERSONAL_ACCESS_TOKEN` > `GITLAB_API_TOKEN` > `CI_JOB_TOKEN`）
+
+**token 优先取 glab config 里该 host 的 token**，避免误用别的实例的 token 导致 401。跑之前先 `glab auth status` 确认目标实例已认证。
+
+OCR bot 登录名是**实例相关**的（如 `gitblue.bot` 或 `ai_bot001`），通过 `OCR_BOT_LOGIN` 环境变量指定：
+
+```bash
+export OCR_BOT_LOGIN=ai_bot001   # 目标实例的 OCR bot 用户名
+```
+
+`OCR_BOT_LOGIN` 为空时不过滤 bot（拉取全部 discussion）。
 
 ## MR ID 推导
 
-MR ID 未给时从分支名推导：
+MR ID 未给时从分支名推导（注意 `--hostname`）：
 
 ```bash
-glab mr list --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '.[0].iid'
+glab mr list --hostname internal.example.com \
+  --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '.[0].iid'
 ```
 
 ## 拉取 review discussion
@@ -36,7 +60,7 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 
 ### GitLab discussion 数据结构
 
-`glab api /projects/:id/merge_requests/:iid/discussions` 返回 JSON 数组，每个元素是一个 discussion（thread）：
+`GET /projects/:id/merge_requests/:iid/discussions` 返回 JSON 数组，每个元素是一个 discussion（thread）：
 
 ```json
 {
@@ -46,7 +70,7 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
     {
       "id": 12345,
       "body": "issue text",
-      "author": {"username": "gitblue.bot"},
+      "author": {"username": "ai_bot001"},
       "position": {
         "position_type": "text",
         "new_path": "path/to/file.go",
@@ -60,7 +84,7 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 
 ### 过滤规则
 
-只保留 `author.username == "gitblue.bot"` 的 discussion：
+只保留 OCR bot（`OCR_BOT_LOGIN`，默认不过滤）的 discussion：
 
 | 类型 | 判定条件 | 是否保留 |
 | ---- | ---- | ---- |
@@ -69,6 +93,7 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 | Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌ |
 | LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ |
 | Error note | body 含 `⚠️ OpenCodeReview error` | ❌ |
+| System note | `notes[0].system == true`（commit push、description 变更等） | ❌ |
 
 ### Fallback note 解析
 
@@ -100,13 +125,12 @@ GitLab 将 resolved 状态存储在 discussion 的第一个 note 上（`notes[0]
 
 ### 分页
 
-`glab mr note list` 内部处理分页。不完整时回退到 `glab api`：
+脚本内部用 `curl` 分页。不完整时回退到 `glab api`（注意 `--hostname`）：
 
 ```bash
-glab api /projects/:id/merge_requests/<MR_ID>/discussions?per_page=100&page=1
+glab api --hostname internal.example.com \
+  /projects/:id/merge_requests/<MR_ID>/discussions?per_page=100&page=1
 ```
-
-检查 `Link` header 是否有 `rel="next"`，继续请求直到当前页返回空数组。
 
 ## 贴标签 + resolve discussion
 
@@ -118,10 +142,11 @@ cat classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_IID>
 
 ### 回退命令
 
-脚本失败时逐条回退：
+脚本失败时逐条回退（注意 `--hostname`）：
 
 ```bash
-glab mr note create <MR_ID> --reply <discussion_id_prefix> -m "..."
+glab mr note create --hostname internal.example.com \
+  <MR_ID> --reply <discussion_id_prefix> -m "..."
 ```
 
 `--reply` 接受完整 discussion ID 或至少 8 字符的唯一前缀。
@@ -129,7 +154,8 @@ glab mr note create <MR_ID> --reply <discussion_id_prefix> -m "..."
 ### Resolve discussion
 
 ```bash
-glab api -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
+glab api --hostname internal.example.com \
+  -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
 ```
 
@@ -147,8 +173,9 @@ glab api -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id
 
 | 变量 | 用途 |
 | ---- | ---- |
-| `CI_SERVER_URL` | GitLab 实例 URL（默认 `http://internal.example.com`） |
+| `CI_SERVER_URL` | 显式覆盖 GitLab 实例 URL；缺省时从 git remote + glab config 推导 |
 | `CI_PROJECT_ID` | 项目 ID（优先使用，跳过自动推导） |
-| `GITLAB__PERSONAL_ACCESS_TOKEN` | GitLab PAT 认证 |
+| `OCR_BOT_LOGIN` | OCR bot 用户名（实例相关，如 `ai_bot001`）；空 = 不过滤 bot |
+| `GITLAB__PERSONAL_ACCESS_TOKEN` | GitLab PAT 认证（兜底，优先用 glab config 该 host 的 token） |
 | `GITLAB_API_TOKEN` | 旧版 token（fallback） |
 | `CI_JOB_TOKEN` | CI Job Token 认证（CI 环境） |

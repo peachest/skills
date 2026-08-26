@@ -138,6 +138,12 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
         endpoint = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions?per_page=100&page={page}"
         status, body, _ = curl(endpoint)
         if status == 0 or not isinstance(body, list) or not body:
+            if page == 1 and status != 200:
+                # Auth or instance mismatch surfaces as a silent 0-finding pull;
+                # say why so the operator checks auth instead of debugging curl.
+                print(f"WARN: discussions fetch HTTP {status} — check glab auth "
+                      f"(`glab auth status`), CI_SERVER_URL, and OCR_BOT_LOGIN",
+                      file=sys.stderr)
             break
 
         for disc in body:
@@ -150,9 +156,16 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
             if skip_resolved and first_note.get("resolved", False):
                 continue
 
-            # Only process bot notes
+            # Skip system notes (commit pushes, description changes, etc.)
+            if first_note.get("system", False):
+                continue
+
+            # Only process notes from the OCR bot. The bot login is
+            # instance-specific (e.g. gitblue.bot vs ai_bot001) — set
+            # OCR_BOT_LOGIN to filter. Empty = no bot filter (pull everything).
             author = first_note.get("author", {}).get("username", "")
-            if author != "gitblue.bot":
+            ocr_bot_login = os.environ.get("OCR_BOT_LOGIN", "")
+            if ocr_bot_login and author != ocr_bot_login:
                 continue
 
             pos = first_note.get("position")
