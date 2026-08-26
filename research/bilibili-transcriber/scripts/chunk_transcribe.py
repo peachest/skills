@@ -41,61 +41,95 @@ import argparse
 import concurrent.futures
 import json
 import os
-import re
-import shutil
-import subprocess
 import sys
 import time
+import wave
+
+import numpy as np
 
 
-# ── Audio helpers ──
+# ── Audio helpers (pure Python — no external binary required) ──
+
+SAMPLE_RATE = 16000
+
+
+def _open_wav(path: str) -> wave.Wave_read:
+    """Open a WAV file with stdlib wave, enforcing the expected format."""
+    try:
+        w = wave.open(path, "rb")
+    except (wave.Error, OSError) as e:
+        print(f"ERROR: Not a readable WAV file: {path} ({e})", file=sys.stderr)
+        sys.exit(1)
+    if w.getframerate() != SAMPLE_RATE or w.getnchannels() != 1:
+        print(
+            f"ERROR: Expected {SAMPLE_RATE}Hz mono WAV, got "
+            f"{w.getframerate()}Hz/{w.getnchannels()}ch", file=sys.stderr)
+        sys.exit(1)
+    return w
+
 
 def get_duration(path: str) -> float:
-    """Get audio duration in seconds. Prefers ffprobe, falls back to ffmpeg."""
-    if shutil.which("ffprobe"):
-        r = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-             "-of", "csv=p=0", path],
-            capture_output=True, text=True
-        )
-        try:
-            return float(r.stdout.strip())
-        except ValueError:
-            pass
-
-    r = subprocess.run(
-        ["ffmpeg", "-i", path],
-        capture_output=True, text=True
-    )
-    m = re.search(r'Duration:\s+(\d+):(\d+):(\d+\.\d+)', r.stderr or "")
-    if m:
-        return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
-
-    print("ERROR: Could not determine duration", file=sys.stderr)
-    sys.exit(1)
+    """Get audio duration in seconds from the WAV header (no probe binary)."""
+    with _open_wav(path) as w:
+        return w.getnframes() / w.getframerate()
 
 
 def get_filesize_mb(path: str) -> float:
     return os.path.getsize(path) / (1024 * 1024)
 
 
+def _window_silence_mask(path: str, silence_db: float, min_dur: float,
+                         win_sec: float = 0.05, hop_sec: float = 0.02) -> tuple:
+    """
+    Compute a per-window boolean mask: True where the window's RMS amplitude
+    (in dBFS) is below silence_db. Windows are win_sec long, hop_sec apart.
+
+    Returns (mask, hop_sec) — window i covers [i*hop_sec, i*hop_sec+win_sec)
+    seconds, so timestamps are derived from hop_sec.
+    """
+    threshold = 10 ** (silence_db / 20.0)  # linear amplitude (full-scale = 1.0)
+    with _open_wav(path) as w:
+        data = w.readframes(w.getnframes())
+    samples = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+
+    win = max(1, int(win_sec * SAMPLE_RATE))
+    hop = max(1, int(hop_sec * SAMPLE_RATE))
+    n_wins = max(0, (len(samples) - win) // hop + 1)
+    mask = np.zeros(n_wins, dtype=bool)
+    for i in range(n_wins):
+        seg = samples[i * hop:i * hop + win]
+        rms = float(np.sqrt(np.mean(seg * seg)))
+        mask[i] = rms < threshold
+    return mask, hop_sec
+
+
 def detect_silence(path: str, silence_db: float = -30,
                    min_dur: float = 0.5) -> list:
     """
-    Run ffmpeg silencedetect, return list of (midpoint, duration) tuples.
-    Each tuple represents a silence segment that is a candidate cut point.
+    Silence-aware pause detection (pure Python path)
+    (drop-in for the former "ffmpeg silencedetect" pipeline). Returns a list of (midpoint, duration) tuples — each
+    silence segment is a candidate cut point.
     """
-    r = subprocess.run(
-        ["ffmpeg", "-i", path,
-         "-af", f"silencedetect=noise={silence_db}dB:d={min_dur}",
-         "-f", "null", "-"],
-        capture_output=True, text=True
-    )
-    starts = [float(m.group(1)) for m in re.finditer(
-        r'silence_start:\s+([\d.]+)', r.stderr)]
-    ends = [float(m.group(1)) for m in re.finditer(
-        r'silence_end:\s+([\d.]+)', r.stderr)]
-    return [((s + e) / 2, e - s) for s, e in zip(starts, ends) if e > s]
+    mask, hop_sec = _window_silence_mask(path, silence_db, min_dur)
+    if not mask.any():
+        return []
+
+    # Contiguous runs of True windows => silence segments
+    segs = []
+    in_silence = False
+    start = 0
+    for i, m in enumerate(mask):
+        if m and not in_silence:
+            in_silence = True
+            start = i
+        elif not m and in_silence:
+            in_silence = False
+            if (i - start) * hop_sec >= min_dur:
+                segs.append((start, i))
+    if in_silence and (len(mask) - start) * hop_sec >= min_dur:
+        segs.append((start, len(mask)))
+
+    return [((s + e) / 2 * hop_sec, (e - s) * hop_sec) for s, e in segs]
 
 
 # ── Chunking strategies ──
@@ -262,13 +296,20 @@ STRATEGIES = {
 # ── Transcription helpers ──
 
 def create_chunk(wav_path: str, chunk_path: str, start: float, duration: float):
-    """Extract a chunk from the WAV file using ffmpeg."""
-    subprocess.run(
-        ["ffmpeg", "-y", "-ss", str(start), "-t", str(duration),
-         "-i", wav_path, "-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
-         chunk_path, "-loglevel", "error"],
-        check=True
-    )
+    """Extract a chunk from the WAV file by slicing frames (pure Python)."""
+    with _open_wav(wav_path) as w:
+        rate = w.getframerate()
+        n_frames = w.getnframes()
+        start_frame = max(0, int(start * rate))
+        end_frame = min(n_frames, int((start + duration) * rate))
+        w.setpos(start_frame)
+        data = w.readframes(end_frame - start_frame)
+
+    with wave.open(chunk_path, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)  # s16
+        out.setframerate(rate)
+        out.writeframes(data)
 
 
 def transcribe_chunk(chunk_path: str, endpoint: str, model: str,
