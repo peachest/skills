@@ -37,6 +37,22 @@ def _find_aria2c() -> str:
     raise RuntimeError("aria2c not found in PATH or ~/scripts/aria2c")
 
 
+def _resolve_ffmpeg() -> str:
+    """Locate an ffmpeg binary: prefer the static binary bundled with the
+    `imageio-ffmpeg` pip package, fall back to PATH. Avoids depending on a
+    system-installed ffmpeg."""
+    try:
+        import imageio_ffmpeg  # pip package with bundled static ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    raise RuntimeError(
+        "ffmpeg not found — install the pip package: pip install imageio-ffmpeg")
+
+
 def _download_with_aria2c(url: str, output_path: str, output_dir: str):
     """Download a URL via aria2c subprocess.
 
@@ -288,9 +304,9 @@ def fetch(url: str, output_dir: str = None) -> dict:
             with open(list_path, "w") as f:
                 for sp in segment_paths:
                     f.write(f"file '{os.path.basename(sp)}'\n")
-            # ffmpeg concat
+            # ffmpeg concat (binary resolved via imageio_ffmpeg, no system dep)
             result = subprocess.run(
-                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                [_resolve_ffmpeg(), "-y", "-f", "concat", "-safe", "0",
                  "-i", list_path, "-c", "copy", audio_path],
                 capture_output=True, text=True, timeout=120)
             if result.returncode != 0:
