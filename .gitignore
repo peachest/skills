@@ -2,3 +2,6 @@ __pycache__/
 .pi-subagents
 .pi
 .pytest_cache/
+
+# Generated skill outputs (bilibili-transcriber transcripts land in CWD)
+references/
