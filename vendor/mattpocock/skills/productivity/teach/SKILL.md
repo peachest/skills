@@ -85,7 +85,7 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 
 A lesson is the main thing you produce — the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
 
-A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte.
+A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte. Build from the shared ` base.css ` components and tokens; an inline `<style>` block is for one-off component styling only, and every font-size, spacing, and line-height in it references a token via ` var() ` (see [CSS Self-Check](#css-self-check)).
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development — grounded in `UNDERSTANDING-MAP.md`, not guessed.
 
@@ -156,9 +156,40 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). They are orthogonal — both run on lessons with diagrams.
+Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). The three are orthogonal — a lesson with diagrams runs all three; a plain lesson runs fact-check and CSS self-check.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
+
+## CSS Self-Check
+
+After generating or editing any lesson or reference HTML, run this mechanical check before the learner sees it. It catches the failure mode fact-check and viz-check both miss: inline `<style>` blocks (and inline ` style="" ` attributes) using bare literal font-size/spacing/line-height values instead of the token system defined in ` base.css ` and ` CSS-CONVENTIONS.md `.
+
+Run from the workspace root (requires the lesson file path):
+
+```bash
+python3 -c '
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+# extract inline <style> blocks + style="" attributes
+blocks = re.findall(r"<style[^>]*>(.*?)</style>", s, re.S) + re.findall(r"style=\"([^\"]*)\"", s)
+violations = []
+for b in blocks:
+    for prop in ("font-size", "padding", "margin", "line-height"):
+        for m in re.finditer(prop + r":\s*([^;}\"]+)", b):
+            val = m.group(1).strip()
+            # em/% are relative units outside the token system; only flag absolute literals (px, rem, pt, bare numbers)
+            if "var(" not in val and val != "0" and not re.match(r"^[\d.]+(em|%)$", val):
+                violations.append(f"{prop}: {val}")
+if violations:
+    print(f"{p}: {len(violations)} bare literal(s) — replace with var(--token):")
+    for v in violations: print(f"  {v}")
+    sys.exit(1)
+print(f"{p}: OK")
+' lessons/0001-your-lesson.html
+```
+
+**Zero violations** is the completion criterion. Fix each violation by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.). Relative ` em `/` % ` values (e.g. inline ` code ` padding ` 0.15em 0.35em `) are outside the token system and pass the check; absolute ` px `/` rem `/` pt `/bare numbers must be tokens.
 
 ## Visualization Self-Check
 
