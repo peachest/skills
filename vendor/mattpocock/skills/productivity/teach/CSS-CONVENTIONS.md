@@ -68,6 +68,14 @@ Nine levels consolidate the former 19 ad-hoc rem/px/pt values. **Always referenc
 
 Body uses `--font-voice` with `font-feature-settings: "pnum" on, "lnum" on, "liga" on` (proportional + lining numerals + ligatures) for tidy mixed CJK/Latin/digit rendering. Headings use `--font-ui`.
 
+## Motion & Elevation
+
+Motion tokens (Anthropic CDS): `--ease-out` (default), `--ease-snap`, `--ease-overshoot`, `--ease-in-out-quart`; durations `--dur-fast`(60ms) / `--dur-snap`(.12s) / `--dur-base`(.2s) / `--dur-sheet`(.3s) / `--dur-slow`(.45s). **Only interactive elements get `transition`** (links, cards, quiz-options) — never body text. Multi-property transitions share one duration+easing.
+
+Elevation: `--shadow-sm` (card rest), `--shadow-md` (card hover), `--shadow-focus` (focus ring, double-layer). Cards lift on hover (`translateY(-2px)` + `--shadow-md`) and press on `:active` (`scale(.99)`).
+
+Three semantic `@keyframes`: `callout-pulse` (callout appear), `quiz-feedback` (answer reveal, overshoot), `step-reveal` (step-list clip-path sweep, staggered). All neutralized by the existing `prefers-reduced-motion: reduce` override.
+
 ## Dark Mode
 
 Automatic via `prefers-color-scheme: dark`, or per-lesson override by adding `.dark` class to `<html>` or `<body>`. To force light mode, add `.light` class.
