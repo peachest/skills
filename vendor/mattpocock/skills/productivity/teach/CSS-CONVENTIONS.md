@@ -76,6 +76,14 @@ Elevation: `--shadow-sm` (card rest), `--shadow-md` (card hover), `--shadow-focu
 
 Three semantic `@keyframes`: `callout-pulse` (callout appear), `quiz-feedback` (answer reveal, overshoot), `step-reveal` (step-list clip-path sweep, staggered). All neutralized by the existing `prefers-reduced-motion: reduce` override.
 
+## Spacing & Shapes
+
+Spacing scale `--sp-1`(4px) … `--sp-10`(64px). Structural padding/margins on the 4px grid are tokenized (e.g. body padding `var(--sp-6) var(--sp-5) var(--sp-10)`, card padding `var(--sp-4)`, block gaps `var(--sp-4)`/`var(--sp-2)`). **Off-grid values** (0.8/0.9/1.1/1.2/1.35rem — legacy rhythm) are retained as literals for now; a future grid-alignment pass can snap them to the nearest `--sp-*`.
+
+Rounded `--r-sm`(4px) / `--r-md`(8px) / `--r-lg`(12px) / `--r-pill`(1000px); `--radius` is an alias of `--r-md`. Use `--r-sm` for inline badges/tags, `--r-md` for callouts/quiz-options/cards, `--r-lg` for large containers. Circles keep literal `50%`. Inline link focus uses a sub-`--r-sm` `2px` to hug the text.
+
+Breakpoints: `992px` (tablet — tightens page padding), `600px` (mobile — collapses grids to single column, stacks pipelines). Both in addition to `prefers-color-scheme`/`prefers-reduced-motion`/`print`.
+
 ## Dark Mode
 
 Automatic via `prefers-color-scheme: dark`, or per-lesson override by adding `.dark` class to `<html>` or `<body>`. To force light mode, add `.light` class.
