@@ -96,6 +96,23 @@
   --shadow-md: 0 1px 2px #0000000d, 0 4px 8px #00000014;
   --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --ring-color: var(--accent);
+
+  /* --- Spacing scale (4-64px linear; see DESIGN.md) --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+  --sp-10: 64px;
+
+  /* --- Rounded (4 levels; --radius kept as alias of --r-md) --- */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 1000px;
+  --radius: var(--r-md);
 }
 
 /* --- Dark mode (67% of lessons use dark themes; support both system + per-lesson override) --- */
@@ -160,7 +177,7 @@ body {
   color: var(--text);
   background: var(--bg);
   margin: 0;
-  padding: 2rem 1.5rem 4rem;
+  padding: var(--sp-6) var(--sp-5) var(--sp-10);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -181,7 +198,7 @@ h1 {
   font-size: var(--fs-h1);
   line-height: var(--lh-h1);
   margin-top: 0;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
   letter-spacing: -0.02em;
 }
 
@@ -198,7 +215,7 @@ h3 {
   font-size: var(--fs-h3);
   line-height: var(--lh-h3);
   margin-top: 1.8rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
 }
 
 p {
@@ -208,7 +225,7 @@ p {
 
 /* --- Lesson Header --- */
 .lesson-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
 }
 
 .lesson-meta {
@@ -225,7 +242,7 @@ p {
   font-family: var(--font-ui);
   font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--sp-5);
 }
 
 .subtitle {
@@ -242,7 +259,7 @@ p {
   font-size: var(--fs-caption);
   font-weight: 500;
   padding: 0.1rem 0.4rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
   margin-right: 0.15rem;
@@ -253,7 +270,7 @@ p {
   font-family: var(--font-ui);
   font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
@@ -265,7 +282,7 @@ p {
 
 .lesson-nav a:hover { text-decoration: underline; }
 
-.lesson-nav .separator { margin: 0 0.5rem; color: var(--light); }
+.lesson-nav .separator { margin: 0 var(--sp-2); color: var(--light); }
 
 .nav-links {
   margin-top: 2.5rem;
@@ -301,7 +318,7 @@ li { margin-bottom: 0.4rem; }
 /* --- Blockquotes --- */
 blockquote {
   margin: 1.2rem 0;
-  padding: 0.5rem 1rem;
+  padding: var(--sp-2) var(--sp-4);
   border-left: 3px solid var(--accent);
   background: var(--accent-bg);
   color: var(--text);
@@ -383,7 +400,7 @@ code {
   font-size: 0.88em;
   background: var(--code-bg);
   padding: 0.15em 0.35em;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
 }
 
 pre {
@@ -438,7 +455,7 @@ figcaption {
 
 /* --- KaTeX display math --- */
 .katex-display {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
   overflow-x: auto;
 }
 
@@ -446,27 +463,27 @@ figcaption {
 
 /* --- Quiz --- */
 .quiz-container {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
 }
 
 .quiz {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
 }
 
 .quiz-section {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-5);
   border-top: 2px solid var(--border);
 }
 
 .quiz-intro {
   font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--sp-5);
 }
 
 .quiz-question {
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
 }
 
 .quiz-question-text {
@@ -480,9 +497,9 @@ figcaption {
   display: flex;
   align-items: flex-start;
   padding: 0.6rem 0.9rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   cursor: pointer;
   transition: background-color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
   font-size: var(--fs-body);
@@ -553,7 +570,7 @@ figcaption {
   font-size: var(--fs-h4);
   font-weight: 600;
   text-align: center;
-  padding: 1rem;
+  padding: var(--sp-4);
   border-radius: var(--radius);
   margin-top: 1.5rem;
   display: none;
@@ -592,7 +609,7 @@ figcaption {
   font-size: var(--fs-caption);
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
 }
@@ -600,7 +617,7 @@ figcaption {
 /* --- Highlight (15 ws) --- */
 .highlight {
   background: var(--accent-bg);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0.05em 0.2em;
 }
 
@@ -625,12 +642,12 @@ figcaption {
 .compare-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: var(--sp-4);
   margin: 1.2rem 0;
 }
 
 .compare-card {
-  padding: 1rem;
+  padding: var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -666,7 +683,7 @@ figcaption {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-2);
   margin: 1.2rem 0;
 }
 
@@ -706,8 +723,8 @@ figcaption {
 .flow-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
 }
 
 .flow-step {
@@ -848,7 +865,7 @@ figcaption {
   border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  margin: 0.5rem 0;
+  margin: var(--sp-2) 0;
 }
 
 .arch-arrow {
@@ -868,7 +885,7 @@ figcaption {
 .matrix-cell {
   width: 2rem;
   height: 2rem;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -908,7 +925,7 @@ figcaption {
 .code-compare {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  gap: var(--sp-2);
   margin: 1.2rem 0;
 }
 
@@ -920,19 +937,19 @@ figcaption {
 .formula-box {
   background: var(--code-bg);
   border-radius: var(--radius);
-  padding: 1rem 1.2rem;
+  padding: var(--sp-4) var(--sp-5);
   margin: 1.2rem 0;
   overflow-x: auto;
 }
 
 /* --- Tech card (4 ws) --- */
 .tech-card {
-  padding: 1rem;
+  padding: var(--sp-4);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
-  margin: 1rem 0;
+  margin: var(--sp-4) 0;
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
 }
@@ -946,7 +963,7 @@ figcaption {
   font-size: var(--fs-caption);
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
   margin-bottom: 0.4rem;
@@ -1005,7 +1022,7 @@ figcaption {
 /* --- Resources --- */
 .resources-section {
   margin-top: 2.5rem;
-  padding-top: 1.5rem;
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
@@ -1018,15 +1035,15 @@ figcaption {
 
 /* --- Footer --- */
 .lesson-footer {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
 .followup-reminder {
   background: var(--accent-bg);
   border-radius: var(--radius);
-  padding: 1rem 1.2rem;
+  padding: var(--sp-4) var(--sp-5);
   font-size: var(--fs-small);
 }
 
@@ -1034,10 +1051,15 @@ figcaption {
 
 .followup-reminder strong { color: var(--accent); }
 
-/* --- Responsive (E: base.css was missing this) --- */
+/* --- Responsive --- */
+@media (max-width: 992px) {
+  /* tablet: tighten page padding between desktop and mobile */
+  body { padding: var(--sp-5) var(--sp-4) var(--sp-8); }
+}
+
 @media (max-width: 600px) {
   body {
-    padding: 1rem;
+    padding: var(--sp-4);
     font-size: var(--fs-body);
   }
 
@@ -1070,7 +1092,7 @@ figcaption {
 
 /* --- Print --- */
 @media print {
-  body { padding: 1rem; font-size: var(--fs-body); }
+  body { padding: var(--sp-4); font-size: var(--fs-body); }
   .quiz-option { border: 1px solid #ccc; }
   .lesson-nav { display: none; }
   .followup-reminder { display: none; }
