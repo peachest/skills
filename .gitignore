@@ -5,3 +5,7 @@ __pycache__/
 
 # Generated skill outputs (bilibili-transcriber transcripts land in CWD)
 references/
+
+# teach skill python tooling (generated)
+vendor/mattpocock/skills/productivity/teach/uv.lock
+vendor/mattpocock/skills/productivity/teach/.venv/
