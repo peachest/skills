@@ -164,35 +164,13 @@ Distinct from both is **OKB** fact-checking, which runs upstream in the knowledg
 
 After generating or editing any lesson or reference HTML, run this mechanical check before the learner sees it. It catches the failure mode fact-check and viz-check both miss: inline `<style>` blocks (and inline ` style="" ` attributes) using bare literal font-size/spacing/line-height values instead of the token system defined in ` base.css ` and ` CSS-CONVENTIONS.md `.
 
-Run from the workspace root (requires the lesson file path):
+Run from the workspace root:
 
 ```bash
-python3 -c '
-import re, sys, pathlib
-p = pathlib.Path(sys.argv[1])
-s = p.read_text()
-# extract inline <style> blocks + style="" attributes
-blocks = re.findall(r"<style[^>]*>(.*?)</style>", s, re.S) + re.findall(r"style=\"([^\"]*)\"", s)
-violations = []
-for b in blocks:
-    for prop in ("font-size", "padding", "margin", "line-height"):
-        for m in re.finditer(prop + r":\s*([^;}\"]+)", b):
-            val = m.group(1).strip()
-            # em/% are relative units outside the token system; only flag absolute literals (px, rem, pt, bare numbers)
-            # multi-value (e.g. "0.15em 0.35em") passes if every space-separated token is em/%/0
-            parts = val.split()
-            all_relative = all(re.match(r"^[\d.]+(em|%)$", p) or p == "0" for p in parts) if parts else False
-            if "var(" not in val and val != "0" and not all_relative:
-                violations.append(f"{prop}: {val}")
-if violations:
-    print(f"{p}: {len(violations)} bare literal(s) — replace with var(--token):")
-    for v in violations: print(f"  {v}")
-    sys.exit(1)
-print(f"{p}: OK")
-' lessons/0001-your-lesson.html
+python3 ./assets/css-self-check.py lessons/0001-your-lesson.html
 ```
 
-**Zero violations** is the completion criterion. Fix each violation by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.). Relative ` em `/` % ` values (e.g. inline ` code ` padding ` 0.15em 0.35em `) are outside the token system and pass the check; absolute ` px `/` rem `/` pt `/bare numbers must be tokens.
+The script scans inline `<style>` blocks and ` style="" ` attributes for bare absolute literals (` px `/` rem `/` pt `/bare numbers) in ` font-size `/` padding `/` margin `/` line-height `. Relative ` em `/` % ` values pass (outside the token system). **Zero violations** is the completion criterion — fix each by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.).
 
 ## Visualization Self-Check
 
