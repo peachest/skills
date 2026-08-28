@@ -4,10 +4,35 @@
    Components derived from empirical analysis of 95 lessons across 21 workspaces. */
 
 :root {
-  /* --- Fonts (renamed from --body-font/--heading-font/--mono-font, 186:0 consensus) --- */
-  --serif: Georgia, "Songti SC", "Noto Serif SC", "Times New Roman", serif;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
-  --mono: "SF Mono", "Fira Code", "Consolas", "Liberation Mono", monospace;
+  /* --- Font families (DESIGN.md: voice/ui/mono; --serif/--sans kept as aliases) --- */
+  --font-voice: Georgia, "Songti SC", "Noto Serif SC", "Times New Roman", serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Consolas", "Liberation Mono", monospace;
+  --serif: var(--font-voice);
+  --sans: var(--font-ui);
+  --mono: var(--font-mono);
+
+  /* --- Font-size scale (9 levels; consolidates 19 ad-hoc values, see DESIGN.md) --- */
+  --fs-display: 2.75rem;
+  --fs-h1: 1.75rem;
+  --fs-h2: 1.4rem;
+  --fs-h3: 1.2rem;
+  --fs-h4: 1.05rem;
+  --fs-body: 1rem;
+  --fs-body-lg: 1.125rem;
+  --fs-small: 0.875rem;
+  --fs-caption: 0.75rem;
+  --fs-code: 0.9rem;
+
+  /* --- Line-height scale --- */
+  --lh-display: 1.2;
+  --lh-h1: 1.3;
+  --lh-h2: 1.35;
+  --lh-h3: 1.4;
+  --lh-h4: 1.45;
+  --lh-body: 1.75;
+  --lh-small: 1.5;
+  --lh-code: 1.5;
 
   /* --- Colors --- */
   --text: #1a1a1a;
@@ -15,6 +40,8 @@
   --light: #999;
   --accent: #0366d6;
   --accent-bg: #0969da14;
+  --brand: #d97757;
+  --brand-emphasized: #c6613f;
   --bg: #ffffff;
   --surface: #ffffff;          /* container/card background (63/95 lessons) */
   --code-bg: #f6f8fa;
@@ -52,6 +79,40 @@
   --max-width: 680px;
   --line-height: 1.75;
   --radius: 6px;
+
+  /* --- Motion (Anthropic CDS easing/duration; see DESIGN.md) --- */
+  --ease-out: cubic-bezier(.165, .84, .44, 1);
+  --ease-snap: cubic-bezier(.32, .72, 0, 1);
+  --ease-overshoot: cubic-bezier(.34, 1.3, .64, 1);
+  --ease-in-out-quart: cubic-bezier(.77, 0, .175, 1);
+  --dur-fast: 60ms;
+  --dur-snap: .12s;
+  --dur-base: .2s;
+  --dur-sheet: .3s;
+  --dur-slow: .45s;
+
+  /* --- Elevation (layered soft shadows; see DESIGN.md) --- */
+  --shadow-sm: 0 1px 2px #0000000a;
+  --shadow-md: 0 1px 2px #0000000d, 0 4px 8px #00000014;
+  --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --ring-color: var(--accent);
+
+  /* --- Spacing scale (4-64px linear; see DESIGN.md) --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+  --sp-10: 64px;
+
+  /* --- Rounded (4 levels; --radius kept as alias of --r-md) --- */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 1000px;
+  --radius: var(--r-md);
 }
 
 /* --- Dark mode (67% of lessons use dark themes; support both system + per-lesson override) --- */
@@ -92,16 +153,31 @@
   --teal-bg: #042f2e;
 }
 
+/* --- Keyframes (semantic; constrained by prefers-reduced-motion below) --- */
+@keyframes callout-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-bg); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes quiz-feedback {
+  0%   { opacity: 0; transform: translateY(0.4rem); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes step-reveal {
+  0%   { clip-path: inset(0 0 100% 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
 * { box-sizing: border-box; }
 
 body {
-  font-family: var(--serif);
-  font-size: 17px;
-  line-height: var(--line-height);
+  font-family: var(--font-voice);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-feature-settings: "pnum" on, "lnum" on, "liga" on;
   color: var(--text);
   background: var(--bg);
   margin: 0;
-  padding: 2rem 1.5rem 4rem;
+  padding: var(--sp-6) var(--sp-5) var(--sp-10);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -114,19 +190,21 @@ article {
 h1, h2, h3, h4 {
   font-family: var(--sans);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--lh-h1);
   color: var(--text);
 }
 
 h1 {
-  font-size: 1.9rem;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
   margin-top: 0;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
   letter-spacing: -0.02em;
 }
 
 h2 {
-  font-size: 1.35rem;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
   margin-top: 2.5rem;
   margin-bottom: 0.8rem;
   padding-bottom: 0.3rem;
@@ -134,9 +212,10 @@ h2 {
 }
 
 h3 {
-  font-size: 1.1rem;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
   margin-top: 1.8rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
 }
 
 p {
@@ -146,12 +225,12 @@ p {
 
 /* --- Lesson Header --- */
 .lesson-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
 }
 
 .lesson-meta {
-  font-family: var(--sans);
-  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -160,14 +239,14 @@ p {
 
 /* alias: .meta */
 .meta {
-  font-family: var(--sans);
-  font-size: 0.85rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--sp-5);
 }
 
 .subtitle {
-  font-size: 1.05rem;
+  font-size: var(--fs-h4);
   color: var(--muted);
   font-style: italic;
   margin-bottom: 0;
@@ -176,11 +255,11 @@ p {
 /* --- Tags --- */
 .tag {
   display: inline-block;
-  font-family: var(--sans);
-  font-size: 0.72rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   font-weight: 500;
   padding: 0.1rem 0.4rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
   margin-right: 0.15rem;
@@ -188,10 +267,10 @@ p {
 
 /* --- Navigation --- */
 .lesson-nav {
-  font-family: var(--sans);
-  font-size: 0.85rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
@@ -203,13 +282,13 @@ p {
 
 .lesson-nav a:hover { text-decoration: underline; }
 
-.lesson-nav .separator { margin: 0 0.5rem; color: var(--light); }
+.lesson-nav .separator { margin: 0 var(--sp-2); color: var(--light); }
 
 .nav-links {
   margin-top: 2.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
-  font-size: 0.9rem;
+  font-size: var(--fs-small);
 }
 .nav-links a { color: var(--accent); }
 
@@ -217,9 +296,16 @@ p {
 a {
   color: var(--accent);
   text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 a:hover { text-decoration: underline; }
+
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: 2px;
+}
 
 /* --- Lists --- */
 ul, ol {
@@ -232,7 +318,7 @@ li { margin-bottom: 0.4rem; }
 /* --- Blockquotes --- */
 blockquote {
   margin: 1.2rem 0;
-  padding: 0.5rem 1rem;
+  padding: var(--sp-2) var(--sp-4);
   border-left: 3px solid var(--accent);
   background: var(--accent-bg);
   color: var(--text);
@@ -243,7 +329,7 @@ blockquote p { margin-bottom: 0; }
 
 /* --- Sidenote --- */
 .sidenote {
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
   color: var(--muted);
   margin: 0.25rem 0 0.75rem;
   padding-left: 0.75rem;
@@ -252,7 +338,7 @@ blockquote p { margin-bottom: 0; }
 
 /* --- Source reference --- */
 .src-ref {
-  font-size: 0.8rem;
+  font-size: var(--fs-caption);
   color: var(--muted);
   margin: 0.25rem 0;
 }
@@ -263,13 +349,14 @@ blockquote p { margin-bottom: 0; }
   margin: 1.2rem 0;
   padding: 0.8rem 1rem;
   border-radius: var(--radius);
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
+  animation: callout-pulse var(--dur-slow) var(--ease-out);
 }
 
 .callout-title {
-  font-family: var(--sans);
+  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.3rem;
@@ -313,7 +400,7 @@ code {
   font-size: 0.88em;
   background: var(--code-bg);
   padding: 0.15em 0.35em;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
 }
 
 pre {
@@ -321,8 +408,8 @@ pre {
   padding: 0.9rem 1rem;
   border-radius: var(--radius);
   overflow-x: auto;
-  line-height: 1.5;
-  font-size: 0.85rem;
+  line-height: var(--lh-code);
+  font-size: var(--fs-code);
   margin: 1.2rem 0;
 }
 
@@ -337,7 +424,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin: 1.2rem 0;
-  font-size: 0.92rem;
+  font-size: var(--fs-small);
 }
 
 th, td {
@@ -347,9 +434,9 @@ th, td {
 }
 
 th {
-  font-family: var(--sans);
+  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
   color: var(--muted);
   border-bottom: 2px solid var(--border);
 }
@@ -362,13 +449,13 @@ figure {
 
 figcaption {
   color: var(--muted);
-  font-size: 0.88em;
+  font-size: var(--fs-small);
   margin-top: 0.3rem;
 }
 
 /* --- KaTeX display math --- */
 .katex-display {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
   overflow-x: auto;
 }
 
@@ -376,46 +463,52 @@ figcaption {
 
 /* --- Quiz --- */
 .quiz-container {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
 }
 
 .quiz {
-  margin: 1.5rem 0;
+  margin: var(--sp-5) 0;
 }
 
 .quiz-section {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-5);
   border-top: 2px solid var(--border);
 }
 
 .quiz-intro {
-  font-size: 0.9rem;
+  font-size: var(--fs-small);
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--sp-5);
 }
 
 .quiz-question {
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
 }
 
 .quiz-question-text {
   font-weight: 600;
   margin-bottom: 0.8rem;
-  font-family: var(--sans);
-  font-size: 1rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
 }
 
 .quiz-option {
   display: flex;
   align-items: flex-start;
   padding: 0.6rem 0.9rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  font-size: 0.95rem;
+  transition: background-color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+  font-size: var(--fs-body);
+}
+
+.quiz-option:active { transform: scale(.99); }
+
+.quiz-option:focus-within {
+  box-shadow: var(--shadow-focus);
 }
 
 .quiz-option:hover {
@@ -458,11 +551,11 @@ figcaption {
 
 .quiz-feedback {
   margin-top: 0.6rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-small);
   display: none;
 }
 
-.quiz-feedback.visible { display: block; }
+.quiz-feedback.visible { display: block; animation: quiz-feedback var(--dur-base) var(--ease-overshoot); }
 
 .quiz-feedback.correct {
   color: var(--correct);
@@ -473,11 +566,11 @@ figcaption {
 }
 
 .quiz-score {
-  font-family: var(--sans);
-  font-size: 1.05rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h4);
   font-weight: 600;
   text-align: center;
-  padding: 1rem;
+  padding: var(--sp-4);
   border-radius: var(--radius);
   margin-top: 1.5rem;
   display: none;
@@ -512,11 +605,11 @@ figcaption {
 /* --- Badge (16 ws) --- */
 .badge {
   display: inline-block;
-  font-family: var(--sans);
-  font-size: 0.72rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
 }
@@ -524,14 +617,14 @@ figcaption {
 /* --- Highlight (15 ws) --- */
 .highlight {
   background: var(--accent-bg);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0.05em 0.2em;
 }
 
 /* --- Label (10 ws) --- */
 .label {
-  font-family: var(--sans);
-  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -549,21 +642,26 @@ figcaption {
 .compare-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: var(--sp-4);
   margin: 1.2rem 0;
 }
 
 .compare-card {
-  padding: 1rem;
+  padding: var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
 }
+
+.compare-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.compare-card:active { transform: scale(.99); }
 
 .compare-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--fs-small);
   margin: 1.2rem 0;
 }
 
@@ -585,7 +683,7 @@ figcaption {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-2);
   margin: 1.2rem 0;
 }
 
@@ -594,13 +692,13 @@ figcaption {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  font-size: 0.9rem;
+  font-size: var(--fs-small);
   text-align: center;
 }
 
 .pipeline-arrow {
   color: var(--muted);
-  font-size: 1.2rem;
+  font-size: var(--fs-h3);
 }
 
 /* --- Flow diagram (9 ws) --- */
@@ -625,8 +723,8 @@ figcaption {
 .flow-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
 }
 
 .flow-step {
@@ -644,7 +742,7 @@ figcaption {
   border-radius: 50%;
   background: var(--accent);
   color: var(--bg);
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   font-weight: 600;
   font-family: var(--sans);
 }
@@ -684,14 +782,14 @@ figcaption {
 }
 
 .timeline-title {
-  font-family: var(--sans);
+  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
   margin-bottom: 0.2rem;
 }
 
 .timeline-desc {
-  font-size: 0.9rem;
+  font-size: var(--fs-small);
   color: var(--muted);
 }
 
@@ -708,7 +806,14 @@ figcaption {
   padding-left: 2.2rem;
   position: relative;
   margin-bottom: 0.8rem;
+  animation: step-reveal var(--dur-slow) var(--ease-out) both;
 }
+.step-list > li:nth-child(1) { animation-delay: 0ms; }
+.step-list > li:nth-child(2) { animation-delay: 60ms; }
+.step-list > li:nth-child(3) { animation-delay: 120ms; }
+.step-list > li:nth-child(4) { animation-delay: 180ms; }
+.step-list > li:nth-child(5) { animation-delay: 240ms; }
+.step-list > li:nth-child(6) { animation-delay: 300ms; }
 
 .step-list > li::before {
   content: counter(step);
@@ -723,7 +828,7 @@ figcaption {
   border-radius: 50%;
   background: var(--accent);
   color: var(--bg);
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   font-weight: 600;
   font-family: var(--sans);
 }
@@ -737,20 +842,20 @@ figcaption {
   border-radius: 50%;
   background: var(--accent);
   color: var(--bg);
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   font-weight: 600;
   font-family: var(--sans);
   margin-right: 0.4rem;
 }
 
 .stage-name {
-  font-family: var(--sans);
+  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
 }
 
 .stage-desc {
-  font-size: 0.88rem;
+  font-size: var(--fs-small);
   color: var(--muted);
 }
 
@@ -760,13 +865,13 @@ figcaption {
   border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  margin: 0.5rem 0;
+  margin: var(--sp-2) 0;
 }
 
 .arch-arrow {
   text-align: center;
   color: var(--muted);
-  font-size: 1.2rem;
+  font-size: var(--fs-h3);
   margin: 0.2rem 0;
 }
 
@@ -780,17 +885,17 @@ figcaption {
 .matrix-cell {
   width: 2rem;
   height: 2rem;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: var(--fs-caption);
   font-family: var(--mono);
 }
 
 .matrix-label {
-  font-family: var(--sans);
-  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   color: var(--muted);
   text-align: center;
 }
@@ -801,9 +906,9 @@ figcaption {
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
   overflow-x: auto;
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
   margin: 1.2rem 0;
 }
 
@@ -820,7 +925,7 @@ figcaption {
 .code-compare {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  gap: var(--sp-2);
   margin: 1.2rem 0;
 }
 
@@ -832,28 +937,33 @@ figcaption {
 .formula-box {
   background: var(--code-bg);
   border-radius: var(--radius);
-  padding: 1rem 1.2rem;
+  padding: var(--sp-4) var(--sp-5);
   margin: 1.2rem 0;
   overflow-x: auto;
 }
 
 /* --- Tech card (4 ws) --- */
 .tech-card {
-  padding: 1rem;
+  padding: var(--sp-4);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
-  margin: 1rem 0;
+  margin: var(--sp-4) 0;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
 }
+
+.tech-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.tech-card:active { transform: scale(.99); }
 
 .tech-badge {
   display: inline-block;
-  font-family: var(--sans);
-  font-size: 0.72rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--accent-bg);
   color: var(--accent);
   margin-bottom: 0.4rem;
@@ -861,8 +971,8 @@ figcaption {
 
 /* --- File tree (4 ws, lazygit-style: generic tree + file-tree specialization) --- */
 .tree {
-  font-family: var(--mono);
-  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
   margin: 1.2rem 0;
 }
 
@@ -877,8 +987,8 @@ figcaption {
 }
 
 .file-tree {
-  font-family: var(--mono);
-  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
   margin: 1.2rem 0;
 }
 
@@ -894,7 +1004,7 @@ figcaption {
 /* --- Reference link (4 ws) --- */
 .ref-link {
   display: block;
-  font-size: 0.88rem;
+  font-size: var(--fs-small);
   margin: 0.3rem 0;
   padding-left: 0.8rem;
   border-left: 2px solid var(--border);
@@ -905,14 +1015,14 @@ figcaption {
 /* --- Arrow (4 ws) --- */
 .arrow {
   color: var(--muted);
-  font-size: 1.1rem;
+  font-size: var(--fs-h4);
   text-align: center;
 }
 
 /* --- Resources --- */
 .resources-section {
   margin-top: 2.5rem;
-  padding-top: 1.5rem;
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
@@ -920,32 +1030,37 @@ figcaption {
 
 .resource-item {
   margin-bottom: 0.8rem;
-  font-size: 0.93rem;
+  font-size: var(--fs-small);
 }
 
 /* --- Footer --- */
 .lesson-footer {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
 .followup-reminder {
   background: var(--accent-bg);
   border-radius: var(--radius);
-  padding: 1rem 1.2rem;
-  font-size: 0.93rem;
+  padding: var(--sp-4) var(--sp-5);
+  font-size: var(--fs-small);
 }
 
 .followup-reminder p { margin: 0; }
 
 .followup-reminder strong { color: var(--accent); }
 
-/* --- Responsive (E: base.css was missing this) --- */
+/* --- Responsive --- */
+@media (max-width: 992px) {
+  /* tablet: tighten page padding between desktop and mobile */
+  body { padding: var(--sp-5) var(--sp-4) var(--sp-8); }
+}
+
 @media (max-width: 600px) {
   body {
-    padding: 1rem;
-    font-size: 15px;
+    padding: var(--sp-4);
+    font-size: var(--fs-body);
   }
 
   .compare-grid,
@@ -977,7 +1092,7 @@ figcaption {
 
 /* --- Print --- */
 @media print {
-  body { padding: 1rem; font-size: 12pt; }
+  body { padding: var(--sp-4); font-size: var(--fs-body); }
   .quiz-option { border: 1px solid #ccc; }
   .lesson-nav { display: none; }
   .followup-reminder { display: none; }
