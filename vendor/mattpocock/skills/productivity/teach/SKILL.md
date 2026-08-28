@@ -179,7 +179,10 @@ for b in blocks:
         for m in re.finditer(prop + r":\s*([^;}\"]+)", b):
             val = m.group(1).strip()
             # em/% are relative units outside the token system; only flag absolute literals (px, rem, pt, bare numbers)
-            if "var(" not in val and val != "0" and not re.match(r"^[\d.]+(em|%)$", val):
+            # multi-value (e.g. "0.15em 0.35em") passes if every space-separated token is em/%/0
+            parts = val.split()
+            all_relative = all(re.match(r"^[\d.]+(em|%)$", p) or p == "0" for p in parts) if parts else False
+            if "var(" not in val and val != "0" and not all_relative:
                 violations.append(f"{prop}: {val}")
 if violations:
     print(f"{p}: {len(violations)} bare literal(s) — replace with var(--token):")
