@@ -85,7 +85,7 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 
 A lesson is the main thing you produce — the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
 
-A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte.
+A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte. Build from the shared ` base.css ` components and tokens; an inline `<style>` block is for one-off component styling only, and every font-size, spacing, and line-height in it references a token via ` var() ` (see [CSS Self-Check](#css-self-check)).
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development — grounded in `UNDERSTANDING-MAP.md`, not guessed.
 
@@ -156,9 +156,21 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). They are orthogonal — both run on lessons with diagrams.
+Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). The three are orthogonal — a lesson with diagrams runs all three; a plain lesson runs fact-check and CSS self-check.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
+
+## CSS Self-Check
+
+After generating or editing any lesson or reference HTML, run this mechanical check before the learner sees it. It catches the failure mode fact-check and viz-check both miss: inline `<style>` blocks (and inline ` style="" ` attributes) using bare literal font-size/spacing/line-height values instead of the token system defined in ` base.css ` and ` CSS-CONVENTIONS.md `.
+
+Run from the workspace root:
+
+```bash
+python3 ./assets/css-self-check.py lessons/0001-your-lesson.html
+```
+
+The script scans inline `<style>` blocks and ` style="" ` attributes for bare absolute literals (` px `/` rem `/` pt `/bare numbers) in ` font-size `/` padding `/` margin `/` line-height `. Relative ` em `/` % ` values pass (outside the token system). **Zero violations** is the completion criterion — fix each by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.).
 
 ## Visualization Self-Check
 

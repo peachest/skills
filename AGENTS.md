@@ -10,6 +10,10 @@
 
 安装或同步 skill 到全局 agent 时，必须用 `npx skills add -g ./<path> -a pi -y`，禁止手动 `cp`。完整规范见 `docs/agents/install-skills.md`。
 
+## 测试
+
+A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present (`uv run pytest` from the skill directory). A green run is the completion criterion for the change; a skill with no tests is exempt.
+
 ## Agent skills
 
 ### Issue tracker
