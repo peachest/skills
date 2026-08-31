@@ -46,6 +46,9 @@ _Avoid_: review, validation
 - **Route**: The spec — the planned path through the terrain. What review-spec inspects before handing off to implement for traversal.
 _Avoid_: spec, plan
 
+- **Reckon**: Dead-reckon your position after time away — recover where you got to across every project this session touches, from the last known fix (compaction summary + git + MRs + wayfinder frontier) plus the distance traveled since. The temporal complement to orient: orient reads terrain (what is here), reckon reads the wake you left (where did I get to). Invoke `/reckon` once; rules stay on until "stop reckon". See `engineering/reckon`.
+_Avoid_: resume (overloaded with pi's `--resume`), status report, progress check, checkpoint
+
 - **Distress signal**: What hail produces when the agent is off-route, looping, or failing to make progress. Captures routes attempted, estimated position, off-route cause, and rescue needed.
 _Avoid_: error report, stuck report
 
