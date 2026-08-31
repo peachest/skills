@@ -45,6 +45,12 @@ map: <#n> → frontier <#x,#y> (N open)   ← 仅有 wayfinder map 时
 
 Cross-repository dependencies — one MR waiting on another repo's MR — are described in prose within the relevant block, inferred from session context. If the context reveals a dependency, state it: "MR !9 阻塞于 HAMi MR !2".
 
+The `map:` line is mandatory, not optional-when-convenient. A project with an open wayfinder map always gets the line — query the tracker (`glab issue list --label wayfinder:map` / `gh issue list --label wayfinder:map`) as part of the baseline, do not skip it because the session did not recently touch the map. A project with no open map gets no line; a project with a closed map gets no line. Writing `map: 无 open wayfinder map` is the same error as omitting the line for a project that has one — silence is the correct expression of "no map here", a line is not. Omitting the line for a project that has an open map is a position error — the frontier is part of where you stand.
+
+The frontier has a limbo state the label query misses: tickets whose code is complete but will close only when a referencing MR merges (`Closes #n` in the commit message). These are open, not frontier (not takeable now), not closed. When the map line would otherwise show `frontier 0 open` but open tickets exist, check whether they are pending MR-merge closure — if so, name them: `map: #108 → #109-#113 pending !25 merge`. A zero-frontier result from a label query is a query-method signal, not proof the map is done.
+
+When a project's working tree holds changes this session did not make — files from a parallel session, stale untracked research, another agent's in-flight work — flag them with the `⚠️` prefix, not as generic dirty workspace: `⚠️ <project> 有非本 session 改动: <files>`. A bare "工作区脏" line that happens to list foreign files is not the alert — the `⚠️` prefix and the explicit "非本 session" framing are what keep foreign changes from being mistaken for this session's position. Do not act on them; name them. Session-scoped means the baseline fixes *this* session's position, and foreign changes are noise in that fix.
+
 Data sources are pure reconstruction — no handoff file, no second source of truth:
 
 - **git** (local state truth): branch, unpushed commits, working tree. Worktrees resolved via `git rev-parse --git-common-dir` to the shared repository root.
