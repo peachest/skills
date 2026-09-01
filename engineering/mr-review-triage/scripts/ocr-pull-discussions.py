@@ -1,4 +1,4 @@
-"""Pull all OCR review issues from a GitLab MR or GitHub PR.
+"""Pull actionable OCR review issues from a GitLab MR or GitHub PR.
 
 Outputs deduplicated review issues as JSON to stdout.
 Progress messages go to stderr — do NOT redirect stderr into stdout (no 2>&1).
@@ -10,6 +10,15 @@ Platform is auto-detected from git remote:
   - anything else     → GitLab MR discussions
 
 Project/repo resolved automatically from env or git remote.
+
+Scope: this script pulls *actionable findings* to classify — inline issues
+and fallback ("could not be posted inline") notes. OCR summary discussions
+(bot status notices with only stats, no inline finding) are deliberately
+filtered out: they have nothing to classify. They ARE resolvable threads on
+the platform, so they are caught by the **closure gate** — run
+ocr-verify-resolved.py after post-labels; it fails until every resolvable
+thread (including summaries) is resolved. Do NOT widen this filter to pull
+summaries back in.
 """
 
 import json
@@ -35,7 +44,13 @@ _JUNK_PREFIXES = {
 
 
 def _is_review_content(body):
-    """Check if a body looks like an OCR review issue (not summary/junk)."""
+    """Check if a body looks like an OCR review issue (not summary/junk).
+
+    OCR summary discussions (🔍/✅/⚠️ OpenCodeReview run reports) are excluded:
+    they carry only stats, no inline finding to classify. They remain
+    resolvable threads, so the closure gate (ocr-verify-resolved.py) handles
+    them — not this pull.
+    """
     body_stripped = body.strip()
     if body_stripped in _JUNK_BODIES:
         return False
