@@ -17,7 +17,7 @@ GitLab 实例（host）、协议（http/https）、token 均由脚本自动从 `
 
 ## CLI 工具
 
-使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。多实例环境下 `glab` 必须带 `--hostname <host>` 指定实例，否则默认走 `gitlab.com`（导致返回空或 401）。
+使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。多实例环境注意：`--hostname` 只对 `glab api` / `glab auth status` 有效；`glab mr` 子命令**不支持** `--hostname`（会报 `Unknown flag`），它们从 cwd 的 git remote 推导 host，或用 `-R <完整 remote URL 或 GROUP/PROJECT 路径>` 显式指定实例。
 
 ```bash
 glab auth status   # 检查已配置的实例和认证状态
@@ -43,10 +43,10 @@ export OCR_BOT_LOGIN=ai_bot001   # 目标实例的 OCR bot 用户名
 
 ## MR ID 推导
 
-MR ID 未给时从分支名推导（注意 `--hostname`）：
+MR ID 未给时从分支名推导（注意用 `-R`，不是 `--hostname`）：
 
 ```bash
-glab mr list --hostname internal.example.com \
+glab mr list -R https://internal.example.com/<group>/<project> \
   --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '.[0].iid'
 ```
 
@@ -86,14 +86,16 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 
 只保留 OCR bot（`OCR_BOT_LOGIN`，默认不过滤）的 discussion：
 
-| 类型 | 判定条件 | 是否保留 |
-| ---- | ---- | ---- |
-| Inline issue | `notes[0].position != null`，body 含具体问题 | ✅ |
-| Fallback | `notes[0].position == null`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 |
-| Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌ |
-| LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ |
-| Error note | body 含 `⚠️ OpenCodeReview error` | ❌ |
-| System note | `notes[0].system == true`（commit push、description 变更等） | ❌ |
+| 类型 | 判定条件 | 是否进入 classified | 是否需 resolve |
+| ---- | ---- | ---- | ---- |
+| Inline issue | `notes[0].position != null`，body 含具体问题 | ✅ | ✅（post-labels） |
+| Fallback | `notes[0].position == null`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 | ✅（post-labels） |
+| Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌（无 finding 可分类） | ✅（verify 门捕获） |
+| LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ | ✅（verify 门捕获，若 resolvable） |
+| Error note | body 含 `⚠️ OpenCodeReview error` | ❌ | ✅（verify 门捕获，若 resolvable） |
+| System note | `notes[0].system == true`（commit push、description 变更等） | ❌ | N/A（不可 resolve） |
+
+Summary/LGTM/Error discussion 是 bot 状态通知，不含可分类的 finding，所以 pull 不拉取它们；但它们在 GitLab 上是 `resolvable=True` 的线程，必须被 resolve。这就是 `ocr-verify-resolved.py` 的工作——它是 closure gate，exit 0 才算 triage 完成。
 
 ### Fallback note 解析
 
@@ -137,15 +139,17 @@ glab api --hostname internal.example.com \
 脚本自动使用 GitLab 后端：
 
 ```bash
-cat classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_IID>
+cat .triage/<MR_ID>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_IID> --mode triage
 ```
+
+`--mode triage` 让 TP（真阳性）也 resolve——fix 已在本 run 落地并验证，不需要「stay open for tracking」。Edge/Question 保持 open。
 
 ### 回退命令
 
-脚本失败时逐条回退（注意 `--hostname`）：
+脚本失败时逐条回退（`glab mr` 子命令用 `-R` 指定实例，不是 `--hostname`）：
 
 ```bash
-glab mr note create --hostname internal.example.com \
+glab mr note create -R https://internal.example.com/<group>/<project> \
   <MR_ID> --reply <discussion_id_prefix> -m "..."
 ```
 
@@ -158,6 +162,30 @@ glab api --hostname internal.example.com \
   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
 ```
+
+## 收尾验证（closure gate）
+
+post-labels 返回 ok 不等于 triage 完成。OCR summary discussion 是 `resolvable=True` 但不在 classified.json 里，post-labels 不会 resolve 它们。必须跑 closure gate：
+
+```bash
+python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <MR_IID>
+# exit 0 = 全部 resolved；exit 1 = 有残留（列在 stderr）
+```
+
+残留的 OCR summary 线程手动回复 + resolve：
+
+```bash
+# 1) 回复
+glab api --hostname internal.example.com \
+  -X POST "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes" \
+  -f "body=✅ 已修复（commit <hash>）：..."
+# 2) resolve
+glab api --hostname internal.example.com \
+  -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
+  -F "resolved=true"
+```
+
+重跑 verify 直到 exit 0。
 
 ## API 端点参考
 
