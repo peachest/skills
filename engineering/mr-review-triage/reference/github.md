@@ -77,13 +77,15 @@ GitHub review comment 与 GitLab discussion 的关键差异：
 
 只保留 OCR bot 发出的 review comment：
 
-| 类型 | 判定条件 | 是否保留 |
-| ---- | ---- | ---- |
-| Inline issue | `user.type == "Bot"`，有 `path` + `line`，body 含具体问题 | ✅ |
-| Fallback | `user.type == "Bot"`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 |
-| Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌ |
-| LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ |
-| Error note | body 含 `⚠️ OpenCodeReview error` | ❌ |
+| 类型 | 判定条件 | 是否进入 classified | 是否需 resolve |
+| ---- | ---- | ---- | ---- |
+| Inline issue | `user.type == "Bot"`，有 `path` + `line`，body 含具体问题 | ✅ | ✅（post-labels） |
+| Fallback | `user.type == "Bot"`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 | ✅（post-labels） |
+| Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌（无 finding 可分类） | ✅（verify 门捕获） |
+| LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ | ✅（verify 门捕获） |
+| Error note | body 含 `⚠️ OpenCodeReview error` | ❌ | ✅（verify 门捕获） |
+
+Summary/LGTM/Error 是 bot 状态通知，不含可分类的 finding，所以 pull 不拉取；但它们仍是 review thread，必须被 resolve。`ocr-verify-resolved.py` 是 closure gate，exit 0 才算 triage 完成。
 
 Bot 识别：GitHub Actions bot 的 login 为 `github-actions[bot]`，`type` 为 `Bot`。如使用其他 bot（如自定义 App），在环境变量 `OCR_BOT_LOGIN` 中指定。
 
@@ -100,8 +102,10 @@ Bot 识别：GitHub Actions bot 的 login 为 `github-actions[bot]`，`type` 为
 脚本自动使用 GitHub 后端：
 
 ```bash
-cat classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <PR_NUMBER>
+cat .triage/<PR_NUMBER>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <PR_NUMBER> --mode triage
 ```
+
+`--mode triage` 让 TP（真阳性）也 resolve——fix 已在本 run 落地并验证。Edge/Question 保持 open。
 
 ### 回复 review comment
 
@@ -138,6 +142,32 @@ mutation($threadId: ID!) {
 ```
 
 脚本内部处理 GraphQL resolve 逻辑。如脚本不支持 resolve，则仅贴标签，不 resolve。
+
+## 收尾验证（closure gate）
+
+post-labels 返回 ok 不等于 triage 完成。OCR summary/LGTM/error discussion 不在 classified.json 里，post-labels 不会 resolve 它们，但它们仍是 review thread。必须跑 closure gate：
+
+```bash
+python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <PR_NUMBER>
+# exit 0 = 全部 resolved；exit 1 = 有残留（列在 stderr）
+```
+
+残留线程手动回复 + resolve（GraphQL）：
+
+```bash
+# 1) 回复
+gh api -X POST repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments/<comment_id>/replies \
+  -f body="✅ 已修复（commit <hash>）：..."
+# 2) resolve thread（需先查 review thread node_id，见上）
+gh api graphql -f query='
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread { isResolved }
+  }
+}' -F threadId="<THREAD_NODE_ID>"
+```
+
+重跑 verify 直到 exit 0。
 
 ### 回退命令
 
