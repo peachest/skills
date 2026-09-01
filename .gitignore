@@ -4,7 +4,8 @@ __pycache__/
 .pytest_cache/
 
 # Generated skill outputs (bilibili-transcriber transcripts land in CWD)
-references/
+# Anchored to repo root so skill references/ directories are not ignored
+/references/
 
 # teach skill python tooling (generated)
 vendor/mattpocock/skills/productivity/teach/uv.lock
