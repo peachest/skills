@@ -17,7 +17,7 @@ GitLab 实例（host）、协议（http/https）、token 均由脚本自动从 `
 
 ## CLI 工具
 
-使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。多实例环境下 `glab` 必须带 `--hostname <host>` 指定实例，否则默认走 `gitlab.com`（导致返回空或 401）。
+使用 [`glab`](https://gitlab.com/gitlab-org/cli) CLI。多实例环境注意：`--hostname` 只对 `glab api` / `glab auth status` 有效；`glab mr` 子命令**不支持** `--hostname`（会报 `Unknown flag`），它们从 cwd 的 git remote 推导 host，或用 `-R <完整 remote URL 或 GROUP/PROJECT 路径>` 显式指定实例。
 
 ```bash
 glab auth status   # 检查已配置的实例和认证状态
@@ -43,10 +43,10 @@ export OCR_BOT_LOGIN=ai_bot001   # 目标实例的 OCR bot 用户名
 
 ## MR ID 推导
 
-MR ID 未给时从分支名推导（注意 `--hostname`）：
+MR ID 未给时从分支名推导（注意用 `-R`，不是 `--hostname`）：
 
 ```bash
-glab mr list --hostname gitlab.transwarp.io \
+glab mr list -R https://gitlab.transwarp.io/<group>/<project> \
   --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '.[0].iid'
 ```
 
@@ -146,10 +146,10 @@ cat .triage/<MR_ID>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-label
 
 ### 回退命令
 
-脚本失败时逐条回退（注意 `--hostname`）：
+脚本失败时逐条回退（`glab mr` 子命令用 `-R` 指定实例，不是 `--hostname`）：
 
 ```bash
-glab mr note create --hostname gitlab.transwarp.io \
+glab mr note create -R https://gitlab.transwarp.io/<group>/<project> \
   <MR_ID> --reply <discussion_id_prefix> -m "..."
 ```
 
