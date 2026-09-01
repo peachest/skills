@@ -8,12 +8,18 @@ Platform is auto-detected from git remote:
   - github.com    → GitHub PR review comment replies + GraphQL resolve
   - anything else → GitLab discussion replies + PUT resolve
 
-Classifications:
+Classifications (default mode — standalone /fix use):
     ✅ TP  — label "真阳性" + fix plan, NOT resolved (stay open for tracking)
     ❌ FP  — label "假阳性" + reason, resolved
     🟡 Edge — label "边缘" + reason, NOT resolved by default
     🔵 OOS  — label "非本 MR 范围" + reason, resolved
     ⏸️ Q    — label "需讨论" + question, NOT resolved
+
+In triage mode (--mode triage), a TP has already been fixed and build-verified
+by the time it reaches post-labels, so it is resolved like FP/OOS. The
+"stay open for tracking" default serves standalone /fix runs where the fix
+may not have landed yet; in /skill:triage-mr the fix is part of the same run.
+Edge and Question stay open in both modes (genuinely unresolved).
 
 Input format:
     [
@@ -30,6 +36,7 @@ Input format:
 
 Usage:
     cat classified.json | python3 ocr-post-labels.py <MR_OR_PR_ID>
+    cat classified.json | python3 ocr-post-labels.py <MR_OR_PR_ID> --mode triage
 """
 
 import json
@@ -75,8 +82,19 @@ _BODY_QUESTION = """### ⏸️ 需讨论
 {reason}
 """
 
+# Per-classification default resolved state.
+# `triage` mode (used by /skill:triage-mr): TP is fixed+verified in-run, so it
+# resolves. `default` mode (standalone /fix): TP stays open for tracking.
 _DEFAULT_RESOLVED = {
     "TP": False,
+    "FP": True,
+    "Edge": False,
+    "OOS": True,
+    "Question": False,
+}
+
+_TRIAGE_RESOLVED = {
+    "TP": True,
     "FP": True,
     "Edge": False,
     "OOS": True,
@@ -104,7 +122,8 @@ def _extract_json(raw):
     return None
 
 
-def _validate_item(item, idx):
+def _validate_item(item, idx, resolved_map=None):
+    resolved_map = resolved_map or _DEFAULT_RESOLVED
     cleaned = dict(item)
 
     if "classification" not in cleaned and "_cat" in cleaned:
@@ -152,9 +171,9 @@ def _validate_item(item, idx):
 
     resolved = cleaned.get("resolved")
     if resolved is None:
-        resolved = _DEFAULT_RESOLVED.get(cls, False)
+        resolved = resolved_map.get(cls, False)
     if not isinstance(resolved, bool):
-        resolved = _DEFAULT_RESOLVED.get(cls, False)
+        resolved = resolved_map.get(cls, False)
     cleaned["resolved"] = resolved
 
     return (True, "", cleaned)
@@ -192,9 +211,10 @@ def _build_body(cleaned):
 # ── GitLab backend ──
 
 
-def _post_gitlab(mr_iid, items):
+def _post_gitlab(mr_iid, items, resolved_map=None):
     from ocr_gitlab import curl, get_project_id
 
+    resolved_map = resolved_map or _DEFAULT_RESOLVED
     project_id = get_project_id()
     if not project_id:
         print("ERROR: could not determine GitLab project ID", file=sys.stderr)
@@ -204,7 +224,7 @@ def _post_gitlab(mr_iid, items):
     ok = fail = skip = 0
 
     for idx, item in enumerate(items):
-        valid, err, cleaned = _validate_item(item, idx)
+        valid, err, cleaned = _validate_item(item, idx, resolved_map)
         if not valid:
             print(f"[SKIP] {err}", file=sys.stderr)
             skip += 1
@@ -348,9 +368,10 @@ def _resolve_github_thread(pr_number, comment_id):
     )
 
 
-def _post_github(pr_number, items):
+def _post_github(pr_number, items, resolved_map=None):
     from ocr_github import curl, get_project_id
 
+    resolved_map = resolved_map or _DEFAULT_RESOLVED
     owner_repo = get_project_id()
     if not owner_repo:
         print("ERROR: could not determine GitHub owner/repo", file=sys.stderr)
@@ -359,7 +380,7 @@ def _post_github(pr_number, items):
     ok = fail = skip = 0
 
     for idx, item in enumerate(items):
-        valid, err, cleaned = _validate_item(item, idx)
+        valid, err, cleaned = _validate_item(item, idx, resolved_map)
         if not valid:
             print(f"[SKIP] {err}", file=sys.stderr)
             skip += 1
@@ -410,10 +431,18 @@ def _post_github(pr_number, items):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID>  <  classified.json", file=sys.stderr)
+        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage]  <  classified.json", file=sys.stderr)
         sys.exit(1)
 
     mr_or_pr_id = sys.argv[1]
+    mode = "default"
+    for arg in sys.argv[2:]:
+        if arg == "--mode":
+            continue
+        if arg in ("triage", "default") and "--mode" in sys.argv:
+            mode = arg
+    resolved_map = _TRIAGE_RESOLVED if mode == "triage" else _DEFAULT_RESOLVED
+
     raw = sys.stdin.read()
 
     items = _extract_json(raw)
@@ -428,9 +457,9 @@ def main():
     print(f"Detected platform: {platform}", file=sys.stderr)
 
     if platform == "github":
-        success = _post_github(mr_or_pr_id, items)
+        success = _post_github(mr_or_pr_id, items, resolved_map)
     else:
-        success = _post_gitlab(mr_or_pr_id, items)
+        success = _post_gitlab(mr_or_pr_id, items, resolved_map)
 
     sys.exit(0 if success else 1)
 
