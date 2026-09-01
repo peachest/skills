@@ -6,6 +6,10 @@
 
 当前仓库下放置了我需要的 skills 的代码仓库。
 
+## 新 skill 归属
+
+新建 skill 一律放在 `in-progress/`，无任何例外，不需要判断主题或成熟度。只有用户明确要求时才移入正式分类目录（如 `productivity/`、`engineering/`）。
+
 ## 安装
 
 安装或同步 skill 到全局 agent 时，必须用 `npx skills add -g ./<path> -a pi -y`，禁止手动 `cp`。完整规范见 `docs/agents/install-skills.md`。
