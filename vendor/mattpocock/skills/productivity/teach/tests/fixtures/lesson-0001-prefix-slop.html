@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 ① 课：Rejection Sampling 完整数学</title>
+  <link rel="stylesheet" href="../assets/base.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script src="../assets/katex.min.js" defer></script>
+  <script src="../assets/auto-render.min.js" defer></script>
+  <script src="../assets/render.js" defer></script>
+  <script src="../assets/quiz.js" defer></script>
+  <script src="../assets/accept-rule-sim.js" defer></script>
+  <style>
+    .accept-sim {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: var(--sp-4);
+      margin: var(--sp-4) 0;
+      display: grid;
+      gap: var(--sp-3);
+    }
+    .accept-sim-controls {
+      display: grid;
+      gap: var(--sp-2);
+    }
+    .accept-sim-slider {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: var(--sp-3);
+      font-size: var(--fs-small);
+      color: var(--muted);
+    }
+    .accept-sim-slider input[type="range"] {
+      accent-color: var(--brand);
+      width: 100%;
+    }
+    .accept-sim-value {
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      color: var(--text);
+      min-width: 3em;
+      text-align: right;
+    }
+    .accept-sim-bars,
+    .accept-sim-dart {
+      display: grid;
+      justify-items: center;
+    }
+    .accept-sim-svg {
+      max-width: 420px;
+      width: 100%;
+      height: auto;
+    }
+    .accept-sim-ratio {
+      font-size: var(--fs-small);
+      line-height: var(--lh-small);
+    }
+    .accept-sim-actions {
+      display: flex;
+      gap: var(--sp-2);
+      flex-wrap: wrap;
+    }
+    .accept-sim-btn {
+      font: inherit;
+      font-size: var(--fs-small);
+      padding: var(--sp-1) var(--sp-3);
+      border-radius: var(--r-pill);
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      cursor: pointer;
+      transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+    }
+    .accept-sim-btn:hover { background: var(--brand-emphasized); }
+    .accept-sim-btn:active { transform: scale(0.97); }
+    .accept-sim-btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .accept-sim-btn-ghost:hover { background: var(--accent-bg); }
+    .accept-sim-stats {
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      color: var(--muted);
+      text-align: center;
+    }
+    .coverage-svg {
+      max-width: 420px;
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: var(--sp-3) auto;
+    }
+    .two-lines {
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface);
+      padding: var(--sp-4);
+      margin: var(--sp-4) 0;
+      display: grid;
+      gap: var(--sp-3);
+    }
+    .two-lines .line-accept {
+      margin: 0;
+      padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
+      border-left: 3px solid var(--green);
+      font-size: var(--fs-body-lg);
+      line-height: var(--lh-body);
+    }
+    .two-lines .line-resample {
+      margin: 0;
+      padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
+      border-left: 3px solid var(--purple);
+      font-size: var(--fs-body-lg);
+      line-height: var(--lh-body);
+    }
+    .two-lines .two-lines-sum {
+      margin: 0;
+      padding: var(--sp-3) 0 0;
+      border-top: 1px solid var(--border);
+      font-size: var(--fs-body);
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <article>
+    <header>
+      <div class="tag">PLAN 节点 ①</div>
+      <h1>Rejection Sampling 完整数学</h1>
+      <p class="subtitle">整个机制两句话说清：<strong>接受搬运交集，重采补差额，拼起来恰好是 p</strong>——公式、证明、图，都只是把这两句话说严格。</p>
+    </header>
+
+    <section id="why">
+      <h2>为什么贪心比较在 T &gt; 0 时不够用</h2>
+      <p>你已经知道 temperature=0 时的结论：draft 和 target 的 argmax 相同则必接受，不同则必拒绝并直接取 target 的 argmax。这很干净——但生产服务跑的几乎都是 T &gt; 0。一旦采样带温度，"target 的输出"就不再是一个 token，而是一个<strong>分布</strong> $p(x)$。此时逐位比较 argmax 会把输出分布变成 draft 和 target 两个 argmax 的混合，<strong>破坏采样质量</strong>。</p>
+      <p>所以需要一套规则，使得"经过 draft 提议、target 审批"之后的输出，<em>在分布意义上严格等于 target 自己采样</em>——这就是 rejection sampling 的使命。</p>
+    </section>
+
+    <section id="two-sentences">
+      <h2>本课的两句话</h2>
+      <p>整个 rejection sampling 的质量流动，两句话说清。后面的一切——公式、证明、尺子图、账本图——都只是把这两句话说严格：</p>
+      <div class="two-lines">
+        <p class="line-accept"><strong>① 接受路径</strong>：放行的质量恰好是 $\min(q, p)$——draft 押多少收多少，押过头就被折算回 target 的预算。<em>押注与预算取小，永不超过预算。</em></p>
+        <p class="line-resample"><strong>② 重采路径</strong>：重采的质量只在"target 比 draft 更想要"（$p &gt; q$）的 token 上——draft 已经过剩覆盖的部分（$q \ge p$）权重为零。</p>
+        <p class="two-lines-sum">两句拼起来：接受搬运<strong>交集</strong>，重采补<strong>差额</strong>，加起来不多不少恰好是 $p$。"输出分布严格等于 target"就是从这两句来的。</p>
+      </div>
+    </section>
+
+    <section id="setup">
+      <h2>句① 的展开：记号与接受规则</h2>
+      <p>对每个位置：target 分布 $p(x)$，draft 分布 $q(x)$。draft 提议了一个 token $x_d \sim q$。取均匀随机数 $r \sim U(0,1)$：</p>
+      <div class="formula-box">
+        $$\text{accept } x_d \iff r < \min\left(1,\ \frac{p(x_d)}{q(x_d)}\right)$$
+      </div>
+      <div class="callout callout-tip">
+        <strong>直觉</strong>：这个比值在惩罚"draft 过度自信"。若 $q(x_d) = 0.9$ 而 $p(x_d) = 0.3$，
+        比值为 $1/3$——draft 把 90% 的概率押在一个 target 只给 30% 的 token 上，这个提议有风险，
+        只能以 $1/3$ 的概率放行。反过来若 $p(x_d) \ge q(x_d)$（target 比 draft 更想要它），比值 ≥ 1，必接受。
+      </div>
+
+      <h3 id="sim">把公式变成图：信任折扣 + 掷飞镖</h3>
+      <p>把 $r$ 想成一枚掷向 $[0,1)$ 线段的飞镖，线段开头长度为 <strong>信任折扣</strong> $\min(1, p/q)$ 的一段是绿灯区——落绿接受，落灰拒绝。拖动下面的滑块，看折扣怎么随 $p, q$ 变化；多掷几次，看实测接受率收敛到理论值。</p>
+      <div class="accept-sim"></div>
+      <p class="fs-small">值得亲手验证的四个现象：① 把 $p$ 拖到 $\ge q$，折扣恒为 1，飞镖必中；② $q$ 押得越满、$p$ 越低，绿灯越短；③ 无论怎么拖，"放行的质量 $= \min(q,p)$" 永不超过 $p$；④ 拖动滑块看两根尺子——<strong>换岗线左边两行永远同宽，预算行（绿+紫）总长永远 $=p$</strong>，这就是 $\min(q,p)+\max(p{-}q,0)=p$ 的实时演示。</p>
+      <div class="callout callout-warning">
+        <strong>FAQ：审批概率为什么是 $\min(1, p/q)$，而不是 $p(x_d)$？（设计视角）</strong><br>
+        乘法结构一直在用：$P(\text{接受}) = q(x_d) \cdot a(x_d)$，疑问在第二个因子。关键：$p(x_d)$ 不是"target 再掷一次骰子"——draft 从 $q$ 里提议这件事本身已经是 $p$ 在起作用，再乘一次是双重计费。审批的真正约束是：<strong>重采路径 $h$ 只能补质量、不能扣质量</strong>，所以接受质量必须满足 $q(x)\,a(x) \le p(x)$，即 $a \le p/q$；加上 $a \le 1$，取两个上界的交点就是 $\min(1, p/q)$。用 $q{=}0.9,\ p{=}0.3$ 对比：$a{=}1$ 放行 $0.9$ 超预算（输出偏向 draft 口味）；$a{=}p$ 只放行 $0.27$，预算内白白损失接受率；$a{=}\min(1,p/q)$ 放行 $0.3$，恰好顶满。它是可行域内最大的审批概率——所有保分布的设计里接受率最高、$\tau$ 最大、最快。
+      </div>
+    </section>
+
+    <section id="resample">
+      <h2>句② 的展开：拒绝之后，差额分布重采样</h2>
+      <p>拒绝时不能直接丢给 target 重跑一遍——那样每个 token 都要两次 forward。诀窍是：这次 target forward <strong>本来就算出了完整的 $p(x)$</strong>，拒绝信息本身也是信息。定义差额分布：</p>
+      <div class="formula-box">
+        $$h(x) = \frac{\max\big(p(x) - q(x),\ 0\big)}{Z}, \qquad Z = \sum_x \max\big(p(x)-q(x),\ 0\big)$$
+      </div>
+      <p>从 $h(x)$ 重新采一个 token 作为该位置的最终输出。<strong>注意分子</strong>：只在"target 比 draft 更想要"的 token 上有质量（$p > q$ 的地方），draft 已经过剩覆盖的部分（$q \ge p$）权重为零。</p>
+      <div class="callout callout-note">
+        <strong>和贪心情形的回连</strong>：T=0 时 $p, q$ 都是 one-hot。若 argmax 相同，$p/q = 1$，必接受（你摸底答对的情形）；
+        若不同，draft 的 token 处 $p = 0$，比值为 0，必拒绝，且 $h(x)$ 只在 target 的 argmax 处非零——
+        重采样必中 target 的 argmax。你已知的贪心等价性，正是这套一般规则在 one-hot 下的退化。
+      </div>
+    </section>
+
+    <section id="proof">
+      <h2>严格化：两句话加起来恰好等于 $p(x)$</h2>
+      <p>现在把两句话说严格。对任意 token $x$，输出它有两条路：<strong>被接受</strong>，或者<strong>被拒绝后从 $h$ 中重采到它</strong>。</p>
+      <ol class="step-list">
+        <li>
+          <strong>接受路径</strong>：先要 draft 提议它（概率 $q(x)$），再要通过审批（概率 $\min(1, p(x)/q(x))$）：
+          $$P_1(x) = q(x)\cdot\min\left(1, \frac{p(x)}{q(x)}\right) = \min\big(q(x),\ p(x)\big)$$
+        </li>
+        <li>
+          <strong>整体拒绝率</strong>：对所有 token 求和 $P_1$，拒绝概率就是补集。注意一个恒等式
+          $\min(q,p) + \max(p-q, 0) = p$，逐 token 用它：
+          $$P(\text{reject}) = 1 - \sum_x \min\big(q(x), p(x)\big) = \sum_x \max\big(p(x)-q(x),\ 0\big) = Z$$
+          <p class="fs-small">注意 $P(\text{reject})$ 是这一轮验证的<strong>边缘</strong>拒绝率——已对"提议了哪个 token"求过平均，不是某个特定 token 的条件拒绝率（那是 $1-\min(1,p/q)$，按提议频率 $q$ 加权后才得到它）。两种算法结果恒等：超发罚没总量 $\sum\max(q{-}p,0)$ = 欠发缺口总量 $\sum\max(p{-}q,0) = Z$，因为 $q, p$ 各自归一。</p>
+        </li>
+        <li>
+          <strong>重采路径</strong>：拒绝后从 $h(x) = \max(p-q,0)/Z$ 采到 $x$：
+          $$P_2(x) = Z \cdot \frac{\max(p(x)-q(x),\ 0)}{Z} = \max\big(p(x)-q(x),\ 0\big)$$
+        </li>
+        <li>
+          <strong>合并</strong>（min + max 恰好拼回 $p$）：
+          $$P(x) = P_1(x) + P_2(x) = \min\big(q(x),p(x)\big) + \max\big(p(x)-q(x),\ 0\big) = p(x) \qquad \blacksquare$$
+        </li>
+      </ol>
+
+      <h3 id="identity-viz">把第 4 步的合并画出来：两根从 0 出发的尺子</h3>
+      <p>柱状图要把三个位置的高度在脑子里相加——尺子图只需要看<strong>长度拼接</strong>。把 draft 的押注和 target 的预算画成两根都从 0 出发的横条，在 $\min(q,p)$ 处立一条竖直的<strong>换岗线</strong>：线左边是绿（接受路径，<em>两行永远同宽</em>）；线右边，预算多出的尾巴是紫（重采补发），押注多出的尾巴被罚没（入 $Z$）。</p>
+      <svg viewBox="0 0 400 214" class="coverage-svg" role="img" aria-label="恒等式尺子图：两根从 0 出发的横条在换岗线处分割">
+        <!-- [0,1] 刻度框 -->
+        <line x1="50" y1="22" x2="50" y2="172" style="stroke:var(--border);stroke-width:1"/>
+        <line x1="330" y1="22" x2="330" y2="172" style="stroke:var(--border);stroke-width:1"/>
+        <text x="50" y="184" text-anchor="middle" style="fill:var(--light);font-size:var(--fs-caption)">0</text>
+        <text x="330" y="184" text-anchor="middle" style="fill:var(--light);font-size:var(--fs-caption)">1</text>
+        <!-- 情形 ① q=0.3 p=0.5 欠发 -->
+        <text x="50" y="14" style="fill:var(--text);font-size:var(--fs-small);font-weight:600">① q &lt; p（欠发）</text>
+        <text x="44" y="37" text-anchor="end" style="fill:var(--muted);font-size:var(--fs-caption)">draft 押注</text>
+        <text x="44" y="69" text-anchor="end" style="fill:var(--muted);font-size:var(--fs-caption)">target 预算</text>
+        <rect x="50" y="26" width="84" height="16" rx="2" style="fill:var(--green)"/>
+        <rect x="50" y="58" width="84" height="16" rx="2" style="fill:var(--green)"/>
+        <rect x="134" y="58" width="56" height="16" rx="2" style="fill:var(--purple)"/>
+        <line x1="134" y1="22" x2="134" y2="78" style="stroke:var(--text);stroke-width:1;stroke-dasharray:4,3"/>
+        <text x="138" y="37" style="fill:var(--muted);font-size:var(--fs-caption)">q=0.30（到头）</text>
+        <text x="196" y="69" style="fill:var(--muted);font-size:var(--fs-caption)">p=0.50</text>
+        <text x="50" y="94" style="fill:var(--text);font-size:var(--fs-small)">绿 0.30（两行同宽）＋ 紫 0.20（预算的尾巴）＝ 0.50 ✓</text>
+        <!-- 情形 ② q=0.7 p=0.4 超发 -->
+        <text x="50" y="116" style="fill:var(--text);font-size:var(--fs-small);font-weight:600">② q &gt; p（超发）</text>
+        <text x="44" y="139" text-anchor="end" style="fill:var(--muted);font-size:var(--fs-caption)">draft 押注</text>
+        <text x="44" y="171" text-anchor="end" style="fill:var(--muted);font-size:var(--fs-caption)">target 预算</text>
+        <rect x="50" y="128" width="112" height="16" rx="2" style="fill:var(--green)"/>
+        <rect x="162" y="128" width="84" height="16" rx="2" style="fill:var(--orange);stroke:var(--red);stroke-width:1;stroke-dasharray:3,2"/>
+        <rect x="50" y="160" width="112" height="16" rx="2" style="fill:var(--green)"/>
+        <line x1="162" y1="124" x2="162" y2="180" style="stroke:var(--text);stroke-width:1;stroke-dasharray:4,3"/>
+        <text x="252" y="139" style="fill:var(--muted);font-size:var(--fs-caption)">q=0.70</text>
+        <text x="166" y="171" style="fill:var(--muted);font-size:var(--fs-caption)">p=0.40（到头）</text>
+        <text x="50" y="196" style="fill:var(--text);font-size:var(--fs-small)">绿 0.40 ＝ p ✓（紫为 0），押注超出的 0.30 罚没 → Z</text>
+        <!-- 图例 -->
+        <rect x="24" y="203" width="10" height="10" rx="2" style="fill:var(--green)"/>
+        <text x="38" y="212" style="fill:var(--muted);font-size:var(--fs-caption)">接受 min(q,p)</text>
+        <rect x="118" y="203" width="10" height="10" rx="2" style="fill:var(--purple)"/>
+        <text x="132" y="212" style="fill:var(--muted);font-size:var(--fs-caption)">重采 max(p−q,0)</text>
+        <rect x="224" y="203" width="10" height="10" rx="2" style="fill:var(--orange);stroke:var(--red);stroke-width:1;stroke-dasharray:3,2"/>
+        <text x="238" y="212" style="fill:var(--muted);font-size:var(--fs-caption)">罚没→Z</text>
+      </svg>
+      <p>上面（欠发）：draft 押 $0.30$，整段都在预算内 → 绿色全收；预算 $0.50$ 还缺 $0.20$，紫色尾巴补上——<strong>预算行的总长就是 $0.50$</strong>。下面（超发）：draft 押 $0.70$ 超出预算 $0.40$ → 换岗线右边整段罚没（$0.30$ 入 $Z$），绿色恰好截到 $p$，紫色为 $0$。<strong>两个方向同一条规律：换岗线左边两行同宽（$\min$），预算行绿+紫总长恒为 $p$（$\max$ 补差）——这就是 $\min(q,p) + \max(p-q,0) = p$。</strong></p>
+      <div class="callout callout-success">
+        <strong>漂亮在哪</strong>：证明不要求 draft 好——$q$ 任意烂，输出分布都是 $p$。
+        draft 的质量只影响 <em>接受率</em>（决定快不快），不影响 <em>正确性</em>（输出永远对）。
+        这就是"无损加速"这个词的数学含义，也是你评估任何投机采样方案时敢说"无损"的底气。
+      </div>
+
+      <h3 id="coverage">把证明画成图：不对称的放行，对称的总量</h3>
+      <p>三 token 词汇表，$q = (0.5,\ 0.1,\ 0.4)$，$p = (0.5,\ 0.3,\ 0.2)$。每个 token 三根柱：draft 押注 $q$、target 预算 $p$、最终输出的构成（绿=接受路径 $\min(q,p)$，紫=重采路径 $\max(p{-}q,0)$，叠起来恰好顶到 $p$）：</p>
+      <svg viewBox="0 0 380 200" class="coverage-svg" role="img" aria-label="覆盖图：三个 token 的 q、p 与输出构成">
+        <!-- baseline -->
+        <line x1="16" y1="140" x2="364" y2="140" style="stroke:var(--border);stroke-width:1"/>
+        <!-- A: q=0.5 p=0.5 -->
+        <rect x="26" y="95" width="22" height="45" rx="2" style="fill:var(--orange)"/>
+        <rect x="52" y="95" width="22" height="45" rx="2" style="fill:var(--accent)"/>
+        <rect x="78" y="95" width="22" height="45" rx="2" style="fill:var(--green)"/>
+        <text x="37" y="89" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.50</text>
+        <text x="63" y="89" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.50</text>
+        <text x="89" y="89" text-anchor="middle" style="fill:var(--green);font-size:var(--fs-caption);font-weight:600">0.50</text>
+        <text x="60" y="156" text-anchor="middle" style="fill:var(--text);font-size:var(--fs-small)">A（q=p）</text>
+        <!-- B: q=0.1 p=0.3 -->
+        <rect x="146" y="131" width="22" height="9" rx="2" style="fill:var(--orange)"/>
+        <rect x="172" y="113" width="22" height="27" rx="2" style="fill:var(--accent)"/>
+        <rect x="198" y="131" width="22" height="9" rx="2" style="fill:var(--green)"/>
+        <rect x="198" y="113" width="22" height="18" rx="2" style="fill:var(--purple)"/>
+        <text x="157" y="125" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.10</text>
+        <text x="183" y="107" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.30</text>
+        <text x="209" y="107" text-anchor="middle" style="fill:var(--green);font-size:var(--fs-caption);font-weight:600">0.30</text>
+        <text x="180" y="156" text-anchor="middle" style="fill:var(--text);font-size:var(--fs-small)">B（q&lt;p）</text>
+        <!-- C: q=0.4 p=0.2 -->
+        <rect x="266" y="104" width="22" height="36" rx="2" style="fill:var(--orange)"/>
+        <rect x="266" y="104" width="22" height="18" rx="2" style="fill:var(--red-bg);stroke:var(--red);stroke-width:1;stroke-dasharray:3,2"/>
+        <rect x="292" y="122" width="22" height="18" rx="2" style="fill:var(--accent)"/>
+        <rect x="318" y="122" width="22" height="18" rx="2" style="fill:var(--green)"/>
+        <text x="277" y="98" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.40</text>
+        <text x="303" y="116" text-anchor="middle" style="fill:var(--muted);font-size:var(--fs-caption)">0.20</text>
+        <text x="329" y="116" text-anchor="middle" style="fill:var(--green);font-size:var(--fs-caption);font-weight:600">0.20</text>
+        <text x="300" y="156" text-anchor="middle" style="fill:var(--text);font-size:var(--fs-small)">C（q&gt;p）</text>
+        <!-- legend -->
+        <rect x="24" y="168" width="10" height="10" rx="2" style="fill:var(--orange)"/>
+        <text x="38" y="177" style="fill:var(--muted);font-size:var(--fs-caption)">押注 q</text>
+        <rect x="86" y="168" width="10" height="10" rx="2" style="fill:var(--accent)"/>
+        <text x="100" y="177" style="fill:var(--muted);font-size:var(--fs-caption)">预算 p</text>
+        <rect x="148" y="168" width="10" height="10" rx="2" style="fill:var(--green)"/>
+        <text x="162" y="177" style="fill:var(--muted);font-size:var(--fs-caption)">接受 min(q,p)</text>
+        <rect x="246" y="168" width="10" height="10" rx="2" style="fill:var(--purple)"/>
+        <text x="260" y="177" style="fill:var(--muted);font-size:var(--fs-caption)">重采</text>
+        <rect x="302" y="168" width="10" height="10" rx="2" style="fill:var(--red-bg);stroke:var(--red);stroke-width:1;stroke-dasharray:3,2"/>
+        <text x="316" y="177" style="fill:var(--muted);font-size:var(--fs-caption)">罚没→Z</text>
+      </svg>
+      <p>读这张账本的三行：</p>
+      <ul>
+        <li><strong>B（q&lt;p，draft 欠自信）</strong>：押注 0.10 全部放行（绿灯满格），但预算是 0.30——缺口 0.20 由紫色重采路径补上。输出合计 0.30 = p。<em>不是"draft 的概率赢了"，是接受路径的天花板就是提议本身：token 只以频率 q 出现在提议里，接受路径最多搬运 q 的质量，缺口只能从重采来。</em></li>
+        <li><strong>C（q&gt;p，draft 超发）</strong>：虚线红块是被罚没的 0.20（押 0.40 只放行 0.20），罚没质量汇入拒绝概率 Z。本例中 Z = 0.20，恰好就是 B 的缺口——<em>罚没超发的，补贴欠发的</em>。</li>
+        <li><strong>A（q=p）</strong>：不出不入，全走接受。</li>
+      </ul>
+      <p>所以两个方向其实是对称的：<strong>修剪超发（q&gt;p）+ 补贴欠发（q&lt;p），账面恒等于 p</strong>。两句话、账本图、尺子图、四行证明——四种说法，同一件事。</p>
+    </section>
+
+    <section id="tau">
+      <h2>补一块拼图：为什么 τ ≥ 1（保底一个 token）</h2>
+      <p>把视角拉回一轮 draft-verify：draft 提议 $N$ 个 token，target <em>一次</em> forward 同时算出全部 $N+1$ 个位置的分布（多出来的那个是 target 对"全接受后下一个位置"的预测，即 <span class="badge">bonus token</span>）。验证从左到右走：</p>
+      <ul>
+        <li>第 $i$ 个位置第一次被拒绝：输出 = 前 $i-1$ 个接受 + 该位置从 $h$ 重采的 1 个 → 本轮产出 $i$ 个 token</li>
+        <li>全部接受：$N$ 个 + bonus → 产出 $N+1$ 个</li>
+      </ul>
+      <p>所以即使第一个 token 就被拒，那一次 target forward 也产出了 1 个（重采的）token——<strong>最坏情况不比普通自回归慢多少</strong>，最好情况一轮白拿 $N+1$ 个。这就解释了你已经答对的 $\tau \in [1, N+1]$。</p>
+    </section>
+
+    <section id="quiz">
+      <h2>检索练习</h2>
+      <p class="fs-small">凭回忆作答，答错看解析——错误后的纠正比一次答对记得更牢。</p>
+      <div class="quiz"
+           data-quiz='[
+        {
+          "question": "T>0 时某 draft token 被拒绝，替代 token 从哪个分布采出？",
+          "options": ["差额分布 relu(p−q)/Z", "target 分布 p(x) 本身", "draft 分布 q(x) 本身", "均匀分布加温度缩放"],
+          "correct": 0,
+          "explanation": "差额分布只在 target 比 draft 更想要（p>q）的 token 上有质量；直接用 p 会把 draft 已覆盖的部分重复计入，破坏等价性。"
+        },
+        {
+          "question": "draft 给某 token q(x)=0.9，target 给 p(x)=0.3，该 token 的接受概率是？",
+          "options": ["1/3", "0.3", "0.9", "0.27"],
+          "correct": 0,
+          "explanation": "min(1, p/q) = min(1, 0.3/0.9) = 1/3。draft 越过度自信（q 远大于 p），比值越小，越容易被拒。"
+        },
+        {
+          "question": "证明中把输出概率拼回 p(x) 的关键恒等式是？",
+          "options": ["min(q,p)+max(p−q,0)=p", "min(q,p)·max(q,p)=p", "q+p−max(q,p)=p", "max(q,p)−min(q,p)=p"],
+          "correct": 0,
+          "explanation": "接受路径给出 min(q,p)，重采路径给出 max(p−q,0)，两者相加恰为 p——接受路径覆盖了 draft 够得着的部分，重采路径补上 target 多出来的部分。"
+        },
+        {
+          "question": "draft 模型很烂（q 与 p 差异巨大），输出分布会怎样？",
+          "options": ["仍是 p，只是接受率低", "偏离 p，质量下降", "介于 p 和 q 之间", "取决于拒绝次数多少"],
+          "correct": 0,
+          "explanation": "证明对任意 q 成立——无损性不依赖 draft 质量。draft 烂只拖慢速度（τ→1），不破坏正确性。这正是评估方案时把『正确性』和『接受率』分开看的理论依据。"
+        }
+      ]'></div>
+    </section>
+
+    <section id="source">
+      <h2>一手来源</h2>
+      <p><a href="https://arxiv.org/abs/2211.17192">Leviathan, Kalman, Matias, <em>Fast Inference from Transformers via Speculative Decoding</em> (arXiv 2211.17192)</a> — rejection sampling 形式化的原始出处，其 Algorithm 1 + Theorem 1 就是本课内容。注意它有孪生工作：DeepMind 的 <a href="https://arxiv.org/abs/2302.01318">Chen et al., <em>Accelerating LLM Decoding with Speculative Sampling</em> (arXiv 2302.01318)</a> 独立提出同一 scheme。建议精读 Leviathan 这两处，约 15 分钟。</p>
+      <div class="callout callout-note">
+        有任何一步卡住（尤其是 min+max 分解那一步），直接在会话里问我——推导类内容最忌讳"看起来懂了"。
+        下一课 <a href="./0002-latency-formula.html">② 延迟公式与三杠杆</a> 会用上本课的 τ，把你的"一次验证多个候选"反问升级成可分析的框架。
+      </div>
+    </section>
+  </article>
+</body>
+</html>

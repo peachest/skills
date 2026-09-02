@@ -87,7 +87,7 @@ A lesson is the main thing you produce — the unit in which knowledge and skill
 
 A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte. Build from the shared ` base.css ` components and tokens; an inline `<style>` block is for one-off component styling only, and every font-size, spacing, and line-height in it references a token via ` var() ` (see [CSS Self-Check](#css-self-check)).
 
-The prose must read as the user's teacher, not as generated filler. After drafting a lesson, run the `unslop` skill on the lesson body and fix every flagged tell before delivery — formulaic transitions and summary padding are defects in a lesson, not style choices.
+The prose must read as the user's teacher, not as generated filler. After drafting a lesson, run the de-slop pass ([Prose Self-Check](#prose-self-check)) and fix every adjudicated tell before delivery — formulaic transitions and summary padding are defects in a lesson, not style choices.
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development — grounded in `UNDERSTANDING-MAP.md`, not guessed.
 
@@ -170,7 +170,7 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (via the `unslop` skill) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams runs all five; a plain lesson runs fact-check, CSS self-check, navigation self-check, and de-slop.
+Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams runs all five; a plain lesson runs fact-check, CSS self-check, navigation self-check, and de-slop.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
 
@@ -197,6 +197,21 @@ python3 ./assets/nav-chain-check.py lessons/
 ```
 
 The script orders `lessons/*.html` by leading number and verifies each lesson links to both neighbours — the first lesson needs no back link, the last needs no next link. **Zero missing links** is the completion criterion; fix by updating the neighbour's navigation block, never by deleting a link.
+
+## Prose Self-Check
+
+After drafting or editing a lesson, de-slop the prose before the learner sees it — the lesson is the user's teacher's voice, and generated filler reads as a defect.
+
+- **English prose**: run the `unslop` skill; its banned-phrase scanner covers English.
+- **Chinese prose**: the unslop scanner declines non-English input. Run the flag-only frequency audit instead:
+
+```bash
+python3 ./assets/prose-freq-check.py lessons/0001-your-lesson.html
+```
+
+The script extracts visible text (style/script/svg stripped) and reports stylistic tics: `恰好` (>5), `永远` (>2), `不多不少` / `同一件事` / `都只是` (any occurrence), and `——` density (>25 per 100 prose lines, calibrated on a real before/after de-slop pair). A flag is a prompt to adjudicate in context, never authorization to edit: load-bearing uses stay (mathematical `恰好` = exactness, safety-rule `永远`), decorative uses get minimal fixes — never rewrite the paragraph. Structural tells the scanner cannot see, check by reading: self-congratulatory callout titles ("漂亮在哪：…"), "X、Y、Z——同一件事" codas, "后面的一切都只是" scaffolding, triplet parallels whose tail items are consequences rather than peers, and subtitles that restate the opening thesis.
+
+Completion criterion: **every flag adjudicated** (kept with reason, or fixed) — not zero flags. Formulas, numbers, citations, KaTeX, and visualizations stay untouched; keep the change rate to a few percent with zero words added (unslop's `diff_check`).
 
 ## Visualization Self-Check
 
