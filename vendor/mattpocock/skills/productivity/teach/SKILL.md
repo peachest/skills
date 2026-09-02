@@ -95,6 +95,18 @@ Each lesson should recommend a primary source for the user to read or watch. Thi
 
 Each lesson should contain a reminder to ask followup questions to the agent. The agent is their teacher, and can assist with anything that's unclear.
 
+### Retrieval rhythm
+
+A lesson's practice section is a three-stage ladder, each stage a stronger form of retrieval than the last:
+
+1. **Socratic recall** — free-recall questions via the `socratic.js` component (question → hidden hint → reference answer). The learner answers from memory before seeing anything; this effortful retrieval is what builds storage strength. The hint points to source clues (an OKB note, a diagram already shown above); the reference answer resolves the question outright — a hint that just poses another vague question is a defect. One or two questions suffice.
+2. **Quiz** — recognition check via the `quiz.js` component. Distractors are plausible misunderstandings of the same concept, each tagged with the misconception it exposes (the `misconceptions` field). A wrong answer is diagnostic: write the exposed misconception into the session log so the next Probe starts from it.
+3. **Quest** — a practice task with an observable outcome (an artifact, a comparison, a decision with criteria, an inspection of a real project). If the task produces nothing inspectable, it is not a quest — restate it until it does.
+
+### Provenance in presentation
+
+The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains".
+
 ## Assets
 
 Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse.
@@ -147,7 +159,7 @@ For skill acquisition, difficulty is the tool. Effortful retrieval is what build
 
 Each of these should be based on a **feedback loop**, where the user receives feedback on their performance. This feedback loop should be as tight as possible, giving feedback immediately - and ideally automatically.
 
-For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting.
+For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting. Distractors are plausible misunderstandings of the same concept, not absurd throwaways — tag each with the misconception it exposes (`misconceptions` in `quiz.js`) so a wrong pick diagnoses what to re-teach.
 
 ## Fact-Checking
 
