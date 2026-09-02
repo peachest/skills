@@ -292,7 +292,8 @@ teach 课件组件目录（沿用 CSS-CONVENTIONS.md，令牌化后规格）：
 | 组件 | 类名 | 关键规格 |
 |---|---|---|
 | Callout | `.callout` + `.-note/-tip/-warning/-success/-danger` | padding sp-4/sp-5，左 4px 语义色边，radius md |
-| Quiz | `.quiz-container > .quiz` + `.-option/-feedback/-score` | option: padding sp-3/4，hover→accent-bg，focus→shadow-focus |
+| Quiz | `.quiz-container > .quiz` + `.-option/-feedback/-score` | option: padding sp-3/4，hover→accent-bg，focus→shadow-focus；`misconceptions` 字段错选诊断 |
+| Socratic | `.socratic` + `.-item/-question/-btn/-hint/-answer` | 检索阶段：问题→隐藏提示→参考答案；hint 用 purple-bg，answer 用 success-bg，一次性展开 |
 | Compare | `.compare-grid > .compare-card` / `.compare-table` | 并排对比，card 用 radius lg |
 | Pipeline | `.pipeline > .pipeline-stage` + `.pipeline-arrow` | 横向流程，stage 用 radius md |
 | Flow | `.flow-diagram` + `.flow-box/-arrow/-step/-num` | 流程图，num 用 pill badge |
@@ -308,11 +309,27 @@ teach 课件组件目录（沿用 CSS-CONVENTIONS.md，令牌化后规格）：
 
 ### 交互态契约（统一）
 
-所有可交互组件（quiz-option / tech-card / callout / ref-link）遵循：
+所有可交互组件（quiz-option / tech-card / callout / ref-link / socratic-btn）遵循：
 
 - **hover**：背景/边框色缓动变化（`var(--dur-base) var(--ease-out)`）。
 - **focus-visible**：`box-shadow: var(--shadow-focus)`（双层 ring，不依赖 outline）。
 - **active**：`transform: scale(.99)`（按压感）。
+
+### Provenance 语义（callout ↔ 知识来源）
+
+Callout 语义色同时承载**知识来源分层**——OKB 的 bronze→silver→gold 分层要延续到课件呈现层，学习者必须一眼分清「源说的」和「AI 解释的」：
+
+| Provenance 层 | Callout | 标题规范 |
+|---|---|---|
+| SOURCE（OKB gold/silver 支持的 claim） | `.callout-note`（蓝） | `Source` / `原文要点`，正文带 claim-level 脚注指向 OKB note |
+| EXTERNAL（当前文档 / 新版差异） | `.callout-note`（蓝） | 标题前缀 `外部 · External`；与 SOURCE 分开呈现，不互相替换 |
+| DERIVED（AI 类比 / 心智模型 / 场景） | `.callout-tip`（紫） | 必须标注衍生，如 `类比 · AI 衍生`、`心智模型 · AI 衍生` |
+
+规则：
+
+- 衍生内容**永不**伪装成 source——没有 OKB 脚注的 claim 不放进 Source callout。
+- warning/success/danger 保留原有教学用途（注意 / 达成 / 陷阱）；版本差异的警示可叠加 warning。
+- 紫色同时是 tip（教学提示）与 DERIVED 的颜色——两者都是「AI 的解释性内容」，语义兼容。
 
 ## Do's and Don'ts
 
