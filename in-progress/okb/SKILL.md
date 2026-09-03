@@ -13,7 +13,7 @@ Three **distinct directories**, linked by `sources[].resource` (the derivation e
 
 | Layer | Directory | Holds |
 |---|---|---|
-| **Bronze** | `bronze/<topic>/<source-slug>.md` | a raw source snapshot (URL + fetched_at + sha256) — the only fidelity layer |
+| **Bronze** | `bronze/<topic>/<source-slug>.md` | a raw source snapshot (URL + author + fetched_at + sha256) — the only fidelity layer |
 | **Silver** | `silver/<topic>/<concept>.md` | the **only rewrite layer** — distilled note, every fact preserved, sourced, unverified |
 | **Gold** | `gold/<topic>/<concept>.md` | a **verification overlay** — verified events pointing back to silver, no rewritten body |
 
@@ -39,6 +39,8 @@ okb/
 ---
 source: <original URL>
 title: <label>
+author: <bylined author of the source>
+mirrors: [<alternate URL>]   # optional: same work syndicated on another channel
 fetched_at: <ISO 8601>
 sha256: <content hash>
 ---
@@ -51,10 +53,12 @@ sha256: <content hash>
 ---
 type: concept            # concept | reference
 title: ...
-description: ...
+description: ...         # one-line factual summary, ≤40 chars, naming the key entity
 tags: [ ... ]
-status: draft            # draft | stable | deprecated
+status: draft            # draft | stable | deprecated; promoted by factcheck or user confirmation
 generated: { by: process:okb-distill, at: <ISO 8601> }
+updated: <ISO 8601>      # last concept-aggregation merge
+conflicts_with: []       # concepts whose facts contradict this note; both versions kept
 verified: []             # empty ⇒ unverified
 stale_after: <ISO 8601>
 sources:                 # derivation edge; [^id] footnotes key into these ids
@@ -73,18 +77,24 @@ sources:                 # derivation edge; [^id] footnotes key into these ids
 Build knowledge for a topic by running these in order. Each step is done on its completion criterion.
 
 1. **Ingest** a source — fetch it and save a bronze snapshot.
-   Done when `bronze/<topic>/<source-slug>.md` exists with `source`, `fetched_at`, `sha256` set and the verbatim content saved.
+   Mirror check first: an existing bronze with the same `author` + `title` is the same work syndicated on another channel — add the URL to its `mirrors:` and skip the fetch.
+   Done when `bronze/<topic>/<source-slug>.md` exists with `source`, `author`, `title`, `fetched_at`, `sha256` set, the verbatim content saved, and the topic's `ingests_since_status` counter in `index.md` incremented.
 
 2. **Distill** — write a silver note from the bronze snapshot. **This is the only rewrite pass.**
-   Done when `silver/<topic>/<concept>.md` exists with a non-empty `type` and `sources` listing the bronze snapshot, **and every fact in the bronze snapshot is preserved** (no compression, no dropped claims). Attribute body claims with `[^id]` footnotes keyed to `sources[].id`.
+   Start with **concept aggregation**: scan the topic's existing silver notes and route every concept in the new source — merge into the matching note (append to `sources[]`, fold the new facts into the body, refresh `updated`) or open a new one. One concept under two slugs is the failure state this step exists to prevent.
+   When the new source contradicts an existing note, keep both versions in the body and set `conflicts_with` on each side — resolution belongs to the user.
+   Distill always writes `status: draft`.
+   Done when every concept from the bronze snapshot is merged or newly opened, `silver/<topic>/<concept>.md` carries a non-empty `type` and `description`, `sources` lists the bronze snapshot, **and every fact in the bronze snapshot is preserved** (no compression, no dropped claims). Attribute body claims with `[^id]` footnotes keyed to `sources[].id`.
 
 3. **Fact-check** — verify the silver note and write a gold **verification overlay** (not content).
    Done when `gold/<topic>/<concept>.md` exists, its `sources[].resource` points at the silver note, and `verified` is non-empty. Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory. The gold note carries no rewritten body — it only records verification + back to silver.
+   Verification promotes the silver note `draft → stable`; a one-line user confirmation of a draft promotes it too.
 
 4. **Query** — read notes back out, filtered by `topic`, `status`, or `verified`.
    Done when the matching notes are returned.
 
 5. **Status** — report layer distribution plus the stale (`now >= stale_after`) and broken-link list, and a **taxonomy health audit** over all three directories (same-level distinguishable / same-level related / parent covers children / distance reflects relevance / structure serves retrieval, not itself).
+   Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
 
 ## Evidence chain (invariant)
 
@@ -106,4 +116,4 @@ A teaching workspace reads knowledge through `RESOURCES.md`, pointing into OKB:
 - [micro-batch event loop](../../okb/gold/<topic>/micro-batch-event-loop.md)
 ```
 
-Point Knowledge entries at `gold/`, falling back to `silver/` when gold is absent. When a topic's knowledge is missing from OKB, run curation first, then read from OKB.
+Point Knowledge entries at `gold/`, falling back to stable `silver/` when gold is absent. A draft silver is readable but unreviewed — treat its claims as provisional. When a topic's knowledge is missing from OKB, run curation first, then read from OKB.
