@@ -35,3 +35,23 @@ def test_duration_parser():
     assert eu.dur_sec("1:02:03") == 3723
     assert eu.dur_sec("0:00") == 0
     assert eu.dur_sec("") == 0
+
+
+def test_metrics_md_parser(tmp_path):
+    import importlib.util
+    script = Path(__file__).parent.parent / "scripts" / "collect-metrics.py"
+    spec = importlib.util.spec_from_file_location("cm", script)
+    cm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cm)
+    md = tmp_path / "metrics.md"
+    md.write_text(
+        "| 音频时长 | 1633.7s |\n| WAV 大小 | 49.8MB |\n"
+        "| 转码耗时 | 2.154s |\n| 推理耗时 | 27.865s |\n"
+        "| RTF | .0170 |\n| 字符数 | 18255 |\n| 转录模式 | silence-aware |",
+        encoding="utf-8",
+    )
+    m = cm.parse_metrics_md(md)
+    assert m["duration_s"] == 1633.7
+    assert m["rtf"] == 0.017  # ".0170" must NOT parse as 170
+    assert m["chars"] == 18255
+    assert m["mode"] == "silence-aware"
