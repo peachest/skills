@@ -131,7 +131,9 @@ echo "[2/3] Transcribing via whisper-asr (${WHISPER_ENDPOINT}, model=${WHISPER_M
 T2=$(date +%s%N)
 
 NEEDS_CHUNK=0
-if [ "$(echo "$WAV_SIZE_MB > $MAX_FILESIZE_MB" | bc)" -eq 1 ]; then
+# compare raw BYTES, not the scale=1 display value: 25.0199MB truncates to
+# 25.0, passes the "≤ 25" check, and the server rejects the upload at 25.0199
+if [ "$(echo "$WAV_SIZE > $MAX_FILESIZE_MB * 1048576" | bc)" -eq 1 ]; then
   NEEDS_CHUNK=1
 fi
 
