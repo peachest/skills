@@ -29,8 +29,8 @@ def parse_pipeline_url(url: str) -> tuple[str, str, str]:
     """Extract (hostname, url_encoded_project_path, pipeline_id) from a GitLab pipeline URL.
 
     Example:
-      https://internal.example.com/llm/<platform>/hami/<device-plugin-repo>/-/pipelines/1326695
-      → ("internal.example.com", "llm%2F<platform>%2Fhami%2F<device-plugin-repo>", "1326695")
+      https://gitlab.blue.example/llm/<platform>/hami/<device-plugin-repo>/-/pipelines/1326695
+      → ("gitlab.blue.example", "llm%2F<platform>%2Fhami%2F<device-plugin-repo>", "1326695")
     """
     parsed = urlparse(url)
     host = parsed.netloc

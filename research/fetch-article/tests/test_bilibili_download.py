@@ -236,7 +236,8 @@ class TestAria2cDownload:
     def test_proxy_passed_when_set(self, tmp_path, monkeypatch):
         """https_proxy env var → --all-proxy in aria2c args."""
         output_dir = str(tmp_path)
-        monkeypatch.setenv("https_proxy", "http://INTERNAL_PROXY_IP:3128")
+        proxy = "http://proxy.internal.example:3128"
+        monkeypatch.setenv("https_proxy", proxy)
         fake_size = 100
 
         mock_subprocess = _make_mock_subprocess_success(fake_size)
@@ -248,7 +249,7 @@ class TestAria2cDownload:
                 output_dir=output_dir)
 
         args = mock_subprocess.run.call_args[0][0]
-        assert "--all-proxy=http://INTERNAL_PROXY_IP:3128" in args
+        assert f"--all-proxy={proxy}" in args
 
     def test_proxy_omitted_when_unset(self, tmp_path, monkeypatch):
         """No https_proxy → no --all-proxy in aria2c args."""
