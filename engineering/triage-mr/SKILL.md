@@ -75,6 +75,8 @@ python3 -c "import json; d=json.load(open('/tmp/issues.json')); print(f'{len(d)}
 
 **Completion criterion**: `/tmp/issues.json` exists, contains a valid JSON array, and the source MR/PR identity in `/tmp/pull-source.log` matches expectations.
 
+**Scope note**: the pull includes comments from both the OCR bot and human reviewers — inline findings, fallback notes, and general (non-inline) reviewer threads (`file="(general)"`, `line=0`). This keeps the pull aligned with the closure gate, which counts every resolvable thread regardless of author. Human general comments go through the same `/fix` classification as bot findings.
+
 ### 2. Run /fix
 
 Read `/skill:fix` and execute its full process (gather → recommend → verify → grill → fix → verify build → report) with `/tmp/issues.json` as input.
