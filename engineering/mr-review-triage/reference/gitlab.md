@@ -33,13 +33,11 @@ glab auth status   # 检查已配置的实例和认证状态
 
 **token 优先取 glab config 里该 host 的 token**，避免误用别的实例的 token 导致 401。跑之前先 `glab auth status` 确认目标实例已认证。
 
-OCR bot 登录名是**实例相关**的（如 `gitblue.bot` 或 `ai_bot001`），通过 `OCR_BOT_LOGIN` 环境变量指定：
+OCR bot 登录名是实例相关的（如 `gitblue.bot` 或 `ai_bot001`）。
 
-```bash
-export OCR_BOT_LOGIN=ai_bot001   # 目标实例的 OCR bot 用户名
-```
-
-`OCR_BOT_LOGIN` 为空时不过滤 bot（拉取全部 discussion）。
+> **注**：GitLab 后端已不再按作者过滤（`OCR_BOT_LOGIN` 对 GitLab 已废弃）——人类
+> 评审的 general 评论同样拉取，否则 pull 与 closure gate 口径不一致（gate 统计所有
+> resolvable 线程）。噪声靠 body 过滤规则排除。
 
 ## MR ID 推导
 
@@ -84,12 +82,13 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 
 ### 过滤规则
 
-只保留 OCR bot（`OCR_BOT_LOGIN`，默认不过滤）的 discussion：
+拉取所有非 system 且内容像评审的 discussion（OCR bot + 人类评审者，不按作者过滤）：
 
 | 类型 | 判定条件 | 是否进入 classified | 是否需 resolve |
 | ---- | ---- | ---- | ---- |
 | Inline issue | `notes[0].position != null`，body 含具体问题 | ✅ | ✅（post-labels） |
 | Fallback | `notes[0].position == null`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 | ✅（post-labels） |
+| General reviewer comment | `notes[0].position == null`，`resolvable == true`，非 summary/junk body（常见为人类评审的总帖/杂项帖） | ✅，`file="(general)"`、`line=0` | ✅（post-labels） |
 | Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌（无 finding 可分类） | ✅（verify 门捕获） |
 | LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ | ✅（verify 门捕获，若 resolvable） |
 | Error note | body 含 `⚠️ OpenCodeReview error` | ❌ | ✅（verify 门捕获，若 resolvable） |
@@ -203,7 +202,7 @@ glab api --hostname internal.example.com \
 | ---- | ---- |
 | `CI_SERVER_URL` | 显式覆盖 GitLab 实例 URL；缺省时从 git remote + glab config 推导 |
 | `CI_PROJECT_ID` | 项目 ID（优先使用，跳过自动推导） |
-| `OCR_BOT_LOGIN` | OCR bot 用户名（实例相关，如 `ai_bot001`）；空 = 不过滤 bot |
+| `OCR_BOT_LOGIN` | 已废弃（GitLab 不再按作者过滤，人类评论同样拉取） |
 | `GITLAB__PERSONAL_ACCESS_TOKEN` | GitLab PAT 认证（兜底，优先用 glab config 该 host 的 token） |
 | `GITLAB_API_TOKEN` | 旧版 token（fallback） |
 | `CI_JOB_TOKEN` | CI Job Token 认证（CI 环境） |

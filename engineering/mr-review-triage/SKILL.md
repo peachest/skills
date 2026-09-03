@@ -12,7 +12,7 @@ Platform-specific scripts and reference docs for GitLab MR and GitHub PR review 
 
 | Script | Purpose |
 | ------ | ------- |
-| `scripts/ocr-pull-discussions.py` | Pull OCR bot review comments, deduplicated |
+| `scripts/ocr-pull-discussions.py` | Pull review comments (OCR bot + human reviewers), deduplicated |
 | `scripts/ocr-post-labels.py` | Post verdict labels + resolve threads |
 | `scripts/ocr-verify-resolved.py` | Closure gate: exit 0 only when every resolvable thread is resolved |
 

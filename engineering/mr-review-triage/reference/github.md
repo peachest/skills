@@ -75,19 +75,20 @@ GitHub review comment 与 GitLab discussion 的关键差异：
 
 ### 过滤规则
 
-只保留 OCR bot 发出的 review comment：
+拉取 OCR bot 与人类评审者的 review comment（其他 bot 除外）：
 
 | 类型 | 判定条件 | 是否进入 classified | 是否需 resolve |
 | ---- | ---- | ---- | ---- |
-| Inline issue | `user.type == "Bot"`，有 `path` + `line`，body 含具体问题 | ✅ | ✅（post-labels） |
-| Fallback | `user.type == "Bot"`，body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 | ✅（post-labels） |
+| Inline issue（bot） | 作者为 `OCR_BOT_LOGIN` 配置的 bot，有 `path` + `line`，body 含具体问题 | ✅ | ✅（post-labels） |
+| Inline issue（人类） | `user.type != "Bot"`，有 `path` + `line`，body 含具体问题 | ✅ | ✅（post-labels） |
+| Fallback | body 以 `🔍 OpenCodeReview — issues` 开头 | ✅，解析子问题 | ✅（post-labels） |
 | Summary | body 以 `🔍 OpenCodeReview found` 开头 | ❌（无 finding 可分类） | ✅（verify 门捕获） |
 | LGTM | body 以 `✅ OpenCodeReview: No issues` 开头 | ❌ | ✅（verify 门捕获） |
 | Error note | body 含 `⚠️ OpenCodeReview error` | ❌ | ✅（verify 门捕获） |
 
 Summary/LGTM/Error 是 bot 状态通知，不含可分类的 finding，所以 pull 不拉取；但它们仍是 review thread，必须被 resolve。`ocr-verify-resolved.py` 是 closure gate，exit 0 才算 triage 完成。
 
-Bot 识别：GitHub Actions bot 的 login 为 `github-actions[bot]`，`type` 为 `Bot`。如使用其他 bot（如自定义 App），在环境变量 `OCR_BOT_LOGIN` 中指定。
+Bot 识别：配置的 OCR bot（`OCR_BOT_LOGIN`，默认 `github-actions[bot]`）与人类（`type != "Bot"`）的评论都拉取；其他 bot（如 `dependabot[bot]`）的状态通知被丢弃。人类 inline 评论必须拉取——closure gate 统计所有未 resolve 的 review thread，与作者无关，若 pull 只收 bot 会重现 "0 findings 但 gate 报 open" 的错位。
 
 ### Fallback note 解析
 
@@ -196,4 +197,4 @@ gh api -X POST repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments/<comment_id>/repl
 | 变量 | 用途 |
 | ---- | ---- |
 | `GITHUB_TOKEN` / `GH_TOKEN` | GitHub 认证 |
-| `OCR_BOT_LOGIN` | OCR bot 的 login（默认 `github-actions[bot]`） |
+| `OCR_BOT_LOGIN` | OCR bot 的 login（默认 `github-actions[bot]`）；人类评论始终拉取 |
