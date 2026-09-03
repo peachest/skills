@@ -92,6 +92,18 @@ def agg(rows, key, flt=None):
     }
 
 
+def load_duplicates(out_dir: Path) -> dict:
+    """Sidecar map of bvid -> reason; records matching it are annotated
+    duplicate=true (kept in the dataset, excluded from analysis)."""
+    p = out_dir / "duplicates.json"
+    if p.is_file():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="harvest fetch/transcript metrics")
     ap.add_argument("workspace", help="queue workspace dir (contains workspaces/BV*/)")
@@ -105,6 +117,7 @@ def main() -> int:
         return 2
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    dups = load_duplicates(out_dir)
 
     fetch_rows, tr_rows = [], []
     for d in sorted(ws.iterdir()):
@@ -147,6 +160,8 @@ def main() -> int:
                         speed_mb_s=round(row["audio_mb"] / dl, 2),
                     )
             row["fetched_at"] = int(st.st_mtime)
+            if bvid in dups:
+                row["duplicate"] = dups[bvid]
             fetch_rows.append(row)
 
         md = d / "faster-whisper" / "metrics.md"
@@ -170,6 +185,8 @@ def main() -> int:
                         row["asr_s"] / (row["duration_s"] / 60), 2
                     )
                 row["transcribed_at"] = int(md.stat().st_mtime)
+                if bvid in dups:
+                    row["duplicate"] = dups[bvid]
                 tr_rows.append(row)
 
     fetch_path = out_dir / "fetch-metrics.json"
@@ -183,7 +200,7 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    print(f"source={args.source}: {len(fetch_rows)} fetch, {len(tr_rows)} transcript records")
+    print(f"source={args.source}: {len(fetch_rows)} fetch, {len(tr_rows)} transcript records ({len([r for r in fetch_rows if r.get('duplicate')])} marked duplicate)")
     rel = [r for r in fetch_rows if r["reliable"]]
     s = agg(rel, "speed_mb_s")
     if s:
