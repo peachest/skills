@@ -45,13 +45,18 @@ fi
 EP="${WHISPER_ENDPOINT:-}"
 MODEL="${WHISPER_MODEL:-}"
 if [ -n "$EP" ]; then
-  resp=$(curl -s --noproxy '*' --max-time 10 "$EP/v1/models" 2>/dev/null || true)
+  # WHISPER_ENDPOINT may or may not already end in /v1 — build the models URL once
+  case "$EP" in
+    */v1) models_url="${EP%/}/models" ;;
+    *)    models_url="${EP%/}/v1/models" ;;
+  esac
+  resp=$(curl -s --noproxy '*' --max-time 10 "$models_url" 2>/dev/null || true)
   if [ -z "$resp" ]; then
     fail "ASR endpoint unreachable: $EP (service moved/restarted? probe again, check NodePort)"
   elif printf '%s' "$resp" | grep -q "\"id\":\"$MODEL\""; then
     say "PASS  ASR endpoint: $EP (model $MODEL)"
   else
-    fail "ASR endpoint alive but model '$MODEL' not listed in /v1/models"
+    fail "ASR endpoint alive but model '$MODEL' not listed in $models_url"
   fi
 fi
 
