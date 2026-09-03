@@ -47,7 +47,9 @@ glab api "projects/<PROJECT_ID>" | jq -r '.default_branch'
 |------|------|------|
 | MR 直指默认分支 | trunk-based 仓库 | 正常写 `Closes #n`，自动关闭可用 |
 | 最终同步 MR 汇总 | 阶段性 dev→默认分支 回流 | 工作分支 MR 不期待关闭；回流 MR description 汇总全部 `Closes #n` |
-| merge 后手动关闭 | 长期双分支仓库（如 HAMi：默认 `master`、工作 `dev`） | 每次 MR merge 后验证未关闭则手动 close（note 原因 + `glab issue close`） |
+| merge 后手动关闭 | 长期双分支仓库（工作分支 ≠ 默认分支，如默认 `master`、工作 `dev`） | 每次 MR merge 后验证未关闭则手动 close（note 原因 + `glab issue close`）。若已把工作分支设为默认分支则回到策略 1 |
+
+注意：修改默认分支只对**之后**创建的 MR/commit 生效，之前已合入的 closing pattern 不会追补关闭，需按「merge 后验证」手动补账。
 
 ### 项目设置例外
 
