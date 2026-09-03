@@ -11,11 +11,47 @@ Remote: `<YOUR_GITLAB_REMOTE>`
 - **列出 issue**：`glab issue list -F json`，配合 `--label` 过滤。
 - **评论 issue**：`glab issue note <number> --message "..."`。GitLab 将评论称为 "notes"。
 - **添加/移除标签**：`glab issue update <number> --label "..."` / `--unlabel "..."`。多个标签用逗号分隔或重复参数。
-- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push/merge 到默认分支后 GitLab 自动 close。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭 Map（漏写 `Closes #<map>` 或 GitLab 未触发），agent 手动 `glab issue close <map>`（先 note 记录原因）。详见 MR 约定段的「merge 后验证」。
+- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 closing pattern（`Closes #n` / `Fixes #n` / `Resolves #n` 等，全集见「自动关闭的边界」段），push/merge 到**默认分支**后 GitLab 自动 close。**仓库工作分支非默认分支时自动关闭永不触发**，此时 merge 后验证 + 手动关闭是常态而非例外（详见「自动关闭的边界」段）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitLab 未触发），agent 手动 `glab issue close <n>`（先 note 记录原因）。详见 MR 约定段的「merge 后验证」。
 - **更新 issue body**：`glab issue update <n> --description "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--description "$(cat <<'EOF'\n...\nEOF\n)"`。
 - **Merge Request**：GitLab 将 PR 称为 "merge request"。使用 `glab mr create`、`glab mr view`、`glab mr note` 等。
 
 `glab` 在仓库中运行时自动推断项目。
+
+## 自动关闭的边界（默认分支限制）
+
+GitLab 官方规则：closing pattern 引用的 issue **仅在以下两种情况自动关闭**：
+
+1. 含 closing pattern 的 **commit push 到默认分支**；
+2. 含 closing pattern 的 **commit 或 MR merge 进默认分支**。
+
+合入其他分支（如 `dev`）只产生 "mentioned in ..." 系统 note，**永不关闭** issue。
+
+### Closing pattern 全集
+
+关键词（含首字母大写/全小写两种形式）：`Close(s|d|ing)`、`Fix(es|ed|ing)`、`Resolve(s|d|ing)`、`Implement(s|ed|ing)`。
+
+引用格式：本地 `#123`、跨项目 `group/project#123`、issue 完整 URL。
+
+注意：`Related to #n`、`Part of #n` 只建立关联/mention，**不关闭** issue。
+
+### 项目初始化检查（每个仓库必做）
+
+```bash
+glab api "projects/<PROJECT_ID>" | jq -r '.default_branch'
+# 对照实际工作分支（MR target branch）
+```
+
+工作分支 ≠ 默认分支时，在 map 的 Notes 段记录这一事实，并选用以下策略之一：
+
+| 策略 | 适用 | 做法 |
+|------|------|------|
+| MR 直指默认分支 | trunk-based 仓库 | 正常写 `Closes #n`，自动关闭可用 |
+| 最终同步 MR 汇总 | 阶段性 dev→默认分支 回流 | 工作分支 MR 不期待关闭；回流 MR description 汇总全部 `Closes #n` |
+| merge 后手动关闭 | 长期双分支仓库（如 HAMi：默认 `master`、工作 `dev`） | 每次 MR merge 后验证未关闭则手动 close（note 原因 + `glab issue close`） |
+
+### 项目设置例外
+
+项目设置「Settings → Repository → Branch defaults → Auto-close referenced issues on default branch」被取消勾选时，即使在默认分支上也不自动关闭。诊断自动关闭失效时除检查分支外还需排除此项。
 
 ## 状态管理
 
@@ -79,6 +115,15 @@ glab issue list --label in-progress -F json | jq '.[].iid'
 glab issue update <n> --label status::claimed
 glab api "projects/<PROJECT_ID>/labels/in-progress" -X DELETE
 ```
+
+### 过时 ticket 清理
+
+停滞项目会遗留大量已失效的 open issue（map 停滞、目标分支从未落地、决策已废弃）。清理流程：
+
+1. **盘点**：`glab issue list -F json` 列出全部 open issue，按 map 分组，对照各 map 的 Decisions-so-far 和分支实际存在性（`glab api "projects/<PROJECT_ID>/repository/branches"`）判断哪些已停滞。
+2. **区分**：已完成但未关闭（如非默认分支 MR 合入后漏关）→ 手动关闭补账；项目停滞/废弃 → 与用户确认处置（全关、保留部分、逐个审查）。
+3. **执行**：批量 close 前先向用户确认范围和方式（是否留 note、是否打 `wontfix`）。已停滞项目至少在 map 上留一条 note 说明废弃原因，子 ticket 可直接关闭。
+4. **验证**：清理后重新 `glab issue list`，确认仅剩有效 ticket。
 
 ## CI/CD 操作 — Pipeline 与 Job 查询
 
@@ -160,8 +205,8 @@ Agent 不主动创建 MR。用户说"提交 MR"或"创建 merge request"时，�
 - **描述**：包含 Map 链接、已完成子 ticket 列表、`Closes #<map>`。
 - **命令**：`glab mr create --title "<map title>" --description "$(cat <<'EOF'\n参见 #<map>。\n\n子 ticket：\n- #<n> <title>\n- #<m> <title>\n\nCloses #<map>\nEOF\n)" --target-branch main`。
 - **确认**：创建前必须向用户展示 MR 描述并等待确认。
-- **关闭 Map**：merge 后 GitLab 根据 MR description 中的 `Closes #<map>` 自动关闭。
-- **merge 后验证**：merge 完成后，agent 必须运行 `glab api "projects/<PROJECT_ID>/issues/<map_iid>" | jq -r '.state'` 确认 Map 已 closed。若仍为 opened（MR description 漏写 `Closes #<map>` 或 GitLab 未触发自动关闭），则手动关闭：先 `glab issue note <map> --message "..."` 记录原因，再 `glab issue close <map>`。此为 `glab issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
+- **关闭 Map**：merge 后 GitLab 根据 MR description 中的 `Closes #<map>` 自动关闭（仅当 MR 目标分支为默认分支，见「自动关闭的边界」段）。
+- **merge 后验证**：merge 完成后，agent 必须对 MR description 中所有 closing pattern 引用的 issue（含 Map 和子 ticket）运行 `glab api "projects/<PROJECT_ID>/issues/<iid>" | jq -r '.state'` 确认已 closed。若仍为 opened——常见原因：仓库工作分支非默认分支（GitLab 必然不触发，见「自动关闭的边界」段）、MR description 漏写 closing pattern——则手动关闭：先 `glab issue note <n> --message "..."` 记录原因，再 `glab issue close <n>`。此为 `glab issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
 
 ## Issue 模板
 
