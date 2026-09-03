@@ -608,7 +608,7 @@
 <span class="line"><span>   │   Serving!                                         │</span></span>
 <span class="line"><span>   │                                                    │</span></span>
 <span class="line"><span>   │   - Local:            https://localhost:5000       │</span></span>
-<span class="line"><span>   │   - On Your Network:  https://INTERNAL_NODE_IP:5000   │</span></span>
+<span class="line"><span>   │   - On Your Network:  https://203.0.113.42:5000   │</span></span>
 <span class="line"><span>   │                                                    │</span></span>
 <span class="line"><span>   │   Copied local address to clipboard!               │</span></span>
 <span class="line"><span>   │                                                    │</span></span>
