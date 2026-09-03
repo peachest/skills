@@ -61,17 +61,59 @@ directory; pass `--root <PROJECT_DIR>` to run from elsewhere.
 
 ```bash
 # Survey: scan project, detect modules, generate chart skeleton
-<cmd> init [--root <PROJECT_DIR>] [--lang auto]
+<cmd> init [--root <PROJECT_DIR>] [--lang auto] [--json]
 
 # Resurvey: report drift (new / deleted / modified files since last survey)
-<cmd> check [--root <PROJECT_DIR>] [--fail-on-stale]
+<cmd> check [--root <PROJECT_DIR>] [--fail-on-stale] [--json]
 
 # Re-baseline: refresh SHA baseline after chart has been reviewed/edited
-<cmd> update [--root <PROJECT_DIR>]
+<cmd> update [--root <PROJECT_DIR>] [--json]
 
 # Coverage: show chart coverage summary
-<cmd> status [--root <PROJECT_DIR>]
+<cmd> status [--root <PROJECT_DIR>] [--json]
 ```
+
+`--json` emits one machine-readable JSON object on stdout instead of the
+human report — for CI, git hooks, and other agents. Shape:
+
+```json
+{
+  "command": "check",
+  "ok": false,
+  "summary": {"tracked": 5, "in_wiki": 5, "current": 6, "new": 1,
+               "deleted": 0, "modified": 0, "l3_drift": 0, "integrity": 2},
+  "signals": [{"code": "WIKI-NEW-FILE", "path": "src/x.go",
+               "detail": "in code, not yet in wiki"}]
+}
+```
+
+## Stable signal codes
+
+Every stale/finding carries a stable code (`WIKI-*`). Codes are a public
+contract: adding new ones is additive, renaming is a breaking change.
+
+| Code | Fires when | Signal |
+| ---- | ---------- | ------ |
+| `WIKI-NEW-FILE` | File in code, not in SHA baseline | 🟡 |
+| `WIKI-DELETED-FILE` | In baseline, gone from code | 🔴 |
+| `WIKI-MODIFIED-FILE` | SHA changed since last review | 🟠 |
+| `WIKI-L3-DRIFT` | CONTEXT.md / ADRs exist but overview.md doesn't link (or vice versa) | 🔵 |
+| `WIKI-MODULE-WIKI-MISSING` | Module has source files but no `<module>.md` registration table | 🟣 |
+| `WIKI-OVERVIEW-MODULE-MISMATCH` | overview.md module index ≠ actual module set | 🟣 |
+| `WIKI-UNREGISTERED-FILE` | Source file missing from its module's registration table | 🟣 |
+| `WIKI-ORPHAN-ENTRY` | Registration row for a file not present in code | 🟣 |
+
+The four 🟣 **wiki self-integrity** codes assert three-way consistency:
+overview module index ↔ module wiki files ↔ registration-table rows. They
+fire even when the SHA baseline itself is clean — e.g. someone hand-deleted
+a registration row or an overview module row. `update` repairs
+`WIKI-MODULE-WIKI-MISSING` (it regenerates missing module skeletons) and
+`WIKI-OVERVIEW-MODULE-MISMATCH` (it regenerates the overview); registration
+rows are filled in by the AI/human workflow, never auto-generated with
+descriptions.
+
+Exit codes (all commands): `0` = ok, `1` = drift detected with
+`--fail-on-stale` (check only), `2` = error (e.g. no wiki initialized).
 
 ## Platform Detection & CLI Routing
 
@@ -188,6 +230,7 @@ types of file drift plus L3 domain-language connectivity drift:
 | **DELETED** | File on the chart, gone from code | Remove its row from the module chart | 🔴 |
 | **MODIFIED** | SHA changed since last survey | Update description if responsibility changed; else just re-`update` | 🟠 |
 | **L3 DRIFT** | CONTEXT.md or ADRs exist but overview.md doesn't link (or vice versa) | Run `update` to re-link | 🔵 |
+| **INTEGRITY** | overview index ↔ module wikis ↔ registration tables are out of sync (see signal codes above) | `update` for skeletons/overview; hand-sync registration rows | 🟣 |
 
 ```bash
 <cmd> check --root <PROJECT_DIR>
@@ -199,7 +242,11 @@ After resolving all stale signals, re-register the baseline:
 <cmd> update --root <PROJECT_DIR>
 ```
 
-**Completion criterion**: `check` reports zero stale signals.
+**Completion criterion**: `check` reports zero stale signals — including
+the 🟣 integrity signals (zero placeholders is not enough; the three-way
+overview ↔ module wiki ↔ registration-table consistency must also hold).
+In CI or hooks, use `check --fail-on-stale --json` for a machine-readable,
+fail-closed gate.
 
 ### 4. Periodic resurvey
 
@@ -233,6 +280,28 @@ Override with `--lang <language>` or `--extensions .ext1,.ext2`.
 
 Test files, generated files (`*.pb.go`, `zz_generated_*`), vendored
 code, and build artifacts are automatically skipped.
+
+## Evidence boundary
+
+A green `check` proves only that the chart **structurally covers** the code:
+the registration tables list every tracked file, the overview index matches
+the actual module set, and the SHA baseline is current. It does **not** prove
+that any one-line description is accurate — description quality is produced
+by the fill-in workflow (step 2), not verified by this tool. A wrong or stale
+description on an unchanged file will never be flagged. Treat `check` as a
+coverage/consistency gate, not a correctness oracle.
+
+## Verify
+
+This skill carries a fail-closed test suite covering both runtimes (positive
+drift shapes, negative fail-closed shapes, and Python↔Node JSON parity):
+
+```bash
+cd <SKILL_DIR> && uv run pytest
+```
+
+Run it after modifying `scripts/wiki.py` or `scripts/wiki.js`. When touching
+one runtime, keep the other in lockstep — the parity tests enforce it.
 
 ## Domain language
 
