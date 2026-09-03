@@ -1,3 +1,6 @@
 # Machine-specific runtime detection (auto-generated at install).
 # See runtime.conf.example for the template.
 runtime.conf
+
+# Test suite virtualenv (uv run pytest)
+.venv/
