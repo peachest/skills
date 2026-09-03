@@ -57,6 +57,8 @@ metadata:
 - 首次调用某 MCP 工具前，或不确定参数时，先读取对应工具 descriptor/schema；本文参数只是快速参考，实际以 schema 为准。
 - 创建订单可能生成真实支付二维码，回复只保留必要的订单和支付信息。
 
+**环境自检**: `bash scripts/check-env.sh` — verify runtime assumptions (run on a new node)
+
 ## MCP 调用模式
 
 优先调用当前智能体已配置的 `my-coffee` MCP 工具。若当前智能体没有配置 MCP server，但可拿到有效 token（环境变量 / 用户在对话中提供 / 本地文件 `~/.my-coffee/LUCKIN_MCP_TOKEN`），使用 `curl` 调用 MCP HTTP 接口。
