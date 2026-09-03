@@ -83,3 +83,44 @@ OUT=$(python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
   --json | python3 -c "import sys,json; print(json.load(sys.stdin)['raw_path'])") && \
 bash <SKILL_DIR>/scripts/transcribe.sh "$OUT"
 ```
+
+## Environment Check
+
+`runtime.conf` is the runtime record: the ASR endpoint, model, and language the
+pipeline assumes. Assumptions rot when the service moves, the pod restarts, or
+you switch dev nodes. Validate them before a long batch — or whenever a
+transcription run surprises you:
+
+```bash
+bash <SKILL_DIR>/scripts/check-env.sh
+```
+
+PASS/WARN lines are informational; any FAIL exits 1. It probes: runtime.conf
+values, aria2c/ffmpeg/python3 (with requests+numpy), the ASR endpoint via
+`/v1/models` (model id included), bilibili.com reachability (direct, then
+proxy), and the `bili` CLI credential (enumeration only).
+
+## Batch Mode
+
+Transcribing a whole channel: enumerate the uploader's videos into a manifest,
+filter it to taste, then run the resumable queue.
+
+```bash
+# 1. Enumerate (credential REQUIRED — anonymous space-API calls hit 412)
+~/.local/share/uv/tools/bilibili-cli/bin/python <SKILL_DIR>/scripts/enumerate-uploader.py \
+  --bv BV1iz4R6EEFk --out ~/research/<topic>/manifest.json
+#    (or --mid <mid> directly)
+
+# 2. Filter the manifest (jq / python) — drop vlogs, keep the teaching videos
+
+# 3. Queue (resumable: existing transcripts auto-skip, failures recorded
+#    in <workspace>/status.jsonl, ascending duration so short videos land first)
+mkdir -p ~/research/<topic> && cd ~/research/<topic>
+bash <SKILL_DIR>/scripts/run-queue.sh "$PWD" manifest.json
+```
+
+The queue needs a python with requests+numpy prepended to PATH (see
+Environment Check). Two non-obvious rules baked into the script: loop children
+never inherit stdin (a downloader once ate bytes from the redirected input and
+truncated every following BV id), and WAV intermediates are deleted after each
+success while the source audio and metrics are kept.

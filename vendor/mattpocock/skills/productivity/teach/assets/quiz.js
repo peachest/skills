@@ -8,10 +8,17 @@
  *          "question": "Question text?",
  *          "options": ["A", "B", "C", "D"],
  *          "correct": 1,
- *          "explanation": "Why B is correct."
+ *          "explanation": "Why B is correct.",
+ *          "misconceptions": ["Picking A means X is confused with Y.", null, "Picking C means ...", "Picking D means ..."]
  *        }
  *      ]'>
  * </div>
+ *
+ * `misconceptions` (optional) is a parallel array to `options`: entry i
+ * names the misconception that choosing option i exposes. On a wrong
+ * answer, the feedback shows the diagnosis for the chosen option, so the
+ * wrong pick teaches what to fix instead of just "incorrect". Use null for
+ * options that carry no specific diagnosis.
  *
  * Include in <head> or end of <body>:
  *   <script src="../assets/quiz.js" defer></script>
@@ -98,6 +105,10 @@
 
       var inputs = qDiv.querySelectorAll('input[type="radio"]');
       var isCorrect = oi === q.correct;
+      var diagnosis =
+        !isCorrect && q.misconceptions && q.misconceptions[oi]
+          ? " 你的选择暴露的误解：" + q.misconceptions[oi] + "。"
+          : "";
 
       inputs.forEach(function (input, idx) {
         input.disabled = true;
@@ -125,7 +136,8 @@
           "✗ 不对。正确答案是 " +
           String.fromCharCode(65 + q.correct) +
           "。" +
-          (q.explanation || "");
+          (q.explanation || "") +
+          diagnosis;
       }
 
       // Update score if all answered
