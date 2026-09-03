@@ -30,9 +30,9 @@ class TestParsePipelineUrl(unittest.TestCase):
     """URL parsing seam: pipeline URL → (host, encoded_project, pipeline_id)."""
 
     def test_standard_url(self):
-        url = "https://internal.example.com/llm/llmops/hami/ppu-device-plugin/-/pipelines/1326695"
+        url = "https://gitlab.blue.example/llm/llmops/hami/ppu-device-plugin/-/pipelines/1326695"
         host, project, pid = parse_pipeline_url(url)
-        self.assertEqual(host, "internal.example.com")
+        self.assertEqual(host, "gitlab.blue.example")
         self.assertEqual(project, "llm%2Fllmops%2Fhami%2Fppu-device-plugin")
         self.assertEqual(pid, "1326695")
 

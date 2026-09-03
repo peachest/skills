@@ -4,13 +4,13 @@ GitLab 平台的具体命令、API 端点和数据格式。
 
 ## 平台检测
 
-远程地址含 `gitlab.com` 或自建 GitLab 实例（如 `internal.example.com`、`internal.example.com`）时判定为 GitLab。
+远程地址含 `gitlab.com` 或自建 GitLab 实例（如 `gitlab.blue.example`、`gitlab.red.example`）时判定为 GitLab。
 
 ```bash
 git remote get-url origin
 # git@gitlab.com:ns/proj.git              → GitLab
-# git@internal.example.com:ns/proj.git    → GitLab (self-hosted)
-# http://internal.example.com/ns/proj.git  → GitLab (self-hosted)
+# git@gitlab.blue.example:ns/proj.git    → GitLab (self-hosted)
+# http://gitlab.red.example/ns/proj.git  → GitLab (self-hosted)
 ```
 
 GitLab 实例（host）、协议（http/https）、token 均由脚本自动从 `git remote get-url origin` + glab config 推导，无需手动设置环境变量。
@@ -25,7 +25,7 @@ glab auth status   # 检查已配置的实例和认证状态
 
 ## 多实例认证（重要）
 
-同一台机器可能配置多个 GitLab 实例（如 `gitlab.com`、`internal.example.com`、`internal.example.com`）。脚本按以下优先级解析实例上下文：
+同一台机器可能配置多个 GitLab 实例（如 `gitlab.com`、`gitlab.blue.example`、`gitlab.red.example`）。脚本按以下优先级解析实例上下文：
 
 1. `CI_SERVER_URL` 环境变量（显式覆盖）
 2. `git remote get-url origin` 的 host + glab config `hosts.<host>`（token、api_protocol、api_host）
@@ -44,7 +44,7 @@ OCR bot 登录名是实例相关的（如 `gitblue.bot` 或 `ai_bot001`）。
 MR ID 未给时从分支名推导（注意用 `-R`，不是 `--hostname`）：
 
 ```bash
-glab mr list -R https://internal.example.com/<group>/<project> \
+glab mr list -R https://gitlab.red.example/<group>/<project> \
   --source-branch="$(git rev-parse --abbrev-ref HEAD)" -F json | jq '.[0].iid'
 ```
 
@@ -129,7 +129,7 @@ GitLab 将 resolved 状态存储在 discussion 的第一个 note 上（`notes[0]
 脚本内部用 `curl` 分页。不完整时回退到 `glab api`（注意 `--hostname`）：
 
 ```bash
-glab api --hostname internal.example.com \
+glab api --hostname gitlab.red.example \
   /projects/:id/merge_requests/<MR_ID>/discussions?per_page=100&page=1
 ```
 
@@ -148,7 +148,7 @@ cat .triage/<MR_ID>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-label
 脚本失败时逐条回退（`glab mr` 子命令用 `-R` 指定实例，不是 `--hostname`）：
 
 ```bash
-glab mr note create -R https://internal.example.com/<group>/<project> \
+glab mr note create -R https://gitlab.red.example/<group>/<project> \
   <MR_ID> --reply <discussion_id_prefix> -m "..."
 ```
 
@@ -157,7 +157,7 @@ glab mr note create -R https://internal.example.com/<group>/<project> \
 ### Resolve discussion
 
 ```bash
-glab api --hostname internal.example.com \
+glab api --hostname gitlab.red.example \
   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
 ```
@@ -175,11 +175,11 @@ python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <MR_IID>
 
 ```bash
 # 1) 回复
-glab api --hostname internal.example.com \
+glab api --hostname gitlab.red.example \
   -X POST "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes" \
   -f "body=✅ 已修复（commit <hash>）：..."
 # 2) resolve
-glab api --hostname internal.example.com \
+glab api --hostname gitlab.red.example \
   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
 ```

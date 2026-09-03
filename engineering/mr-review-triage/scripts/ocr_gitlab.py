@@ -7,7 +7,7 @@ and retry with jitter + Retry-After support on transient failures.
 Multi-instance aware: the GitLab host is derived from `git remote get-url origin`
 (not hardcoded), the token is read from glab config for that host, and the `glab`
 fallback passes `--hostname <host>` so self-hosted instances resolve correctly
-(e.g. `internal.example.com` alongside `internal.example.com`).
+(e.g. `gitlab.red.example` alongside `gitlab.blue.example`).
 """
 
 import json
@@ -40,10 +40,10 @@ def _parse_host(url):
     """Derive (host, scheme) from a git remote or API URL.
 
     Handles:
-      https://internal.example.com/ns/proj.git          -> ('internal.example.com', 'https')
-      http://internal.example.com/ns/proj.git           -> ('internal.example.com', 'http')
-      git@internal.example.com:ns/proj.git              -> ('internal.example.com', None)
-      ssh://git@internal.example.com:10022/ns/proj.git  -> ('internal.example.com', None)
+      https://gitlab.red.example/ns/proj.git          -> ('gitlab.red.example', 'https')
+      http://gitlab.red.example/ns/proj.git           -> ('gitlab.red.example', 'http')
+      git@gitlab.red.example:ns/proj.git              -> ('gitlab.red.example', None)
+      ssh://git@gitlab.red.example:10022/ns/proj.git  -> ('gitlab.red.example', None)
 
     The ssh port is dropped (the API host never carries the ssh port); the
     scheme is None for ssh remotes and is filled from glab config later.

@@ -30,7 +30,7 @@ GitLab and GitHub are both supported. The platform is auto-detected from `git re
 Override with `OCR_PLATFORM=gitlab|github` env var.
 
 The GitLab host, scheme (http/https), and token are derived automatically from the
-git remote + glab config, so self-hosted instances (e.g. `internal.example.com`)
+git remote + glab config, so self-hosted instances (e.g. `gitlab.red.example`)
 work without extra env vars. The OCR bot login is instance-specific — set
 `OCR_BOT_LOGIN` when the bot isn't `gitblue.bot` (see the GitLab reference).
 
