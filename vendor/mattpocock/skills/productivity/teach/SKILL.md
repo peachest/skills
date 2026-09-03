@@ -87,13 +87,27 @@ A lesson is the main thing you produce — the unit in which knowledge and skill
 
 A lesson should be **beautiful** — clean, readable typography and layout — since the user will return to these later to review. Think Tufte. Build from the shared ` base.css ` components and tokens; an inline `<style>` block is for one-off component styling only, and every font-size, spacing, and line-height in it references a token via ` var() ` (see [CSS Self-Check](#css-self-check)).
 
+The prose must read as the user's teacher, not as generated filler. After drafting a lesson, run the de-slop pass ([Prose Self-Check](#prose-self-check)) and fix every adjudicated tell before delivery — formulaic transitions and summary padding are defects in a lesson, not style choices.
+
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development — grounded in `UNDERSTANDING-MAP.md`, not guessed.
 
-Each lesson should link via HTML anchors to other lessons and reference documents.
+Each lesson links via HTML anchors to other lessons and reference documents. Navigation is a chain: each lesson ends with a next link to the following lesson and (after the first) a back link to the previous one. Delivering lesson N includes updating lesson N−1's next link to point at N — the delivery is finished only when the chain is unbroken ([Navigation Self-Check](#navigation-self-check)).
 
 Each lesson should recommend a primary source for the user to read or watch. This should be the most high-quality, high-trust resource you found on the topic.
 
 Each lesson should contain a reminder to ask followup questions to the agent. The agent is their teacher, and can assist with anything that's unclear.
+
+### Retrieval rhythm
+
+A lesson's practice section is a three-stage ladder, each stage a stronger form of retrieval than the last:
+
+1. **Socratic recall** — free-recall questions via the `socratic.js` component (question → hidden hint → reference answer). The learner answers from memory before seeing anything; this effortful retrieval is what builds storage strength. The hint points to source clues (an OKB note, a diagram already shown above); the reference answer resolves the question outright — a hint that just poses another vague question is a defect. One or two questions suffice.
+2. **Quiz** — recognition check via the `quiz.js` component. Distractors are plausible misunderstandings of the same concept, each tagged with the misconception it exposes (the `misconceptions` field). A wrong answer is diagnostic: write the exposed misconception into the session log so the next Probe starts from it.
+3. **Quest** — a practice task with an observable outcome (an artifact, a comparison, a decision with criteria, an inspection of a real project). If the task produces nothing inspectable, it is not a quest — restate it until it does.
+
+### Provenance in presentation
+
+The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains".
 
 ## Assets
 
@@ -147,7 +161,7 @@ For skill acquisition, difficulty is the tool. Effortful retrieval is what build
 
 Each of these should be based on a **feedback loop**, where the user receives feedback on their performance. This feedback loop should be as tight as possible, giving feedback immediately - and ideally automatically.
 
-For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting.
+For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting. Distractors are plausible misunderstandings of the same concept, not absurd throwaways — tag each with the misconception it exposes (`misconceptions` in `quiz.js`) so a wrong pick diagnoses what to re-teach.
 
 ## Fact-Checking
 
@@ -156,7 +170,7 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). The three are orthogonal — a lesson with diagrams runs all three; a plain lesson runs fact-check and CSS self-check.
+Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams runs all five; a plain lesson runs fact-check, CSS self-check, navigation self-check, and de-slop.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
 
@@ -171,6 +185,33 @@ python3 ./assets/css-self-check.py lessons/0001-your-lesson.html
 ```
 
 The script scans inline `<style>` blocks and ` style="" ` attributes for bare absolute literals (` px `/` rem `/` pt `/bare numbers) in ` font-size `/` padding `/` margin `/` line-height `. Relative ` em `/` % ` values pass (outside the token system). **Zero violations** is the completion criterion — fix each by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.).
+
+## Navigation Self-Check
+
+After adding, renumbering, or renaming any lesson, run this mechanical check before the learner sees the workspace. It catches the recurring delivery failure: shipping lesson N while lesson N−1's ending link still points at nothing, or at the wrong lesson.
+
+Run from the workspace root:
+
+```bash
+python3 ./assets/nav-chain-check.py lessons/
+```
+
+The script orders `lessons/*.html` by leading number and verifies each lesson links to both neighbours — the first lesson needs no back link, the last needs no next link. **Zero missing links** is the completion criterion; fix by updating the neighbour's navigation block, never by deleting a link.
+
+## Prose Self-Check
+
+After drafting or editing a lesson, de-slop the prose before the learner sees it — the lesson is the user's teacher's voice, and generated filler reads as a defect.
+
+- **English prose**: run the `unslop` skill; its banned-phrase scanner covers English.
+- **Chinese prose**: the unslop scanner declines non-English input. Run the flag-only frequency audit instead:
+
+```bash
+python3 ./assets/prose-freq-check.py lessons/0001-your-lesson.html
+```
+
+The script extracts visible text (style/script/svg stripped) and reports stylistic tics: `恰好` (>5), `永远` (>2), `不多不少` / `同一件事` / `都只是` (any occurrence), and `——` density (>25 per 100 prose lines, calibrated on a real before/after de-slop pair). A flag is a prompt to adjudicate in context, never authorization to edit: load-bearing uses stay (mathematical `恰好` = exactness, safety-rule `永远`), decorative uses get minimal fixes — never rewrite the paragraph. Structural tells the scanner cannot see, check by reading: self-congratulatory callout titles ("漂亮在哪：…"), "X、Y、Z——同一件事" codas, "后面的一切都只是" scaffolding, triplet parallels whose tail items are consequences rather than peers, and subtitles that restate the opening thesis.
+
+Completion criterion: **every flag adjudicated** (kept with reason, or fixed) — not zero flags. Formulas, numbers, citations, KaTeX, and visualizations stay untouched; keep the change rate to a few percent with zero words added (unslop's `diff_check`).
 
 ## Visualization Self-Check
 
