@@ -18,6 +18,10 @@
 
 A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present (`uv run pytest` from the skill directory). A green run is the completion criterion for the change; a skill with no tests is exempt.
 
+## 运行时与环境（脚本型 skill）
+
+Script-dependent skills MUST follow the runtime/environment conventions: `runtime.conf(.example)` dotenv pattern, `scripts/check-env.sh` self-check for heavy external deps, no internal endpoints or secrets in tracked files (the repo is public). Environment migration starts with `bash scripts/check-all-env.sh`. Full spec: `docs/agents/skill-authoring.md`.
+
 ## Agent skills
 
 ### Issue tracker
