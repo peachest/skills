@@ -113,10 +113,16 @@ filter it to taste, then run the resumable queue.
 
 # 2. Filter the manifest (jq / python) — drop vlogs, keep the teaching videos
 
-# 3. Queue (resumable: existing transcripts auto-skip, failures recorded
-#    in <workspace>/status.jsonl, ascending duration so short videos land first)
+# 3. Queue — pipeline version (RECOMMENDED): fetch and ASR run as independent
+#    worker pools connected by queues/ (pending → ready → done); downloads of
+#    upcoming videos overlap ASR of the current one, crash-safe via atomic
+#    rename claims + startup requeue, resumable, same status.jsonl schema.
 mkdir -p ~/research/<topic> && cd ~/research/<topic>
-bash <SKILL_DIR>/scripts/run-queue.sh "$PWD" manifest.json
+python3 <SKILL_DIR>/scripts/pipeline-queue.py "$PWD" manifest.json \
+  --fetch-workers 2 --asr-workers 1
+
+#    Serial fallback (simpler, no pipelining):
+#    bash <SKILL_DIR>/scripts/run-queue.sh "$PWD" manifest.json
 ```
 
 The queue needs a python with requests+numpy prepended to PATH (see
