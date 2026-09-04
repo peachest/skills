@@ -20,7 +20,7 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 
 ## 运行时与环境（脚本型 skill）
 
-Script-dependent skills MUST follow the runtime/environment conventions: `runtime.conf(.example)` dotenv pattern, `scripts/check-env.sh` self-check for heavy external deps, no internal endpoints or secrets in tracked files (the repo is public). Environment migration starts with `bash scripts/check-all-env.sh`. Full spec: `docs/agents/skill-authoring.md`.
+Script skill 的 runtime/环境约定（runtime.conf 模式、check-env.sh、敏感数据规则）全在 `docs/agents/skill-authoring.md`：创建或改造 script skill、把 skill 移出 in-progress、或提交任何含 endpoint/域名/配置的文件前必读（本仓库为 public）。换节点第一步：`bash scripts/check-all-env.sh`。
 
 ## Agent skills
 
