@@ -89,7 +89,9 @@ def main() -> int:
     # 4. checkpoints
     n_check = len(CHECK_PAT.findall(prose))
     if n_check == 0:
-        findings.append("checkpoint: 全文无读者检查点（停下来/想一想/你能）——单向灌输的信号")
+        findings.append("checkpoint: 全文无读者检查点（停下来/想一想/你能）——单向灌输的信号；"
+                        "交互式教学（lesson 为会话锚点、检查点在 session 层）时结合 session 记录裁决，"
+                        "session 内有检验题/追问/复述验证则此项保留不修")
     elif total / max(n_check, 1) > 4000:
         findings.append(f"checkpoint: 平均每 {total // max(n_check, 1)} 字才一个检查点——节拍过长（人类教学 1-3 分钟一拍）")
 
