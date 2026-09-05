@@ -182,6 +182,11 @@ if [ "$NEEDS_CHUNK" -eq 0 ]; then
     exit 1
   fi
   echo "$TEXT" > "$RAW_TEXT_PATH"
+  # preserve the full verbose_json (per-segment timestamps) alongside the
+  # text — downstream dual-transcribe.py harvests segments from here; direct
+  # mode must stay layout-compatible with chunked mode
+  mkdir -p "${OUT_DIR}/chunks/transcripts"
+  echo "$RESPONSE" > "${OUT_DIR}/chunks/transcripts/direct.json"
 fi
 
 T3=$(date +%s%N)

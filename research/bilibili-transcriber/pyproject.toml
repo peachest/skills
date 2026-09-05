@@ -1,0 +1,13 @@
+[project]
+name = "bilibili-transcriber"
+version = "0.1.0"
+description = "Bilibili video → cleaned Chinese transcripts (ASR + LLM cleanup + bilingual dual-pass reconciliation)"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.9",   # clean-transcripts.py / dual-transcribe.py LLM stage
+    "numpy",           # chunk_transcribe.py silence-aware chunking
+    "requests",        # enumerate-uploader.py / API calls
+]
+
+[dependency-groups]
+dev = ["pytest"]
