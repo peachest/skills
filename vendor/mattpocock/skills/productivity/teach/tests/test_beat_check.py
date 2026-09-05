@@ -66,3 +66,35 @@ def test_definition_first_flagged(tmp_path):
 def test_short_prose_skipped(tmp_path):
     rc, out = run(tmp_path, "<p>太短</p>")
     assert rc == 0 and "SKIP" in out
+
+
+def test_reference_mode_skips_hook_and_checkpoint(tmp_path):
+    # glossary-style doc: no hook, no checkpoint — flag as findings when run
+    # as a lesson, clean when auto-detected as reference/ by path
+    glossary = """
+<h2>KV cache 术语速查</h2>
+<p>KV cache：推理时缓存的 Key/Value 张量。公式 \\(C = 2nd s\\)。</p>
+<p>PagedAttention：把连续显存分页管理的策略，解决显存碎片问题，例如 16MB 页粒度。</p>
+<p>GQA：多组共享头，压缩 KV 的头维度。它可以与量化叠加使用。它的收益在长序列最明显。</p>
+"""
+    ref_dir = tmp_path / "reference"
+    ref_dir.mkdir()
+    f = ref_dir / "glossary.html"
+    f.write_text(f"<html><body>{glossary}</body></html>", encoding="utf-8")
+    import subprocess
+    r = subprocess.run([sys.executable, str(SCRIPT), str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout  # reference/ auto-detect: no findings
+    assert "hook" not in r.stdout and "checkpoint" not in r.stdout
+
+    # explicit --reference on a non-reference path also skips both
+    f2 = tmp_path / "lesson.html"
+    f2.write_text(f"<html><body>{glossary}</body></html>", encoding="utf-8")
+    r2 = subprocess.run([sys.executable, str(SCRIPT), str(f2), "--reference"], capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stdout
+
+
+def test_wider_checkpoint_vocabulary(tmp_path):
+    # "你猜为什么" missed by the original pattern (sglang-pp friction)
+    body = GOOD.replace("让我们停下来想一想：", "你猜为什么这样？让我们")
+    rc, out = run(tmp_path, body)
+    assert rc == 0, out

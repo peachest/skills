@@ -35,7 +35,9 @@ FORMAL_PAT = re.compile(r"\\begin\{|\\frac|\\sum|定义如下|形式化地|我�
 # concrete markers
 CONCRETE_PAT = re.compile(r"[0-9]+\.[0-9]+|例如|比如|假设.{0,12}(MB|秒|条|次|个)|worked example|let's say", re.I)
 # checkpoint markers
-CHECK_PAT = re.compile(r"停下来|想一想|你能|试着|自己试|pause and|check yourself|你会怎么", re.I)
+# checkpoint markers — question-shaped reader prompts; wide on purpose
+# (你猜/猜一猜 added from sglang-pp friction: first-draft "你猜为什么" missed)
+CHECK_PAT = re.compile(r"停下来|想一想|你能|试着|自己试|你会怎么|你猜|猜一猜|pause and|check yourself|guess", re.I)
 # callback markers in the last 25%
 CALLBACK_PAT = re.compile(r"回到开头|回到最初|现在你能|回顾.{0,10}钩子|现在可以解释|还记得.{0,30}吗|回到.{0,12}问题|revisit|back to", re.I)
 
@@ -53,10 +55,18 @@ def katex_text(html: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: beat-check.py <lesson.html>")
+    # reference/ documents (glossaries, cheat sheets) are consulted, not
+    # taught — hook and checkpoint beats don't apply. Auto-detect by path,
+    # or force with --reference. (sglang-pp friction: a glossary opening
+    # with a hook would be wrong; adjudicating that away every run is a
+    # human memory tax.)
+    args = [a for a in sys.argv[1:] if a != "--reference"]
+    is_ref = ("--reference" in sys.argv
+              or any(p in ("reference", "references") for p in Path(args[0]).parts)) if args else "--reference" in sys.argv
+    if len(args) != 1:
+        print("usage: beat-check.py <lesson.html> [--reference]")
         return 2
-    html = Path(sys.argv[1]).read_text(encoding="utf-8")
+    html = Path(args[0]).read_text(encoding="utf-8")
     prose = visible_text(html)
     formal = katex_text(html) + " " + prose
     total = len(prose)
@@ -66,10 +76,13 @@ def main() -> int:
 
     findings = []
 
-    # 1. hook: question-shaped tension in the first 15%
-    head = prose[: max(200, int(total * 0.15))]
-    if not HOOK_PAT.search(head):
-        findings.append("hook: 开头 15% 内未见问题式张力（？/为什么/imagine）——先定义后动机的典型信号")
+    # 1. hook: question-shaped tension in the first 15% (lessons only —
+    # reference docs are exempt: a glossary with an opening hook would be
+    # wrong, not missing one)
+    if not is_ref:
+        head = prose[: max(200, int(total * 0.15))]
+        if not HOOK_PAT.search(head):
+            findings.append("hook: 开头 15% 内未见问题式张力（？/为什么/imagine）——先定义后动机的典型信号")
 
     # 2/5. callback: closing ~30% (at least the last 400 chars) references
     # the opening or an early entity
@@ -86,17 +99,19 @@ def main() -> int:
         if not CONCRETE_PAT.search(pre):
             findings.append("concrete-first: 首个公式/定义前无具体材料（数值/例如/假设实例）——抽象先行的信号")
 
-    # 4. checkpoints
-    n_check = len(CHECK_PAT.findall(prose))
-    if n_check == 0:
-        findings.append("checkpoint: 全文无读者检查点（停下来/想一想/你能）——单向灌输的信号；"
-                        "交互式教学（lesson 为会话锚点、检查点在 session 层）时结合 session 记录裁决，"
-                        "session 内有检验题/追问/复述验证则此项保留不修")
-    elif total / max(n_check, 1) > 4000:
-        findings.append(f"checkpoint: 平均每 {total // max(n_check, 1)} 字才一个检查点——节拍过长（人类教学 1-3 分钟一拍）")
+    # 4. checkpoints (lessons only — reference docs are lookup material;
+    # a glossary pausing to ask the reader a question would be noise)
+    if not is_ref:
+        n_check = len(CHECK_PAT.findall(prose))
+        if n_check == 0:
+            findings.append("checkpoint: 全文无读者检查点（停下来/想一想/你能/你猜）——单向灌输的信号；"
+                            "交互式教学（lesson 为会话锚点、检查点在 session 层）时结合 session 记录裁决，"
+                            "session 内有检验题/追问/复述验证则此项保留不修")
+        elif total / max(n_check, 1) > 4000:
+            findings.append(f"checkpoint: 平均每 {total // max(n_check, 1)} 字才一个检查点——节拍过长（人类教学 1-3 分钟一拍）")
 
     if findings:
-        print(f"BEAT CHECK: {len(findings)} finding(s) in {Path(sys.argv[1]).name}")
+        print(f"BEAT CHECK: {len(findings)} finding(s) in {Path(args[0]).name}")
         for f in findings:
             print(f"  - {f}")
         print("每条 finding 需就地裁决（保留有理由，或修复），不是零 finding 才交付")
