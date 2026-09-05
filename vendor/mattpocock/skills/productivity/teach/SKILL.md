@@ -213,6 +213,28 @@ The script extracts visible text (style/script/svg stripped) and reports stylist
 
 Completion criterion: **every flag adjudicated** (kept with reason, or fixed) — not zero flags. Formulas, numbers, citations, KaTeX, and visualizations stay untouched; keep the change rate to a few percent with zero words added (unslop's `diff_check`).
 
+## Cognitive Progression Self-Check
+
+After drafting a lesson, check its cognitive shape before the learner sees it. Distilled from 52 human master-lesson skeletons (3Blue1Brown, Welch Labs, 漫士沉思录, Missing Semester, Art of the Problem — full data: `COGNITIVE-PROGRESSION-GUIDE.md` in the academy shared assets): generated lessons default to "one concept per big section, definition first, examples used once, no return to the hook" — the exact inverse of how humans teach.
+
+Structural half (mechanical):
+
+```bash
+python3 ./assets/beat-check.py lessons/0001-your-lesson.html
+```
+
+It checks five invariants: question-shaped hook in the opening 15%, a callback in the closing 25% (the opening hook or an early example revisited), concrete material before the first formula/definition, at least one reader checkpoint, and checkpoint density (one per ~4000 chars — human lessons beat every 1–3 minutes). A finding is a prompt to adjudicate, never authorization to edit.
+
+Judgment half (read and decide — the script cannot see these):
+
+- **Naming lags the phenomenon**: ≥2 concrete instances before a term is introduced; never "定义→例子" order.
+- **Concrete:abstract parity**: roughly one concrete beat per abstraction, throughout — not "theory first, examples later".
+- **Every abstraction re-explains an old example** — the callback is not a summary but a second pass with new vocabulary (认知成本近乎为零的第二遍).
+- **Abstraction ladder rises within the lesson**: early formalizations are light (names, roadmaps); heavy formalization waits for the middle.
+- **A cliffhanger or open thread ends the lesson** where a next lesson exists (旧答案变新问题 — the next lesson's opening question should already be planted).
+
+Completion criterion: mechanical findings all adjudicated AND each judgment criterion answered yes-or-why-not for the lesson at hand.
+
 ## Visualization Self-Check
 
 Lessons containing structural diagrams (`.drawio` — architecture, dependency graphs, data flow, sequence diagrams) must pass the `drawio-skill` self-check before the learner sees them:
