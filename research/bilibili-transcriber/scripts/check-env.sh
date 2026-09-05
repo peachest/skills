@@ -32,12 +32,15 @@ for tool in aria2c ffmpeg python3; do
     || fail "$tool not on PATH"
 done
 
-# 3. python deps (requests for fetch.py, numpy for chunk_transcribe.py)
+# 3. python deps (requests+numpy for fetch/chunking, aiohttp for LLM stages).
+#    Canonical env: the skill's own venv via `uv sync` (pyproject.toml).
 if command -v python3 > /dev/null 2>&1; then
-  if python3 -c "import requests, numpy" 2>/dev/null; then
-    say "PASS  python3 deps: requests+numpy"
+  if python3 -c "import requests, numpy, aiohttp" 2>/dev/null; then
+    say "PASS  python3 deps: requests+numpy+aiohttp ($(command -v python3))"
+  elif [ -x "$SKILL_DIR/.venv/bin/python" ]; then
+    fail "python3 on PATH lacks deps — run scripts via 'cd $SKILL_DIR && uv run ...' (or: uv sync)"
   else
-    fail "python3 lacks requests/numpy — prepend a venv that has them to PATH"
+    fail "python3 lacks requests/numpy/aiohttp — cd $SKILL_DIR && uv sync, then use 'uv run'"
   fi
 fi
 
@@ -58,6 +61,26 @@ if [ -n "$EP" ]; then
   else
     fail "ASR endpoint alive but model '$MODEL' not listed in $models_url"
   fi
+fi
+
+# 4b. LLM cleanup endpoint alive + model present (Step 3 dependency)
+LEP="${CLEAN_LLM_BASEURL:-}"
+LMODEL="${CLEAN_LLM_MODEL:-}"
+if [ -n "$LEP" ]; then
+  case "$LEP" in
+    */v1) lmodels_url="${LEP%/}/models" ;;
+    *)    lmodels_url="${LEP%/}/v1/models" ;;
+  esac
+  lresp=$(curl -s --noproxy '*' --max-time 10 -H "Authorization: Bearer ${CLEAN_LLM_KEY:-}" "$lmodels_url" 2>/dev/null || true)
+  if [ -z "$lresp" ]; then
+    fail "LLM endpoint unreachable: $LEP (clean/dual-transcribe need it)"
+  elif printf '%s' "$lresp" | grep -q "\"id\":\"$LMODEL\""; then
+    say "PASS  LLM endpoint: $LEP (model $LMODEL)"
+  else
+    fail "LLM endpoint alive but model '$LMODEL' not listed in $lmodels_url"
+  fi
+else
+  say "WARN  CLEAN_LLM_BASEURL unset — Step 3 (clean/dual) unavailable"
 fi
 
 # 5. bilibili reachability (direct first, then via proxy env)
