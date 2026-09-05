@@ -235,6 +235,8 @@ Judgment half (read and decide — the script cannot see these):
 
 Completion criterion: mechanical findings all adjudicated AND each judgment criterion answered yes-or-why-not for the lesson at hand.
 
+**Interactive-teaching exemption**: in lesson+session double-layer courses (the lesson file is an anchor for a live session), the checkpoint finding carries its own exemption path — adjudicate against the session log: if the session held quiz prompts, learner follow-ups, or recall verification, the finding is kept-with-reason and the lesson text is NOT edited. The other four checks apply unchanged (they inspect the written artifact, which the learner revisits alone).
+
 ## Visualization Self-Check
 
 Lessons containing structural diagrams (`.drawio` — architecture, dependency graphs, data flow, sequence diagrams) must pass the `drawio-skill` self-check before the learner sees them:
