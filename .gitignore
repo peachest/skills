@@ -18,3 +18,7 @@ runtime.conf
 # teach skill python tooling (generated)
 vendor/mattpocock/skills/productivity/teach/uv.lock
 vendor/mattpocock/skills/productivity/teach/.venv/
+.venv/
+# transcriber run artifacts
+**/clean-failures.json
+**/dual-failures.json
