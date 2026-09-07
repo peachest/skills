@@ -2,13 +2,20 @@
 
 ## Navigation Metaphor
 
-The shared metaphor system spanning orient, wayfinder, review-spec, project-wiki, and hail. Every skill name is itself a navigation action: survey → orient → wayfind → inspect → traverse → hail.
+The shared metaphor system spanning orient, to-intent, wayfinder, review-spec, project-wiki, and hail. The navigation actions: survey → orient → fix the compass (to-intent) → wayfind → inspect → traverse → hail.
 
 - **Terrain**: The project's current state — code, tests, docs, decisions, conventions. What orient reads and what wayfinder navigates through.
 _Avoid_: codebase (too generic), project state
 
 - **Compass**: The requirement — it points the direction but is not the map. Can be wrong about the terrain.
 _Avoid_: spec, requirement (use when discussing the metaphor)
+
+- **Intent map**: INTENT.md at the repo root — the compass made durable plus the route skeleton: what is being built, for whom, and what done means, as releases of stories. Two maps, two altitudes: the intent map indexes **stories** (what to build); a wayfinder map indexes **decisions** (what to settle before building).
+_Avoid_: product spec, roadmap, PRD
+- **Story**: One capability from the user's point of view on the intent map — a stable id, priority, effort, and *Done when* criteria that are single verifiable statements. The unit of work: picked up, implemented, and reported on by id. Completed stories drop off the map, which keeps it a record of the route ahead, not the route walked.
+_Avoid_: feature, ticket (a ticket is a slice of work cut to deliver a story)
+- **Fog check**: The to-intent test for story sharpness — a *Done when* that cannot be stated as a single verifiable statement means the how is still undecided. The story is fog, not a story: park it in a later release, or hand its release to wayfinder and let decisions clear the fog first.
+_Avoid_: feasibility check, definition-of-done review
 
 - **Bearing**: The compact grounding summary orient produces from reading terrain. Carries terms, constraints, conventions, seams, landmarks, waymarks, gaps, and calibration. Consumed by wayfinder as the basis for charting the map.
 _Avoid_: summary, context, overview
