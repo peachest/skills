@@ -80,7 +80,6 @@ skills/
 
 ### 杂项（misc/）
 
-- **[html-review](./misc/html-review/SKILL.md)** — 验证 HTML 文件结构完整性（DOCTYPE、charset、标签闭合、重复 id、资源引用）
 - **[k8s-dra](./misc/k8s-dra/SKILL.md)** — Kubernetes DRA（动态资源分配）概念、API 参考和示例
 - **[my-coffee](./misc/my-coffee/SKILL.md)** — 瑞幸咖啡点单（搜索门店/商品、查询取餐码/订单状态、取消订单）
 
