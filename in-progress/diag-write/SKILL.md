@@ -13,7 +13,7 @@ From the diagnosis run (or the user's account), collect: the symptom as the user
 
 ## Step 2 — Find or create the entry
 
-Search the vault before creating — symptom keywords and component names across it:
+Check for an existing entry on this issue — symptom keywords and component names, via rg or a listing scan, whatever reliably covers the vault:
 
 ```bash
 rg -il '<keywords>' ~/ops/*.md
@@ -36,6 +36,8 @@ Open `~/ops/index.md`, add the entry to its cluster — title link, labels, one-
 ## Step 5 — Commit
 
 One entry and its index lines ride **one commit** in `~/ops`, message `diag: <标题>`. Commit directly when the tree carries nothing else; when unrelated changes exist, group via `/skill:commit-buddy` so this entry never mixes with them.
+
+Invoked standalone (not via `/skill:diagnosing-bugs-with-docs` Phase 6)? The diagnosis still minted terms and decisions — consider `/skill:domain-modeling` for them as well.
 
 ## Done when
 
