@@ -20,7 +20,7 @@ _Avoid_: feasibility check, definition-of-done review
 - **Bearing**: The compact grounding summary orient produces from reading terrain. Carries terms, constraints, conventions, seams, landmarks, waymarks, gaps, and calibration. Consumed by wayfinder as the basis for charting the map.
 _Avoid_: summary, context, overview
 
-- **Map**: The shared artifact wayfinder creates on the issue tracker — an index of decisions made and pointers to tickets that hold their detail. An index, not a store.
+- **Map**: The shared artifact wayfinder creates on the issue tracker — an index of decisions made and pointers to tickets that hold their detail. An index, not a store. The decision-altitude map; the intent map is the story-altitude counterpart — same metaphor, two altitudes.
 _Avoid_: plan, checklist
 
 - **Chart**: The codebase survey artifact project-wiki produces — a structured map of modules and files with SHA-based drift detection. The persistent form of terrain that orient reads from instead of surveying blindly.
