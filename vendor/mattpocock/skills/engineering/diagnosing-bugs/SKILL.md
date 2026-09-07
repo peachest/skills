@@ -138,3 +138,5 @@ Required before declaring done:
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message — so the next debugger learns
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/skill:improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
+
+**Then persist the diagnosis** via the `/skill:ops-issue-docs` skill — the trail, root cause, and fix become an Issue note in the ops knowledge base, so the next debugger starts from evidence instead of zero.
