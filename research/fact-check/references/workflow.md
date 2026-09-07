@@ -53,6 +53,10 @@ Step-by-step agent instructions for the 8-phase pipeline.
 
 ### Steps
 
+0. **Load the extraction contract — MANDATORY, before producing ANY claim output:**
+   - Read `prompts/extract-claims.md` AND `references/schema.md`.
+   - Never hand-write claim JSON from memory. Field names, the type enum, and the verbatim-copy rule live in those two files. Skipping this step historically caused 0/30 validation failures and forced re-emitting the entire claim set (~2× output token waste).
+
 1. **Pre-extract with mdq** (if available):
    ```bash
    mdq --output json '# *' <doc>    # chapter structure → chunk boundaries
@@ -63,41 +67,31 @@ Step-by-step agent instructions for the 8-phase pipeline.
 
 2. **Chunk document:** split by chapter headings. Large chapters (>100 lines or >4000 tokens) split by paragraph.
 
-3. **LLM extracts claim_text only** — for each chunk:
+3. **LLM extracts minimal claim seeds only** — for each chunk:
    - Read `prompts/extract-claims.md` + chunk content
-   - LLM outputs claim_text + type + expected_verifier (NO source_location, NO content_hash)
+   - LLM outputs ONLY `claim_text` (verbatim excerpt) + `type` + `expected_verifier` (+ optional `decomposition`). NO claim_id, NO source_location, NO content_hash — the assembly script assigns them.
    - **Parallel mode:** if subagents available, dispatch chunks to workers (≤4 concurrency, fresh context)
 
-4. **locate-claim: deterministic positioning** — for each claim_text:
-   ```bash
-   result=$(bash scripts/locate-claim.sh "<claim_text>" <source-doc>)
-   ```
-   - `ok: true` → claim gets `source_location` + `content_hash` ✅
-   - `error: TEXT_NOT_FOUND` → agent sees `closest_match`, fixes claim_text, retries (max 3)
-   - `error: AMBIGUOUS` → short text (≤20 chars) found at multiple locations → agent disambiguates
+4. **Smoke test before bulk extraction:**
+   - Emit ONE claim, assemble it (step 5), confirm `validation.failed == 0`.
+   - This catches format drift at the cost of one claim instead of thirty. Only extract the remaining chunks after the smoke claim is green.
 
-5. **check-atomicity: decomposition check** — for each claim_text:
+5. **Assemble with build-claims.py** (quoting-safe: pipe via stdin, never through bash double quotes — claim_text containing markdown backticks executes as command substitution):
    ```bash
-   result=$(bash scripts/check-atomicity.sh "<claim_text>")
+   cat seeds.jsonl | python3 scripts/build-claims.py --doc <source-doc> --out documents/<key>/claims.json
    ```
-   - `match: true` + `sub_items.length > 1` → agent generates sub_claims[] (derived, no locate-claim needed)
-   - `match: true` + `sub_items.length == 1` → no decomposition needed
-   - `match: false` + `word_count > 25` → mark `compound_flag: "compound_embedded"`
-   - `match: false` + `word_count <= 25` → atomic, proceed
+   The script validates the minimal fields (fails fast on format drift), assigns `claim_id`, runs locate-claim + check-atomicity per claim, fills `source_location` + `content_hash`, writes claims.json, and runs validation inline.
+   - `failed` list non-empty → fix ONLY the failed claims (use `closest_match` to correct claim_text) and pipe just those as another assemble call — ids continue from `next_id`. **Never re-emit the whole set.**
+   - `AMBIGUOUS` → lengthen claim_text, or resolve manually via `--merge` with an explicit `source_location`.
+   - Manual fallback (script unavailable): `scripts/locate-claim.sh` + `scripts/check-atomicity.sh` per claim, then hand-assemble per `references/schema.md`.
 
-6. **Write initial claims.json:**
-   ```
-   fact-check/documents/<key>/claims.json
-   ```
-   Claims now have `source_location` + `content_hash` from locate-claim, `decomposition_mode` from check-atomicity.
-
-7. **Validation loop** (max 3 rounds):
+6. **Targeted patch loop** (only if validation still fails; max 3 rounds):
    ```bash
-   validation=$(bash scripts/validate-claims.sh documents/<key>/claims.json <source-doc>)
+   cat patches.json | python3 scripts/build-claims.py --doc <source-doc> --out documents/<key>/claims.json --merge
    ```
-   - A (JSON syntax), B (schema), C1/C2/C3 (location/text/hash), D (atomicity verification only — no enforcement)
-   - If `failed > 0` and `retry_count < max_retries`: feed failed claims + errors to LLM for targeted fix
-   - If `failed > 0` after 3 rounds: write `validation_errors.json`, continue with partial claims
+   `patches.json` = `[{"claim_id": "C001", "patch": {"claim_text": "..."}}]` — re-emits ONLY the failing claims (re-locates when claim_text changes). Feed `failure_groups` from validate output to the LLM; each group already lists every affected claim_id.
+
+7. **If `failed > 0` after 3 rounds:** write `validation_errors.json`, continue with partial claims.
 
 **Output:** `fact-check/documents/<key>/claims.json` containing all extracted claims with deterministic source_location and content_hash.
 

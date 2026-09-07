@@ -255,10 +255,31 @@ for claim in claims:
     else:
         passed_count += 1
 
+# Grouped, capped failure reporting (R24): identical errors across many claims
+# previously produced ~10KB of repetitive output that polluted agent context and
+# invalidated prefix cache. Now: failures capped at MAX_FAILURE_DETAIL entries,
+# plus failure_groups aggregating every error code with its full claim_id list.
+MAX_FAILURE_DETAIL = 5
+
+failure_groups_map: dict = {}
+for entry in failed_entries:
+    for err in entry["errors"]:
+        code = err.get("code", "UNKNOWN")
+        g = failure_groups_map.setdefault(code, {
+            "code": code,
+            "count": 0,
+            "claim_ids": [],
+            "detail": err.get("detail", ""),
+        })
+        g["count"] += 1
+        g["claim_ids"].append(entry["claim_id"])
+
 result = {
     "passed": passed_count,
     "failed": len(failed_entries),
-    "failures": failed_entries,
+    "failures": failed_entries[:MAX_FAILURE_DETAIL],
+    "failures_truncated": len(failed_entries) > MAX_FAILURE_DETAIL,
+    "failure_groups": sorted(failure_groups_map.values(), key=lambda g: -g["count"]),
     "auto_fixes": auto_fixes,
     "retry_count": 0,
     "max_retries": 3,
