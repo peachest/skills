@@ -1,11 +1,11 @@
 ---
 name: ops-issue-docs
-description: Persist a completed bug diagnosis as an Issue note in the Obsidian ops knowledge base (~/obsidianNote/运维/). Reached at diagnosing-bugs Phase 6 completion, or when the user asks to 记录/沉淀/持久化 a diagnosis or ops issue.
+description: Persist a completed bug diagnosis as an Issue note in the ops knowledge base (~/ops/). Reached at diagnosing-bugs Phase 6 completion, or when the user asks to 记录/沉淀/持久化 a diagnosis or ops issue.
 ---
 
 # Ops Issue Docs
 
-Turn a finished diagnosis into an Issue note that outlives the session. The vault is `~/obsidianNote/运维/` — two live folders, `已解决/` (resolved) and `未确定/` (undetermined) — and the template is `~/obsidianNote/templates/Issue.md`.
+Turn a finished diagnosis into an Issue note that outlives the session. The vault is `~/ops/` — two live folders, `已解决/` (resolved) and `未确定/` (undetermined) — and the template is `~/obsidianNote/templates/Issue.md`. Earlier issues live in the legacy vault `~/obsidianNote/运维/`; they stay there — do not move them.
 
 ## Step 1 — Gather the diagnosis
 
@@ -13,15 +13,15 @@ From the diagnosing-bugs run, collect: the symptom as the user stated it, the en
 
 ## Step 2 — Place and name
 
-Search the vault before creating:
+Search both vaults before creating — the legacy vault holds the history:
 
 ```bash
-grep -rl "<keywords from symptom and cause>" ~/obsidianNote/运维/
+grep -rl "<keywords from symptom and cause>" ~/ops/ ~/obsidianNote/运维/
 ```
 
-If a note already covers this issue, update it in place — fill its empty sections, and move it across folders if its status changed. A sibling note for a known issue splits the trail.
+If a note already covers this issue, update it in place — fill its empty sections, and move it across folders if its status changed. A legacy note (`~/obsidianNote/运维/`) stays where it is; update it there. A sibling note for a known issue splits the trail.
 
-Otherwise create `<folder>/<title>.md`:
+Otherwise create `~/ops/<folder>/<title>.md`:
 
 - `已解决/` — root cause confirmed and the fix verified (loop green)
 - `未确定/` — everything else; the note records how far the trail got
@@ -47,7 +47,7 @@ A ruled-out hypothesis earns a line only when ruling it out took real work — t
 
 ## Step 4 — Link both ways
 
-When 背景 references another note, open that note and add the return link, so the pair reads connected from either end.
+When 背景 references another note, open that note and add the return link, so the pair reads connected from either end. Notes in the other vault are reached by relative path across them (e.g. `../../obsidianNote/运维/<note>.md`) — compute the path from the file you are writing, and verify the target exists.
 
 ## Done when
 
