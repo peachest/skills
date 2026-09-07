@@ -1,9 +1,11 @@
 ---
-name: diagnosing-bugs
-description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
+name: diagnosing-bugs-with-docs
+description: Diagnosis loop for hard bugs and performance regressions, with vault integration — search the ops diagnosis vault (~/ops) for prior diagnoses before hypothesising, and persist the finished diagnosis back into it at Phase 6. Use when the user says "diagnose"/"debug this" AND wants the trail recorded, or reports something broken/throwing/failing/slow in the ops domain (clusters, GPU virtualisation, k8s internals).
 ---
 
-# Diagnosing Bugs
+# Diagnosing Bugs With Docs
+
+> **Forked from** `vendor/mattpocock/skills/engineering/diagnosing-bugs` at `b46aaff` (upstream sync 2026-09). Identical to `/skill:diagnosing-bugs` except the three `~/ops` integration points, each marked **[vault]** below. Keep the fork's drift to those marks only — anything else belongs upstream.
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
@@ -14,6 +16,10 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) to get a clear men
 This skill has you show commands, outputs and captured artifacts. **Redact every secret first** — write `<REDACTED>` in its place. Build loops against env vars, so the credential stays in the environment rather than in what you show. Captured artifacts carry auth headers: quote only the lines that carry the signal.
 
 If the redacted output is not enough to diagnose the bug, say so and ask the user.
+
+**[vault] Phase 0 — Consult the vault**
+
+Before building a feedback loop, run `/skill:diag-search` with the bug's component, failure type, and symptom keywords. A prior diagnosis may hand you the repro command (Phase 1, half-done) or the root cause outright — an already-diagnosed bug needs no loop at all.
 
 ## Phase 1 — Build a feedback loop
 
@@ -95,6 +101,8 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 
 If you cannot state the prediction, the hypothesis is a vibe — discard or sharpen it.
 
+**[vault]** Root causes the vault search surfaced enter this ranked list as hypotheses — prior evidence outranks fresh speculation at equal plausibility. If the bug's territory is new to the vault, re-run `/skill:diag-search` with sharper keywords now that the minimal repro names the moving parts.
+
 **Show the ranked list to the user before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it — proceed with your ranking if the user is AFK.
 
 ## Phase 4 — Instrument
@@ -138,3 +146,5 @@ Required before declaring done:
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message — so the next debugger learns
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/skill:improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
+
+**[vault] Then persist the diagnosis** via `/skill:diag-write` — the trail, root cause, and fix become a vault entry at `~/ops` with labels and an index line, so the next diagnosis starts from evidence instead of zero. This is the contract that separates this skill from plain `/skill:diagnosing-bugs`.
