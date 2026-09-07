@@ -11,6 +11,14 @@
 
 **Rule:** Copy-paste the document substring. Do not translate, summarize, improve, or normalize.
 
+## Assembly Contract
+
+Your output is piped to `scripts/build-claims.py` via stdin, which assigns `claim_id`, runs locate-claim + check-atomicity, and fills `source_location` / `content_hash`. Therefore:
+
+- Emit ONLY the minimal fields: `claim_text`, `type`, `expected_verifier` (+ optional `normalized_claim`, `decomposition`).
+- `type` must be EXACTLY one of the values in the Type Selection Guide table below — anything else is rejected immediately (`code_anchor`, `commit`, `fact` are NOT valid).
+- Claims that fail locate are echoed back with `closest_match`; fix and re-emit ONLY those claims, never the whole set.
+
 ---
 
 You are extracting verifiable factual claims from a technical research document.
@@ -37,7 +45,7 @@ Return a JSON array following this schema:
 ```json
 [
   {
-    "_note": "claim_id is assigned during merge, do NOT include",
+    "_note": "claim_id / source_location / content_hash are assigned by scripts/build-claims.py — do NOT include them",
     "claim_text": "<exact text from the document, do not reword>",
     "normalized_claim": "<optional: standardized version removing stylistic variation>",
     "type": "<see Type Selection Guide below>",
