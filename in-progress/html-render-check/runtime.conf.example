@@ -1,0 +1,13 @@
+# html-render-check runtime configuration
+# Copy to runtime.conf and adjust per-node values. Shell-sourceable dotenv.
+
+# Path to the obscura binary (headless browser). Verify with `obscura --version`.
+# Discovery: `command -v obscura` or ls ~/.local/bin/obscura
+OBSCURA_BIN=obscura
+
+# HTTP port for the local verification server (python3 -m http.server).
+# Discovery: pick any free port: `python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1])"`
+CHECK_PORT=8742
+
+# Path to the pi agent MCP config, used to detect the obscura MCP server (WARN-only check).
+PI_MCP_CONFIG=$HOME/.pi/agent/mcp.json
