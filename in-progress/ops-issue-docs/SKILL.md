@@ -5,7 +5,7 @@ description: Persist a completed bug diagnosis as an Issue note in the ops knowl
 
 # Ops Issue Docs
 
-Turn a finished diagnosis into an Issue note that outlives the session. The vault is `~/ops/` — two live folders, `已解决/` (resolved) and `未确定/` (undetermined) — and the template is `~/obsidianNote/templates/Issue.md`. Earlier issues live in the legacy vault `~/obsidianNote/运维/`; they stay there — do not move them.
+Turn a finished diagnosis into an Issue note that outlives the session. The vault is `~/ops/` — two live folders, `已解决/` (resolved) and `未确定/` (undetermined) — and the template is [Issue-template.md](Issue-template.md) beside this file. Earlier issues live in the legacy vault `~/obsidianNote/运维/`; they stay there — do not move them.
 
 ## Step 1 — Gather the diagnosis
 
