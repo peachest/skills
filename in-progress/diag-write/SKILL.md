@@ -11,9 +11,17 @@ Turn a finished diagnosis into a vault entry that outlives the session. The vaul
 
 From the diagnosis run (or the user's account), collect: the symptom as the user stated it, the environment (nodes, cluster, component versions), the feedback-loop command with its red and green outputs, the ranked hypotheses and which one survived, the fix, and how it was verified. Every line the entry cites comes from this material.
 
-## Step 2 — Create the entry
+## Step 2 — Find or create the entry
 
-`~/ops/<title>.md` from `~/ops/template.md` (delete the template comments). Title = the symptom in one Chinese line, no prefix. Body in Chinese, terse. `source: diagnosis`.
+Search the vault before creating — symptom keywords and component names across it:
+
+```bash
+rg -il '<keywords>' ~/ops/*.md
+```
+
+A hit that covers this issue means an earlier entry exists: update it in place — fill empty sections, refine labels and index — never fork a second trail. (Extraction and migration routes converge here: many sessions, or a session plus a legacy note, on one issue yield one entry.)
+
+Otherwise create `~/ops/<title>.md` from `~/ops/template.md` (delete the template comments). Title = the symptom in one Chinese line, no prefix. Body in Chinese, terse. `source: diagnosis`.
 
 ## Step 3 — Assign labels
 
@@ -31,6 +39,7 @@ In `~/ops`, commit through `/skill:commit-buddy` — grouped so this entry and n
 
 ## Done when
 
+- [ ] Vault searched before creation; an existing entry on this issue was updated, not forked
 - [ ] Frontmatter valid per labels.md (status derived from content, not optimism)
 - [ ] Every label present in labels.md, or registered through user approval this run
 - [ ] index.md updated; entry sits in a cluster or 未归类
