@@ -9,10 +9,17 @@ The **render check** is the rendering layer of HTML verification. Static checks 
 
 ## Position in the check stack
 
-Run **after** static checks pass, **before** the artifact reaches the learner/user:
+This skill owns two layers of HTML verification and runs **before** the artifact reaches the learner/user:
 
-- **teach**: after `css-self-check.py` and `nav-chain-check.py` (and prose/beat checks), before the learner sees the lesson.
+1. **Structure layer** (offline, parse-level; absorbed from the former html-review skill): DOCTYPE, head/body/title/charset, duplicate ids, tag closure (lxml cross-validation), external-resource inventory, inline event handlers. `scripts/validate_html.py`; `--strict` adds html5lib spec parsing + VNU W3C checker (optional deps).
+2. **Render layer** (obscura headless browser): layout geometry, JS smoke, screenshot evidence — what parsing cannot see.
+
+Between them sit the target skill's own static checks:
+
+- **teach**: css-self-check / nav-chain-check / prose / beat checks run between the two layers; `check.sh` runs structure → render around them.
 - **impeccable**: in the finish/inspect pass, when no real browser (chromium/chrome) is on PATH — obscura *is* the browser. It complements `impeccable detect` (which reads the file) with actual render evidence.
+
+Structure expects complete documents (teach lessons, surface artifacts) — not fragments.
 
 ## Setup
 
@@ -32,6 +39,8 @@ tar xzf obscura-x86_64-linux-stealth.tar.gz && cp obscura obscura-worker ~/.loca
 ```bash
 bash scripts/check.sh <file.html> [<file.html>...]
 ```
+
+Runs structure validation (stage 0, gates the run) then the render battery + screenshot per file. Exits non-zero when hard findings exist.
 
 Options via env or flags: `--port N` (http port, default from `runtime.conf`), `--shot-dir DIR` (default: beside the artifact), `--extra-js FILE` (page-specific battery, see below). The script serves the artifact's directory over `python3 -m http.server`, runs the battery + takes a screenshot per file, and exits non-zero when findings exist. Output: one JSON verdict line per file plus a summary.
 
@@ -90,8 +99,9 @@ SKILL.md                    # this file
 runtime.conf.example        # OBSCURA_BIN, CHECK_PORT, PI_MCP_CONFIG
 runtime.conf                # gitignored, per-node
 scripts/check-env.sh        # PASS/WARN/FAIL environment verification
-scripts/check.sh            # orchestrator: serve → battery → screenshot → verdict
-scripts/battery.js          # generic JS check battery
+scripts/check.sh            # orchestrator: structure → serve → battery → screenshot → verdict
+scripts/validate_html.py    # structure layer (DOCTYPE/dup-id/closure/resources; --strict: html5lib+VNU)
+scripts/battery.js          # render layer: generic JS check battery
 examples/overlap-check.js   # page-specific battery example (shape×text, real defect catch)
 examples/overflow-check.js  # page-specific battery example (text-escape + text×text)
 ```
