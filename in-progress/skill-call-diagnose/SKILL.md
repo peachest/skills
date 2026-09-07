@@ -1,11 +1,11 @@
 ---
-name: diagnosing-skill-execute
-description: "Diagnose how a skill executed in past pi sessions. Given a skill name (or a session id), find the sessions that invoked it, then run three parallel axes — Adherence (did the agent follow the skill's documented workflow?), Friction (tool failures, re-emitted payloads, wasted tokens, cache invalidation), Sedimentation (ad-hoc scripts the agent had to write that the skill should absorb). Use when the user asks to 诊断 skill 执行过程 / analyze how a skill ran / audit a skill's sessions, or after a session that ran a skill expensively, slowly, or off-script."
+name: skill-call-diagnose
+description: "Diagnose how a skill executed in a pi session, along three parallel axes — Adherence (did the agent follow the skill's documented workflow?), Friction (tool failures, re-emitted payloads, wasted tokens, cache invalidation), Sedimentation (ad-hoc scripts the agent had to write that the skill should absorb). Takes a trace from /skill:skill-call-extract. Use when the user asks to 诊断 skill 执行过程 / analyze how a skill ran / audit a skill's sessions, or after a session that ran a skill expensively, slowly, or off-script."
 ---
 
-# Diagnosing Skill Execution
+# Skill Call Diagnose
 
-**Leading word:** the **trace** — the session log under diagnosis. Every finding cites trace entries (`[31]`, `[37]`) as evidence; a finding with no entry index is an opinion, not a finding.
+**Leading word:** the **trace** — the session log under diagnosis, delivered by `/skill:skill-call-extract` as a trace file plus trace index. Every finding cites trace entries (`[31]`, `[37]`) as evidence; a finding with no entry index is an opinion, not a finding.
 
 The skill under diagnosis is the **target skill**; its SKILL.md and referenced docs are the ground truth for Adherence. Three axes run as parallel fresh-context sub-agents (they never pollute each other), each reporting under 400 words:
 
@@ -17,46 +17,29 @@ The skill under diagnosis is the **target skill**; its SKILL.md and referenced d
 
 ### 1. Resolve inputs
 
-Target skill **name** (as in its frontmatter) — required. Optional: a session **id** the user already has. If the user gave neither, ask; do not guess a skill name.
+Two things: the **target skill name** (as in its frontmatter — required, ask if absent) and the **trace** (a session file path, or a session id / bare skill name when `/skill:skill-call-extract` has not run yet).
 
-### 2. Locate the sessions
+If no trace is in hand, get one: run the extract skill's script from its installed location (`~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py`) — marker search for a bare skill name, `--session <id>` for an explicit id — and follow its triage flow. If the user already ran `/skill:skill-call-extract`, take its deliverables directly.
 
-```bash
-python3 scripts/find-skill-sessions.py <skill-name>            # marker search
-python3 scripts/find-skill-sessions.py <skill-name> --session <id>   # explicit id
-```
-
-Marker = the skill injection tag, not the string `skill:<name>` (that string appears inside other skills' injected bodies and false-positives by the dozen). Subagent fork sessions carry the marker too — include them. Zero matches → report and stop.
-
-### 3. Triage and pick the trace
-
-Present the match list to the user: file path, timestamps, message counts, tool-call histogram, usage totals, `likely_running`. A day of retries yields many sessions on one skill — that is expected.
-
-- User picks → that session is the trace.
-- User defers → default to the longest **finished** run (most entries, has a closing assistant summary, `likely_running: false`); note the choice.
-- Multiple sessions on the same incident: diagnose the fullest one, cite the others as corroborating evidence, do not run axes on each.
-
-**Done when**: exactly one trace file chosen and stated.
-
-### 4. Load the target skill's contract
+### 2. Load the target skill's contract
 
 Read the target skill's SKILL.md. Every file it names as load-on-demand (workflow, references, prompts) is part of the contract — read them all now and list their paths. If the target skill's source lives in a repo (e.g. `~/skills/...`), read the source copy, not the installed one, when the two differ; note any drift.
 
 **Done when**: the contract path list is complete — the Adherence axis needs it.
 
-### 5. Build the trace index
+### 3. Build the trace index
 
 ```bash
-python3 scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
+python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
 ```
 
-One line per entry: role, tool calls with arg sizes, result sizes, per-turn usage. This index is the only map the axis sub-agents need of a multi-MB trace — they read raw lines only where the index points.
+(Skip if the extract skill already built one.) One line per entry: role, tool calls with arg sizes, result sizes, per-turn usage. This index is the only map the axis sub-agents need of a multi-MB trace — they read raw lines only where it points.
 
-### 6. Spawn the three axes in parallel
+### 4. Spawn the three axes in parallel
 
 First verify the analysis agent exists (`subagent({ action: "list" })`): a read-only agent that can read/search files (e.g. `delegate`-style). If none is available, run the three axes inline in sequence and note the degradation in the report.
 
-Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/session-jsonl.md` path, and its axis brief below. Adherence additionally gets the contract path list from step 4. Sub-agents have fresh context — a bare "the skill docs" with no paths leaves them blind.
+Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2.
 
 Each brief demands: findings each cited by entry index, quantified waste with its arithmetic named, report in Chinese (the final report is user-facing), under 400 words.
 
@@ -68,7 +51,7 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 #### Axis 2 — Friction
 
-> The trace is the session file at `<path>`; navigate with the trace index. Hunt the waste signals defined in the session-JSONL primer: re-emitted payloads (same large tool args across turns), tool failure loops, verbose error echo, prefix-cache collapse (cacheR drop + in= spike), wall-clock stalls.
+> The trace is the session file at `<path>`; navigate with the trace index. Hunt the waste signals defined in the trace-signals reference: re-emitted payloads, tool failure loops, verbose error echo, prefix-cache collapse, wall-clock stalls.
 >
 > Per friction cluster report: what happened, entry indices, and a cost estimate that names its arithmetic — wasted output tokens (duplicate rounds × output), context re-read (sum of in= on cache-collapse turns), minutes stalled. Attribute cause where visible: skill design (e.g. verbose error output) vs harness/environment (network, model provider). 报告用中文，每条发现标注 entry 序号和量化成本。
 
@@ -76,13 +59,13 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 > The trace is the session file at `<path>`; navigate with the trace index. Find every inline script the agent wrote into tool-call arguments (heredoc python/bash, one-liner pipelines) and every manual procedure it repeated across turns.
 >
-> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace, or once here but recognizable from earlier sessions — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. 报告用中文，每条发现标注 entry 序号。
+> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. 报告用中文，每条发现标注 entry 序号。
 
-### 7. Aggregate
+### 5. Aggregate
 
 Present the three axis reports under `## 遵循度 (Adherence)`, `## 摩擦点 (Friction)`, `## 沉淀机会 (Sedimentation)` — verbatim or lightly cleaned. **Do not merge or rerank across axes**: one axis's finding can mask another's (a perfectly compliant run can still be the expensive one). End with per-axis one-liners: findings count + worst finding within that axis.
 
-### 8. Classify and route
+### 6. Classify and route
 
 One table, one row per finding:
 
@@ -100,7 +83,7 @@ Ask the user which rows to act on. For skill-doc / skill-script rows, the fix fl
 
 ## Done when
 
-- [ ] Every match from step 2 either diagnosed or explicitly skipped with a reason
+- [ ] Trace and trace index in hand (via skill-call-extract or its script)
 - [ ] All three axis reports present, every finding carrying entry indices
 - [ ] Friction findings carry quantified cost with named arithmetic
 - [ ] Every sedimentation finding marked one-off / repeated / contract-gap
