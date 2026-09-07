@@ -33,9 +33,9 @@ A label absent from the table may only enter through the new-label protocol: pro
 
 Open `~/ops/index.md`, add the entry to its cluster — title link, labels, one-line gist. No fitting cluster → 未归类 (entries graduate as clusters emerge).
 
-## Step 5 — Commit via /skill:commit-buddy
+## Step 5 — Commit
 
-In `~/ops`, commit through `/skill:commit-buddy` — grouped so this entry and nothing else ride the commit. The vault is local-only; no remote exists.
+One entry and its index lines ride **one commit** in `~/ops`, message `diag: <标题>`. Commit directly when the tree carries nothing else; when unrelated changes exist, group via `/skill:commit-buddy` so this entry never mixes with them.
 
 ## Done when
 
@@ -43,5 +43,5 @@ In `~/ops`, commit through `/skill:commit-buddy` — grouped so this entry and n
 - [ ] Frontmatter valid per labels.md (status derived from content, not optimism)
 - [ ] Every label present in labels.md, or registered through user approval this run
 - [ ] index.md updated; entry sits in a cluster or 未归类
-- [ ] `~/ops` working tree clean (entry committed)
+- [ ] `~/ops` working tree clean (entry committed, message `diag: <标题>`, nothing mixed in)
 - [ ] Every claim in 结论 traces to evidence quoted in 排查过程
