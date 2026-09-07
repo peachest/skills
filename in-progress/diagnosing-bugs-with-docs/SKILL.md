@@ -5,7 +5,7 @@ description: Diagnosis loop for hard bugs and performance regressions, with vaul
 
 # Diagnosing Bugs With Docs
 
-> **Forked from** `vendor/mattpocock/skills/engineering/diagnosing-bugs` at `b46aaff` (upstream sync 2026-09). Identical to `/skill:diagnosing-bugs` except the three `~/ops` integration points, each marked **[vault]** below. Keep the fork's drift to those marks only — anything else belongs upstream.
+> **Forked from** `vendor/mattpocock/skills/engineering/diagnosing-bugs` at `b46aaff` (upstream sync 2026-09). Identical to `/skill:diagnosing-bugs` except the integration points marked **[vault]** below — three `~/ops` points plus a `/skill:domain-modeling` handoff at Phase 6. Keep the fork's drift to those marks only — anything else belongs upstream.
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
@@ -147,4 +147,6 @@ Required before declaring done:
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/skill:improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
 
-**[vault] Then persist the diagnosis** via `/skill:diag-write` — the trail, root cause, and fix become a vault entry at `~/ops` with labels and an index line, so the next diagnosis starts from evidence instead of zero. This is the contract that separates this skill from plain `/skill:diagnosing-bugs`.
+**[vault] Then persist the diagnosis** via `/skill:diag-write` — the trail, root cause, and fix become a vault entry at `~/ops` with labels and an index line, so the next diagnosis starts from evidence instead of zero.
+
+**[vault] Then record terminology and decisions** via `/skill:domain-modeling` — the diagnosis minted terms (the names the bug's moving parts went by: lock 泄漏, vdev 索引错乱, handshake 注解…) and settled decisions (why the fix took this shape, what was ruled out and why). Those belong in the project's domain model where future work reads them, not only in the vault entry. Together with the write above, this is the contract that separates this skill from plain `/skill:diagnosing-bugs`.
