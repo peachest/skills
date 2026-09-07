@@ -72,7 +72,17 @@ for f in "${FILES[@]}"; do
   dir=$(cd "$(dirname "$f")" && pwd)
   base=$(basename "$f")
 
-  # (Re)start server when directory changes.
+  # ---- Stage 0: structure validation (offline, parse-level) ----------------
+  # Absorbed from the former html-review skill. Duplicate ids / broken
+  # structure also break the render battery's assumptions, so gate on it.
+  echo "== $f"
+  struct_out=$(python3 "$SKILL_DIR/scripts/validate_html.py" "$f" 2>&1)
+  struct_rc=$?
+  echo "$struct_out" | sed 's/^/  struct| /'
+  if [ "$struct_rc" -ne 0 ]; then
+    FAILED+=("$f"); echo "  struct: FAIL — skipping render pass"
+    continue
+  fi
   if [ "$dir" != "$prev_dir" ]; then
     cleanup; srv_pid=""
     (cd "$dir" && nohup python3 -m http.server "$PORT" >/dev/null 2>&1 &) 
