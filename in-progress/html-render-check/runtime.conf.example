@@ -1,13 +1,13 @@
 # html-render-check runtime configuration
 # Copy to runtime.conf and adjust per-node values. Shell-sourceable dotenv.
 
-# Path to the obscura binary (headless browser). Verify with `obscura --version`.
-# Discovery: `command -v obscura` or ls ~/.local/bin/obscura
-OBSCURA_BIN=obscura
+# Directory containing node_modules/playwright (the skill repo is public and
+# cannot ship node_modules). Setup:
+#   mkdir -p ~/tools/playwright-runner && cd ~/tools/playwright-runner && npm init -y && npm install playwright
+# (npm install needs the network; on the internal cluster use the corporate proxy.)
+PLAYWRIGHT_DIR=$HOME/tools/playwright-runner
 
-# HTTP port for the local verification server (python3 -m http.server).
-# Discovery: pick any free port: `python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1])"`
-CHECK_PORT=8742
-
-# Path to the pi agent MCP config, used to detect the obscura MCP server (WARN-only check).
-PI_MCP_CONFIG=$HOME/.pi/agent/mcp.json
+# Chromium binaries are shared via Playwright's default cache (~/.cache/ms-playwright).
+# Install with: cd $PLAYWRIGHT_DIR && npx playwright install chromium --only-shell
+# System libs needed (Debian/Ubuntu): sudo apt install libgbm1 libxkbcommon0
+# Cluster/container nodes launch with --no-sandbox by default; set PW_SANDBOX=1 to allow it.
