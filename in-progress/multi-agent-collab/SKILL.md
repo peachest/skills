@@ -14,7 +14,7 @@ Peer-ify when the task spans multiple projects, needs multiple branches/worktree
 Three roles:
 
 - **Leader** — orchestrates: inventory, bootstrap, dispatch, verify, close. **Appointed by the user, never self-elected.** At 3+ collaborating sessions a leader must exist, named by the user. Leaders defer timing decisions to the user ("notify peers now, or after the deploy finishes?").
-- **Peer** — specialist worker (researcher, fixer, writer). Verifies incoming claims against sources before acting, pushes back with file:line evidence, and never answers a user-facing question aimed at another session's user — route it back instead.
+- **Peer** — specialist worker (researcher, fixer, writer). Verifies incoming claims against sources before acting, pushes back with file:line evidence, and never answers a user-facing question aimed at another session's user — route it back instead. When a peer's work is being systematically undone by another session (directional conflict, not an accidental touch), it stops, asks the other session's goal over herdr, and treats the answer as conflicting directives rather than hostility — resolve jointly or escalate to the user; a peer that keeps pushing harder converts a routing problem into a turf war.
 - **Explorer** — solo session using herdr for inspection only. No protocol applies.
 
 Bootstrap a named peer (names survive pane churn; pane IDs do not — see pitfalls #14):
@@ -103,7 +103,7 @@ Sequenced tasks get an explicit gate: "task 1 first; report and confirm before t
 
 ### Handoff currency and receipts
 
-Commit hashes and MR URLs are the currency: peers hold commits for leader approval, the leader specs the commit message, and hashes echo back in acks. After consuming peer output, send an **integration receipt** — which decision adopted it, which ticket or file it landed in, where the full report is archived. Close every thread with a **closure signal**: 任务闭环 / no reply needed / stand down, with a recall clause when the peer may be needed again ("I'll re-contact if review has feedback"). A thread without a closure signal leaves a hanging peer.
+Commit hashes and MR URLs are the currency: peers hold commits for leader approval, the leader specs the commit message, and hashes echo back in acks. After consuming peer output, send an **integration receipt** — which decision adopted it, which ticket or file it landed in, where the full report is archived. Before writing the receipt, check for a **dissenting peer**: one whose conclusion contradicts the majority. A dissent is evidence to weigh, not a vote to outcount — ask the dissenter for its evidence chain and evaluate it on file:line merit; group consensus that silently drops a peer's unique finding is the classic multi-agent failure (groups score far below their best member when unique information never gets pressed against the prior). Close every thread with a **closure signal**: 任务闭环 / no reply needed / stand down, with a recall clause when the peer may be needed again ("I'll re-contact if review has feedback"). A thread without a closure signal leaves a hanging peer.
 
 When leadership transfers: quiz the successor on its inherited context first ("confirm you can see the map and the frontier"), then send the explicit handoff ("you are now the active X session; I am no longer active"), then `herdr workspace focus <new>` so the user lands on the new leader.
 
