@@ -1,6 +1,6 @@
 ---
 name: remote-script-exec
-description: Run non-trivial commands on remote nodes by writing the script locally, scp-ing it over, and executing it there — the scp-first pattern. Use when about to send a multi-line command, nested quotes, heredoc, or variable substitution through ssh; when uploading probe/deploy scripts to an unfamiliar node and running them; when deploying a long-running background job (nohup) to a remote host and fetching results back; or when an inline ssh command fails with quoting/escaping errors (引号地狱 / ssh 转义).
+description: Run non-trivial commands on remote nodes by writing the script locally, scp-ing it over, and executing it there — the scp-first pattern. Use when about to send a multi-line command, nested quotes, heredoc, or variable substitution through ssh; when uploading probe/deploy scripts to an unfamiliar node and running them; when deploying a long-running background job (nohup) to a remote host and fetching results back; or when an inline ssh command failed — escalate to scp-first instead of retrying it inline (quoting/escaping errors, 引号地狱, ssh 转义, remote timeouts).
 ---
 
 # remote-script-exec
@@ -24,6 +24,16 @@ Inline ssh is fine only for a single command with no nested quotes and no multi-
 
 This also satisfies the standing rule that repeatedly-executed logic lives in a script, not in a command string: iteration cost collapses to a re-scp.
 
+## First contact: probe cheap
+
+Before any real work on an unfamiliar node, one cheap probe settles reachability and auth state without hanging:
+
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=5 <user>@<node> 'hostname' 2>&1
+```
+
+Read the outcome: success → key auth works, drop sshpass entirely; `Permission denied` → password flow needed; timeout → the node is unreachable or slow, don't send long commands there. One probe up front beats discovering the auth mode mid-pipeline.
+
 ## Why: quoting hell
 
 Each layer of nesting eats one quoting level, and three layers deep nothing parses:
@@ -35,6 +45,15 @@ Each layer of nesting eats one quoting level, and three layers deep nothing pars
 Layer 3 collides with layer 1: the script wants single quotes that the outer wrapper already spent. Variable expansion is ambiguous too — `$VAR` in an ssh string is a silent bet on which shell expands it.
 
 Real case (sanitized): mid-diagnosis on an unfamiliar node, a probe script needed a one-line patch. The cheap-looking move was inline `sed` inside `ssh '...'` — bash single quotes + sed expression + python f-string subscript, three layers, parse failure. The neighboring iterations that edited the local file and re-scp'd it never failed. Diagnosing the quoting failure cost more than the scp ever would.
+
+When an inline command does fail, the failure is evidence: the command was already past the inline threshold. Escalate to scp-first on the first failure — do not patch the quoted string and retry inline; the retry usually deepens the nesting. (A scan of 200 historical sessions backs every rule in this skill: [`references/scan-evidence.md`](references/scan-evidence.md).)
+
+## Time-bound every remote command
+
+A remote command must return before the local tool timeout kills it. Two rules:
+
+1. **Wrap remote waits in a remote `timeout`.** Anything that polls or waits — `kubectl rollout status`, log tails, sleep-then-check loops — runs as `timeout <N> <command>` on the remote side, with N below the local tool timeout. Otherwise the local timeout kills the ssh session mid-wait and you lose the partial output.
+2. **Separate background launch from verification.** The launch command starts the job (`nohup ... > run.log 2>&1 & echo "pid=$!"`) and exits immediately. Verification — pid alive, output file growing — happens in a separate, later ssh. Never bundle launch + `sleep` + checks into one ssh string: the sleeps and follow-ups push a fast launch past the local timeout and get the whole thing killed.
 
 ## Directory conventions
 
