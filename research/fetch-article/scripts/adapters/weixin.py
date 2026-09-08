@@ -33,11 +33,14 @@ def fetch(url: str, output_dir: str = None) -> dict:
 
     html_path = os.path.join(output_dir, "article.html")
 
-    # Step 1: curl with Referer header (critical for WeChat)
+    # Step 1: curl with Referer header (critical for WeChat).
+    # UA matters: a desktop Chrome UA gets a JS-shell page (~17KB, empty body,
+    # no rich_media_content). The MicroMessenger UA gets the full server-rendered
+    # article directly — no JS execution needed, no captcha trigger.
     print(f"[weixin] Fetching with curl…", file=sys.stderr)
     curl_cmd = [
         "curl", "-sL",
-        "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "-H", "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.49",
         "-H", "Referer: https://mp.weixin.qq.com/",
         "-o", html_path,
         url,
@@ -53,6 +56,15 @@ def fetch(url: str, output_dir: str = None) -> dict:
 
     if "wappoc_appmsgcaptcha" in raw or "环境异常" in raw:
         return _error("WeChat captcha page returned. IP may be blocked or rate-limited.")
+
+    # Shell-page guard: a real article page carries the content container and
+    # the msg_title JS var. Without them the body will convert to empty UI scraps
+    # ("视频 小程序 赞 在看 …") — fail loudly instead of returning garbage.
+    if "rich_media_content" not in raw and "var msg_title" not in raw:
+        return _error(
+            "WeChat returned a JS shell page (no rich_media_content / msg_title). "
+            "Retry later, or use a headless-browser fetcher for this URL."
+        )
 
     # Step 2: Convert to Markdown via to_md.py
     if not TO_MD_PY.exists():
