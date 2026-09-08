@@ -49,4 +49,8 @@ Structure and Reasoning fails are blocking. Sentence Craft and Teaching fails ar
 
 ## Export
 
-When the user says "导出"、"export"、"PDF"，read `<SKILL_DIR>/references/export.md`. Then run `<SKILL_DIR>/scripts/export-blogs.sh` with `<SKILL_DIR>/references/export-style.css`.
+When the user says "导出"、"export"、"PDF"，run **`/skill:export-pdf`** — the standalone Markdown→PDF export skill. Blog-specific notes for the export:
+
+- Export the whole `<PROJECT_DIR>/` directory (batch mode); STYLE-GUIDE.md is skipped automatically.
+- Blog posts hand-number their sections, so the default **with-TOC, without `--number-sections`** behavior of that skill is exactly right — do not add flags.
+- The default stylesheet of that skill (H2 accent bar, zebra tables, dark code blocks) is the canonical blog PDF look; only override with `--css` if the user asks.
