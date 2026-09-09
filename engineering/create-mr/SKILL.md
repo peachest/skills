@@ -23,14 +23,32 @@ confirm with the user is always clean.
 
 ## Process
 
-1. **Select the remote** (`git remote -v`). One remote → use it. Several → ask
-   the user which one. Everything below runs against the *selected* remote.
+0. **Fresh contract, fresh run.** Second execution in one session, or any
+   execution in a session older than ~a day: re-read this SKILL.md first.
+   Adherence decays with staleness — the worst violations on record (skipped
+   asks, hand-written `Draft:` prefixes, unconfirmed pushes) all came from
+   running a days-old memory of this flow.
+
+1. **Preflight, then select the remote.** Run
+   `bash <SKILL_DIR>/scripts/preflight.sh [repo-dir]` — it emits one block per
+   info class the next steps need: REMOTES, PLATFORM, BRANCH (unpushed counts
+   + branch-consistency), TITLE_CANDIDATE, ASSIGNEE, EXISTING_MR (API-first),
+   TARGET_CANDIDATES. One remote → use it. Several → ask the user which one —
+   via ask, even when context makes one look obvious; self-judging the remote
+   is the most recurring violation on record.
 
 2. **Detect the platform** from the selected remote's URL: `github.com` → `gh`;
    anything else → `glab` (self-hosted GitLab included). For GitLab, check
    `glab auth status` first — several instances are usually configured, and glab
    mr commands target the repo's git remote. On auth failure (401), stop and
    tell the user; never retry or work around.
+
+   URL normalization (all forms → one form): `ssh://git@host:port/g/p.git`,
+   `git@host:g/p`, `http://` all normalize to `https://host/g/p`. Cross-instance
+   targeting uses `-R https://<host>/<path>` (full https URL, no `.git`) — never
+   combine `--hostname` with `mr create` (glab rejects the flag pair), and never
+   hand-derive the `-R` value with sed on the fly; `create-draft-mr.sh` below
+   already does the normalization.
 
 3. **Source-branch checkpoint.** The current branch is not necessarily a feature
    branch — it may be the target branch or another long-lived branch. Explore
@@ -47,7 +65,9 @@ confirm with the user is always clean.
    name (e.g. `dev`, or a version branch like `llm-2.3`).
 
 5. **Check for an existing MR.** Server-side query, works before first push
-   (an unpushed branch simply has no MR):
+   (an unpushed branch simply has no MR) — the preflight script's EXISTING_MR
+   block already did this API-first; only hand-roll a query if the preflight
+   was skipped:
 
    ```bash
    glab mr list -R <selected-remote-full-URL> --source-branch <branch>
@@ -61,6 +81,14 @@ confirm with the user is always clean.
 
    Note: `--hostname` is only valid on `glab api` / `glab auth status`, **not**
    on `glab mr` subcommands — use `-R <full remote URL>` there instead.
+
+   Two query traps, both on record: ① a **404 here is a URL/path form
+   problem until proven otherwise** — a misspelled `-R` returned 404 and was
+   once read as "no MR"; re-check via
+   `glab api --hostname <host> projects/<url-encoded-path>/merge_requests?...`
+   before concluding "no MR". ② repos in `tos/*`-style namespaces where glab
+   fails **silently** (empty output, exit 0): go straight to the glab-api
+   skill's API path; do not loop on `glab mr create`.
 
 6. **Title** — derive, then confirm. Offer a short descriptive title naming
    the behavior change or symptom (recommended: what the MR *does*, not which
@@ -83,7 +111,27 @@ confirm with the user is always clean.
    ruled out, and the unblock condition. No deferred work — no question.
 
 8. **Push + create** — one explicit confirmation for the push (a standing user
-   rule; never push unasked). Then:
+   rule; never push unasked). A confirmation counts only as **explicit user
+   input in this session** — an ask answer, or a direct instruction covering
+   *this branch's* push+create. Prior branches' instructions, other sessions'
+   precedent, and your own inference ("context makes it clear") do not count;
+   when in doubt, ask. Then:
+
+   ```bash
+   bash <SKILL_DIR>/scripts/create-draft-mr.sh \
+     --remote <remote> --source <branch> --target <target> \
+     --title "<clean title>" --desc-file <file> \
+     [--assignee <user>] [--no-push] [repo-dir]
+   ```
+
+   Write the description to a file first — never inline it in the command
+   (transient failures then cost a full re-emission). The script normalizes the
+   `-R` URL, scrubs any `Draft:`/`WIP:` prefix from the title, pushes (skip
+   with `--no-push`), creates with `--draft`, and retries once on transient
+   failures (5xx/empty output). Exit 3 = glab silent failure (`tos/*` quirk) —
+   route to the glab-api skill's API path, checking for an existing MR first.
+
+   Manual fallback (script unavailable) — the raw commands:
 
    ```bash
    # GitLab
