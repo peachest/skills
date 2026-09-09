@@ -1,10 +1,10 @@
 # Examples — real transcripts, lightly trimmed
 
-Four messages from real collaborations (2026-08 ~ 2026-09), each annotated with the protocol element it demonstrates. Use as calibration for tone and density, not as templates to copy verbatim.
+Six transcripts from real collaborations (2026-08 ~ 2026-09), each annotated with the protocol element it demonstrates. Use as calibration for tone and density, not as templates to copy verbatim.
 
 ## 1. Dispatch with the full contract (icc leader → cost-fix peer)
 
-Every nine elements present: prefix, identity, pre-digested context with file:line, anti-redundancy, verification commands, report schema, blocked-case protocol.
+A dispatch showing seven of the nine elements: prefix, identity, pre-digested context with file:line, anti-redundancy (implicit in the numbered requirements), verification commands, report schema, and artifact path. The elements this transcript does not show: the anti-hallucination clause and the language directive.
 
 ```
 /skill:herdr
