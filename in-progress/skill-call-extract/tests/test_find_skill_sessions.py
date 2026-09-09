@@ -57,7 +57,7 @@ ASSISTANT_MSG = {
 }
 
 
-def read_load_msg(path: str, ts: str = "2026-09-07T17:55:40.000Z") -> dict:
+def read_load_msg(path: str, ts: str = "2026-09-07T17:55:40.000Z", **extra_args) -> dict:
     return {
         "type": "message",
         "timestamp": ts,
@@ -65,7 +65,7 @@ def read_load_msg(path: str, ts: str = "2026-09-07T17:55:40.000Z") -> dict:
             "role": "assistant",
             "content": [
                 {"type": "toolCall", "id": "c2", "name": "read",
-                 "arguments": {"path": path}},
+                 "arguments": {"path": path, **extra_args}},
             ],
             "usage": {"input": 10, "output": 5, "cacheRead": 0, "cacheWrite": 0},
         },
@@ -73,7 +73,7 @@ def read_load_msg(path: str, ts: str = "2026-09-07T17:55:40.000Z") -> dict:
 
 
 def write_session(path: Path, skill_name: str | None, session_id: str,
-                  read_path: str | None = None) -> None:
+                  read_path: str | None = None, **read_extra) -> None:
     lines = [
         session_line({"type": "session", "version": 3, "id": session_id,
                       "timestamp": "2026-09-07T17:54:28.086Z", "cwd": "/tmp/proj"}),
@@ -85,7 +85,7 @@ def write_session(path: Path, skill_name: str | None, session_id: str,
         )
         lines.append(session_line(msg))
     if read_path:
-        lines.append(session_line(read_load_msg(read_path)))
+        lines.append(session_line(read_load_msg(read_path, **read_extra)))
     lines.append(session_line(ASSISTANT_MSG))
     path.write_text("\n".join(lines) + "\n")
 
@@ -213,6 +213,71 @@ class TestReadDetection:
         s = out["sessions"][0]
         assert s["selected_via"] == "explicit-id"
         assert s["read_count"] == 1 and s["marker_count"] == 0
+
+    def test_prefixed_name_conflict_does_not_match(self, tmp_path):
+        # x-my-skill must not match a search for my-skill (leading slash anchors)
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_99999999.jsonl", None, "99999999-9999",
+                      read_path="/home/u/.pi/agent/skills/x-my-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 0
+
+    def test_bare_relative_path_matches(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_aaaa1111.jsonl", None, "aaaa1111-1111",
+                      read_path="my-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        assert out["sessions"][0]["selected_via"] == "read"
+
+    def test_partial_read_with_offset_limit_counts(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_bbbb2222.jsonl", None, "bbbb2222-2222",
+                      read_path="/home/u/.pi/agent/skills/my-skill/SKILL.md",
+                      offset=200, limit=5)
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        assert out["sessions"][0]["read_count"] == 1
+
+    def test_multiple_reads_counted(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        p = slug / "a_cccc3333.jsonl"
+        lines = [session_line({"type": "session", "version": 3, "id": "cccc3333-3333",
+                               "timestamp": "2026-09-07T17:54:28.086Z", "cwd": "/tmp/proj"})]
+        p1 = "/home/u/.pi/agent/skills/my-skill/SKILL.md"
+        lines.append(session_line(read_load_msg(p1, ts="2026-09-07T17:55:40.000Z")))
+        lines.append(session_line(read_load_msg(p1, ts="2026-09-07T17:56:00.000Z")))
+        p.write_text("\n".join(lines) + "\n")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        assert out["sessions"][0]["read_count"] == 2
+
+    def test_malformed_message_and_arguments_do_not_crash(self, tmp_path):
+        # a corrupt-but-valid-JSON line must never abort the scan
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        lines = [session_line({"type": "session", "version": 3, "id": "dddd4444-4444",
+                               "timestamp": "2026-09-07T17:54:28.086Z", "cwd": "/tmp/proj"})]
+        # message is a plain string (malformed)
+        lines.append(session_line({"type": "message", "timestamp": "2026-09-07T17:55:00.000Z",
+                                   "message": "corrupted"}))
+        # read toolCall whose arguments is a list (malformed), path still as a key nowhere
+        lines.append(session_line({"type": "message", "timestamp": "2026-09-07T17:55:10.000Z",
+                                   "message": {"role": "assistant", "content": [
+                                       {"type": "toolCall", "id": "c9", "name": "read",
+                                        "arguments": ["/home/u/.pi/agent/skills/my-skill/SKILL.md"]}]}}))
+        # real signal after the malformed lines
+        lines.append(session_line(read_load_msg("/home/u/.pi/agent/skills/my-skill/SKILL.md")))
+        p = slug / "a_dddd4444.jsonl"
+        p.write_text("\n".join(lines) + "\n")
+        out, code, err = run("my-skill", "--sessions-dir", str(slug))
+        assert code == 0, f"scan must survive malformed lines, stderr: {err}"
+        assert out["matches"] == 1
+        assert out["sessions"][0]["read_count"] == 1
 
 
 class TestIndex:

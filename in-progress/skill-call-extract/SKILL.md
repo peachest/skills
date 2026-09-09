@@ -1,6 +1,6 @@
 ---
 name: skill-call-extract
-description: "Retrieve pi sessions that invoked a given skill, with per-session stats (tool histogram, token usage, run state) and a compact per-entry trace index. Search by skill name via the skill-injection marker, or resolve an explicit session id. Use when the user asks to 找出/检索/列出 which sessions called a skill, before /skill:skill-call-diagnose needs a trace, or for any backfill/audit over session logs by skill."
+description: "Retrieve pi sessions that invoked a given skill — via the skill-injection marker OR read-loads of its SKILL.md (manual contract loads). With per-session stats (tool histogram, token usage, run state) and a compact per-entry trace index. Use when the user asks to 找出/检索/列出 which sessions called a skill, before /skill:skill-call-diagnose needs a trace, or for any backfill/audit over session logs by skill."
 ---
 
 # Skill Call Extract
@@ -29,7 +29,7 @@ python3 scripts/find-skill-sessions.py <skill-name> --session <id>   # explicit 
 
 The marker is the **skill injection tag** (`<skill name=\"NAME\"` in the raw JSONL — backslash-escaped quotes), never the string `skill:<name>`: that string appears inside other skills' injected bodies and false-positives by the dozen. Subagent fork sessions carry the marker too — include them.
 
-The read-load signal parses actual `toolCall` entries (name `read`), so a session that merely mentions the path in prose does not match. `selected_via` reports which signal(s) hit: `marker` / `read` / `marker+read` / `explicit-id`.
+The read-load signal parses actual `toolCall` entries (name `read`), so a session that merely mentions the path in prose does not match. Partial reads (`offset`/`limit`) count — the agent opened the contract file, which is the fact we record. Known blind spot: loading the contract via `bash cat <path>` is not detected (no read tool call, no marker); rerun with the marker context or treat as no match. `selected_via` reports which signal(s) hit: `marker` / `read` / `marker+read` / `explicit-id`. Malformed JSONL lines (non-dict message/arguments) are skipped, never abort the scan.
 
 ### 3. Present the triage list
 
