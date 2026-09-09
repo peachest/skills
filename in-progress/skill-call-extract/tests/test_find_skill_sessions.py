@@ -57,7 +57,23 @@ ASSISTANT_MSG = {
 }
 
 
-def write_session(path: Path, skill_name: str | None, session_id: str) -> None:
+def read_load_msg(path: str, ts: str = "2026-09-07T17:55:40.000Z") -> dict:
+    return {
+        "type": "message",
+        "timestamp": ts,
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "toolCall", "id": "c2", "name": "read",
+                 "arguments": {"path": path}},
+            ],
+            "usage": {"input": 10, "output": 5, "cacheRead": 0, "cacheWrite": 0},
+        },
+    }
+
+
+def write_session(path: Path, skill_name: str | None, session_id: str,
+                  read_path: str | None = None) -> None:
     lines = [
         session_line({"type": "session", "version": 3, "id": session_id,
                       "timestamp": "2026-09-07T17:54:28.086Z", "cwd": "/tmp/proj"}),
@@ -68,6 +84,8 @@ def write_session(path: Path, skill_name: str | None, session_id: str) -> None:
             f'<skill name="{skill_name}" location="/x/SKILL.md">\\nbody\\n</skill>\\n\\ncheck this'
         )
         lines.append(session_line(msg))
+    if read_path:
+        lines.append(session_line(read_load_msg(read_path)))
     lines.append(session_line(ASSISTANT_MSG))
     path.write_text("\n".join(lines) + "\n")
 
@@ -124,6 +142,77 @@ class TestSearch:
     def test_missing_sessions_dir_errors(self):
         out, code, err = run("x", "--sessions-dir", "/nonexistent-xyz")
         assert code == 2
+
+
+class TestReadDetection:
+    """read-load signal: read tool calls on /<name>/SKILL.md."""
+
+    def test_read_only_session_found(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_33333333.jsonl", None, "33333333-3333",
+                      read_path="/home/u/.pi/agent/skills/my-skill/SKILL.md")
+        out, code, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert code == 0
+        assert out["matches"] == 1
+        s = out["sessions"][0]
+        assert s["selected_via"] == "read"
+        assert s["read_count"] == 1
+        assert s["marker_count"] == 0
+
+    def test_read_source_checkout_layout_also_matches(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_44444444.jsonl", None, "44444444-4444",
+                      read_path="/home/u/skills/engineering/my-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        assert out["sessions"][0]["selected_via"] == "read"
+
+    def test_read_of_other_skill_does_not_match(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_55555555.jsonl", None, "55555555-5555",
+                      read_path="/home/u/.pi/agent/skills/other-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 0
+
+    def test_prose_mention_of_path_is_not_a_match(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        lines = [
+            session_line({"type": "session", "version": 3, "id": "66666666-6666",
+                          "timestamp": "2026-09-07T17:54:28.086Z", "cwd": "/tmp/proj"}),
+            session_line({"type": "message", "timestamp": "2026-09-07T17:55:00.000Z",
+                          "message": {"role": "user", "content": [
+                              {"type": "text",
+                               "text": "see /home/u/.pi/agent/skills/my-skill/SKILL.md for details"}]}}),
+        ]
+        (slug / "a_66666666.jsonl").write_text("\n".join(lines) + "\n")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 0
+
+    def test_marker_and_read_combined(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_77777777.jsonl", "my-skill", "77777777-7777",
+                      read_path="/home/u/.pi/agent/skills/my-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        s = out["sessions"][0]
+        assert s["selected_via"] == "marker+read"
+        assert s["marker_count"] >= 1 and s["read_count"] == 1
+
+    def test_explicit_session_reports_read_count(self, tmp_path):
+        slug = tmp_path / "--tmp-proj--"
+        slug.mkdir()
+        write_session(slug / "a_88888888.jsonl", None, "88888888-8888",
+                      read_path="/home/u/.pi/agent/skills/my-skill/SKILL.md")
+        out, _, _ = run("my-skill", "--session", "88888888", "--sessions-dir", str(slug))
+        assert out["matches"] == 1
+        s = out["sessions"][0]
+        assert s["selected_via"] == "explicit-id"
+        assert s["read_count"] == 1 and s["marker_count"] == 0
 
 
 class TestIndex:

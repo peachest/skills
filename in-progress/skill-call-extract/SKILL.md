@@ -9,8 +9,10 @@ description: "Retrieve pi sessions that invoked a given skill, with per-session 
 
 Two retrieval modes:
 
-1. **By skill name** — marker search across all session logs
-2. **By session id** — resolve an id the user already has (reports even without the marker; the user already knows it ran the skill)
+1. **By skill name** — two signals, either qualifies a session:
+   - the **skill-injection marker** (automatic trigger), or
+   - a **read-load**: a `read` tool call whose path argument ends in `/<name>/SKILL.md` (the agent manually loaded the contract — the marker cannot see this; matches both the installed layout and source checkouts)
+2. **By session id** — resolve an id the user already has (reports even without either signal; the user already knows it ran the skill)
 
 ## Process
 
@@ -27,9 +29,11 @@ python3 scripts/find-skill-sessions.py <skill-name> --session <id>   # explicit 
 
 The marker is the **skill injection tag** (`<skill name=\"NAME\"` in the raw JSONL — backslash-escaped quotes), never the string `skill:<name>`: that string appears inside other skills' injected bodies and false-positives by the dozen. Subagent fork sessions carry the marker too — include them.
 
+The read-load signal parses actual `toolCall` entries (name `read`), so a session that merely mentions the path in prose does not match. `selected_via` reports which signal(s) hit: `marker` / `read` / `marker+read` / `explicit-id`.
+
 ### 3. Present the triage list
 
-Per match: file path, first/last timestamp, entries, message counts, tool-call histogram, usage totals (`input`/`output`/`cacheRead`), marker count, `likely_running`. Zero matches → report and stop.
+Per match: file path, first/last timestamp, entries, message counts, tool-call histogram, usage totals (`input`/`output`/`cacheRead`), marker/read counts, `likely_running`. Zero matches → report and stop.
 
 Selection guidance when the user defers: default to the longest **finished** run (most entries, closing assistant summary, `likely_running: false`). A day of retries yields many sessions on one skill — that is expected; the consumer diagnoses the fullest one and cites the rest as corroboration.
 

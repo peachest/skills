@@ -2,7 +2,10 @@
 """find-skill-sessions.py — locate pi sessions that invoked a given skill.
 
 Usage:
-  # Find every session that invoked the skill (marker = skill injection tag):
+  # Find every session that invoked the skill. Two signals, either qualifies:
+  #   marker    = skill injection tag (automatic trigger)
+  #   read-load = a `read` tool call whose path ends in /<name>/SKILL.md
+  #               (manual contract load the marker cannot see)
   python3 find-skill-sessions.py <skill-name> [--sessions-dir <dir>] [--json]
 
   # Resolve one explicit session id (reports even without the marker —
@@ -108,6 +111,39 @@ def marker_hits(path: Path, markers: list[str]) -> int:
     return hits
 
 
+def read_hits(path: Path, skill_name: str) -> int:
+    """Count `read` tool calls loading this skill's SKILL.md.
+
+    Detects manual contract loads the injection marker cannot see: the agent
+    read the SKILL.md directly instead of triggering injection. Matches any
+    layout where the file's parent dir is the skill name — installed
+    (~/.pi/agent/skills/<name>/SKILL.md) and source checkouts
+    (~/skills/**/<name>/SKILL.md). Only actual toolCall entries count; a
+    session that merely mentions the path in prose does not match.
+    """
+    needle = f"/{skill_name}/SKILL.md"
+    hits = 0
+    with open(path, errors="replace") as f:
+        for line in f:
+            if needle not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            m = e.get("message") or {}
+            content = m.get("content") or []
+            if not isinstance(content, list):
+                continue
+            for c in content:
+                if (isinstance(c, dict) and c.get("type") == "toolCall"
+                        and c.get("name") == "read"):
+                    p = str((c.get("arguments") or {}).get("path", ""))
+                    if p.endswith(needle):
+                        hits += 1
+    return hits
+
+
 def cmd_index(path: Path, cap: int = 600) -> None:
     """Per-entry one-line index: the map analysis sub-agents navigate with."""
     lines: list[str] = []
@@ -187,22 +223,32 @@ def main() -> None:
             meta = scan_session_file(path)
             if meta:
                 meta["marker_count"] = marker_hits(path, markers)
+                meta["read_count"] = read_hits(path, args.skill_name)
                 meta["selected_via"] = "explicit-id"
                 results.append(meta)
             continue
-        # cheap prefilter: marker must appear somewhere in the file
+        # cheap prefilter: marker OR read-path reference must appear in the file
+        needle = f"/{args.skill_name}/SKILL.md"
         text_ok = False
         with open(path, errors="replace") as f:
             for line in f:
-                if any(m in line for m in markers):
+                if any(m in line for m in markers) or needle in line:
                     text_ok = True
                     break
         if not text_ok:
             continue
         meta = scan_session_file(path)
         if meta:
-            meta["marker_count"] = marker_hits(path, markers)
-            meta["selected_via"] = "marker"
+            mc = marker_hits(path, markers)
+            rc = read_hits(path, args.skill_name)
+            if not (mc or rc):
+                # prefilter hit was a bare prose mention, not a real signal
+                continue
+            meta["marker_count"] = mc
+            meta["read_count"] = rc
+            meta["selected_via"] = (
+                "marker+read" if mc and rc else ("marker" if mc else "read")
+            )
             results.append(meta)
 
     if args.session and not explicit_hit:
