@@ -49,18 +49,27 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
   uv tool install weasyprint --with pymupdf
   ```
 
-- **No Chinese font** — download Noto Sans SC variable font (16.9MB) into
-  `~/.fonts` and refresh the cache:
+- **No Chinese font** — preferred body font is Maple Mono Normal NF CN
+  (monospace with CJK glyphs, matching the blog style). Extract just the
+  Regular + Bold weights (~20MB each, not the whole 152MB zip) from the
+  upstream release into `~/.fonts`:
 
   ```bash
-  mkdir -p ~/.fonts && cd ~/.fonts
-  curl -sL --retry 3 -o NotoSansSC.ttf \
-    "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf"
+  cd ~/tmp && gh release download v7.9 --repo subframe7536/maple-font \
+      --pattern 'MapleMonoNormal-NF-CN.zip'
+  unzip -o -q MapleMonoNormal-NF-CN.zip \
+      'MapleMonoNormal-NF-CN-Regular.ttf' 'MapleMonoNormal-NF-CN-Bold.ttf' \
+      -d ~/.fonts
   fc-cache -f
   ```
 
-  The full "Maple Mono NF CN" family is 159MB; Noto Sans SC is the light
-  option and the default stylesheet falls back to it automatically.
+  Light fallback (proportional sans): Noto Sans SC variable font (16.9MB):
+
+  ```bash
+  curl -sL --retry 3 -o ~/.fonts/NotoSansSC.ttf \
+    "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf"
+  fc-cache -f
+  ```
 
 ## Key facts (do not re-derive)
 
@@ -80,6 +89,11 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
 - **weasyprint ≥ 70 logs `Using fontTools instead of HarfBuzz-Subset`** per
   embedded CJK font (unless system libharfbuzz-subset is installed). Cosmetic
   — subsetting still works via fontTools. Filtered by the export script.
+- **Font family names differ per Maple variant**: the *Normal* build
+  registers as `Maple Mono Normal NF CN`, not `Maple Mono NF CN` — check the
+  exact name with `fc-list | grep -i maple` before writing CSS. The Normal
+  variant has no italic files; weasyprint synthesizes an Oblique, which is
+  fine.
 - **`--resource-path=<source dir>`** must point at the directory containing
   the markdown (and its images) so relative image paths resolve.
 
@@ -88,10 +102,10 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
 The default stylesheet (`<SKILL_DIR>/references/style.css`) provides: 2cm/1.5cm
 margins with page-number footer, 10.5pt body at line-height 1.7, styled
 H1/H2/H3, dark rounded code blocks, zebra-striped tables, and blockquote
-accents. Font-family is a fallback chain ("Maple Mono NF CN" → "Noto Sans SC"
-→ "WenQuanYi Zen Hei" → sans-serif), so it adapts to whichever CJK font the
-node has. Override per-run with `--css`, or edit the file for a project-wide
-look.
+accents. Font-family is a fallback chain ("Maple Mono Normal NF CN" →
+"Noto Sans SC" → "WenQuanYi Zen Hei" → sans-serif), so it adapts to
+whichever CJK font the node has. Override per-run with `--css`, or edit the
+file for a project-wide look.
 
 Source of the toolchain facts: pandoc manual + pandoc source
 (`src/Text/Pandoc/PDF.hs`) + weasyprint docs. Full research report:
