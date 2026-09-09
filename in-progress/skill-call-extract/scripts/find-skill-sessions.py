@@ -73,7 +73,9 @@ def scan_session_file(path: Path) -> dict | None:
                 session_id = e.get("id")
                 cwd = e.get("cwd")
             elif t == "message":
-                m = e.get("message", {})
+                m = e.get("message")
+                if not isinstance(m, dict):
+                    continue  # malformed line: skip, never abort the scan
                 role = m.get("role", "?")
                 msg_counts[role] = msg_counts.get(role, 0) + 1
                 u = m.get("usage") or {}
@@ -122,24 +124,30 @@ def read_hits(path: Path, skill_name: str) -> int:
     session that merely mentions the path in prose does not match.
     """
     needle = f"/{skill_name}/SKILL.md"
+    bare = f"{skill_name}/SKILL.md"
     hits = 0
     with open(path, errors="replace") as f:
         for line in f:
-            if needle not in line:
+            if needle not in line and bare not in line:
                 continue
             try:
                 e = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            m = e.get("message") or {}
-            content = m.get("content") or []
+            m = e.get("message")
+            if not isinstance(m, dict):
+                continue
+            content = m.get("content")
             if not isinstance(content, list):
                 continue
             for c in content:
                 if (isinstance(c, dict) and c.get("type") == "toolCall"
                         and c.get("name") == "read"):
-                    p = str((c.get("arguments") or {}).get("path", ""))
-                    if p.endswith(needle):
+                    args = c.get("arguments")
+                    if not isinstance(args, dict):
+                        continue
+                    p = str(args.get("path", ""))
+                    if p.endswith(needle) or p == bare:
                         hits += 1
     return hits
 
@@ -161,7 +169,9 @@ def cmd_index(path: Path, cap: int = 600) -> None:
             ts = (e.get("timestamp") or "")[11:19]  # HH:MM:SS
             desc = t
             if t == "message":
-                m = e.get("message", {})
+                m = e.get("message")
+                if not isinstance(m, dict):
+                    continue
                 role = m.get("role", "?")
                 parts = []
                 for c in m.get("content", []):
@@ -212,6 +222,9 @@ def main() -> None:
 
     # Raw markers to search in file text: JSON-escaped and plain forms.
     markers = [f'<skill name=\\"{args.skill_name}\\"', f'<skill name="{args.skill_name}"']
+    # bare = needle without leading slash; needle in line implies bare in line,
+    # so the prefilter checks bare to also admit bare relative paths.
+    bare = f"{args.skill_name}/SKILL.md"
 
     results = []
     explicit_hit = False
@@ -228,11 +241,10 @@ def main() -> None:
                 results.append(meta)
             continue
         # cheap prefilter: marker OR read-path reference must appear in the file
-        needle = f"/{args.skill_name}/SKILL.md"
         text_ok = False
         with open(path, errors="replace") as f:
             for line in f:
-                if any(m in line for m in markers) or needle in line:
+                if any(m in line for m in markers) or bare in line:
                     text_ok = True
                     break
         if not text_ok:
