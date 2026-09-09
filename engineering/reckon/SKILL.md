@@ -28,7 +28,15 @@ Five facts drive every rule below:
 
 ## Cold start — the baseline
 
-The first response after `/reckon` establishes the **baseline**: a position fix across every project this session touches. A session touches a project if it changed cwd there, ran bash against its paths, or operated its worktree. Multiple worktrees of one repository are one project; distinct repositories are distinct projects, each gets its own block.
+**Query, never recall.** An injection of reckon is a query trigger. Every invocation re-collects state from the live sources below — answering from session memory is a position error: memory holds where you were, the sources hold where you are. The collection scripts make this one command per project; there is no expensive shortcut to save.
+
+How much to emit depends on why reckon fired — three cases:
+
+- **First invocation of a session, after a long gap, or after compaction**: establish the full **baseline** — a position fix across every project this session touches.
+- **Re-injection with fresh position** (position was restated within the last few turns, no compaction since): the query is still mandatory, the full re-emission is not. Queries confirm nothing changed → one line, `位置未变（已复核）`. Queries show a change → emit only the diff.
+- **After compaction**: re-establish the full baseline (rule 4).
+
+A session touches a project if it changed cwd there, ran bash against its paths, or operated its worktree. Multiple worktrees of one repository are one project; distinct repositories are distinct projects, each gets its own block.
 
 Each block leads with the next action — not context, not a plan. The action.
 
@@ -45,17 +53,20 @@ map: <#n> → frontier <#x,#y> (N open)   ← 仅有 wayfinder map 时
 
 Cross-repository dependencies — one MR waiting on another repo's MR — are described in prose within the relevant block, inferred from session context. If the context reveals a dependency, state it: "MR !9 阻塞于 HAMi MR !2".
 
-The `map:` line is mandatory, not optional-when-convenient. A project with an open wayfinder map always gets the line — query the tracker (`glab issue list --label wayfinder:map` / `gh issue list --label wayfinder:map`) as part of the baseline, do not skip it because the session did not recently touch the map. A project with no open map gets no line; a project with a closed map gets no line. Writing `map: 无 open wayfinder map` is the same error as omitting the line for a project that has one — silence is the correct expression of "no map here", a line is not. Omitting the line for a project that has an open map is a position error — the frontier is part of where you stand.
+The `map:` line is part of every baseline: run `frontier.sh` (or the tracker query `glab issue list --label wayfinder:map` / `gh issue list --label wayfinder:map`) per project, then follow its result — an open map produces its line; an empty result moves you straight on to the next data source. The `map:` line exists only to carry an open map; a written `map: 无 open wayfinder map` is a position error in both directions. The frontier is part of where you stand.
 
-The frontier has a limbo state the label query misses: tickets whose code is complete but will close only when a referencing MR merges (`Closes #n` in the commit message). These are open, not frontier (not takeable now), not closed. When the map line would otherwise show `frontier 0 open` but open tickets exist, check whether they are pending MR-merge closure — if so, name them: `map: #108 → #109-#113 pending !25 merge`. A zero-frontier result from a label query is a query-method signal, not proof the map is done.
+The frontier has a limbo state the label query misses: tickets whose code is complete but will close only when a referencing MR merges (`Closes #n` in the commit message). These are open, not frontier (not takeable now), not closed. `frontier.sh` names them in its `pending:` field — carry that into the map line: `map: #108 → #109-#113 pending !25 merge`. A zero-frontier result is a query-method signal, not proof the map is done.
 
 When a project's working tree holds changes this session did not make — files from a parallel session, stale untracked research, another agent's in-flight work — flag them with the `⚠️` prefix, not as generic dirty workspace: `⚠️ <project> 有非本 session 改动: <files>`. A bare "工作区脏" line that happens to list foreign files is not the alert — the `⚠️` prefix and the explicit "非本 session" framing are what keep foreign changes from being mistaken for this session's position. Do not act on them; name them. Session-scoped means the baseline fixes *this* session's position, and foreign changes are noise in that fix.
 
-Data sources are pure reconstruction — no handoff file, no second source of truth:
+Data sources are pure reconstruction — no handoff file, no second source of truth. Collection ships as three scripts in this skill's `scripts/`; call them instead of hand-writing bash:
 
-- **git** (local state truth): branch, unpushed commits, working tree. Worktrees resolved via `git rev-parse --git-common-dir` to the shared repository root.
-- **glab / gh** (MR and wayfinder truth): open MRs, merge status, wayfinder map frontier query.
-- **session JSONL compaction** (intent truth): the last-known "what was I doing".
+- `position.sh [repo...]` (**git truth**): one TSV line per worktree — `path|branch|upstream|ahead|dirty|untracked|last-commit`. One call covers every worktree of the repo, resolves the upstream chain (`@{u}` → `origin/<default>` → `internal/<default>`), and uses `/usr/bin/git` (PATH git may be wrapped).
+- `mr-state.sh <repo> [--iid N]` (**MR truth**): open MRs or one MR — `iid|branch|state|merge_status|sha|title|url|blocking`, where `blocking` extracts a `Depends on !N` mention from the description. Derives the GitLab host from the remote (multi-instance safe), `glab api` only.
+- `frontier.sh <repo>` (**wayfinder truth**): one line per open map — open tickets plus the pending limbo. Empty output is the no-map case; move on silently.
+- **session JSONL compaction** (**intent truth**): the last-known "what was I doing" — read from the compaction summary in context.
+
+GitHub-hosted repos use the `gh` equivalents (`gh pr list`, `gh issue list --label wayfinder:map`).
 
 ## In-session rules
 
@@ -63,7 +74,9 @@ Data sources are pure reconstruction — no handoff file, no second source of tr
 
 The baseline is established once. After that, restate position only when the current turn produced a state change — a commit landed, a file was edited, the cwd moved, a todo item updated. Pure question-and-answer turns (a lookup, a clarification) do not trigger a restate. The restate is one line for the active project:
 
-`[<project> · <branch> · step <n>/<m>] 下一步: <action>`
+`[<project> · <branch> · <状态描述符>] 下一步: <action>`
+
+The status descriptor is what the work actually shows — tip sha, MR state, the current task phrase: `[hami · MR !14 open + CI 监控中 · wiring 完成]`.
 
 If other projects this session touches have items needing attention (an MR awaiting merge, unpushed commits), append one line:
 
@@ -83,10 +96,10 @@ This is the checkpoint. It lives in the conversation only — do not write it to
 
 ### 3. Anchor on project or worktree switch
 
-When the cwd changes to a different project, or a bash command operates on a different repository's paths, the switch is the moment position is most likely lost. Append one anchor line before continuing the work:
+When the cwd changes to a different project, or a bash command operates on a different repository's paths, the switch is the moment position is most likely lost. Append one anchor line before continuing the work, carrying three things — the project switched to, its branch, and how many MRs await merge there:
 
 `→ 切到 <project> · <branch> · 还有 N 个待合并 MR`
 
 ### 4. Re-establish baseline after compaction
 
-If the turn begins and the context feels truncated — recent turns are missing, the baseline is gone — a compaction just happened. Re-run the cold start: output the full baseline across all projects the session touches. Compaction loss only costs the position since the last change; rule 1's restate fills the rest back in.
+The compaction signal is concrete: a compaction summary sits in the context, or the recent turns are missing from it. On that signal, re-run the cold start across all projects the session touches. Compaction loss only costs the position since the last change; rule 1's restate fills the rest back in.
