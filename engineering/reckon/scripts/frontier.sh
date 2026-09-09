@@ -41,10 +41,13 @@ import json, re, sys
 maps, issues, mrs = (json.loads(a) for a in sys.argv[1:4])
 if not maps: sys.exit(0)
 map_iids = {m["iid"] for m in maps}
+# ponytail: Closes in MR description/title only; commit-message Closes (the wayfinder
+# convention) needs the /closes_issues endpoint per MR — add when limbo under-detects.
 closing = set()
 for mr in mrs:
     text = (mr.get("description") or "") + " " + (mr.get("title") or "")
-    closing.update(int(n) for n in re.findall(r'Closes?\s+#(\d+)', text))
+    for chunk in re.findall(r'Closes?\s+((?:#\d+[,\s]*)+)', text):
+        closing.update(int(n) for n in re.findall(r'\d+', chunk))
 for m in maps:
     mid = m["iid"]
     opens = [i["iid"] for i in issues if i["iid"] not in map_iids]
