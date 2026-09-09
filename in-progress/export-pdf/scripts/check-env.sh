@@ -3,11 +3,6 @@
 # PASS/WARN/FAIL per item; any FAIL → exit 1 (the FAIL lines are the setup guide).
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-RUNTIME_CONF="${RUNTIME_CONF:-$SKILL_DIR/runtime.conf}"
-
-[ -f "$RUNTIME_CONF" ] && . "$RUNTIME_CONF"
-WEASYPRINT_VENV="${WEASYPRINT_VENV:-$HOME/.venvs/weasyprint}"
-
 fails=0
 
 # 1. pandoc (system CLI, >= 3.0 — must be the real CLI, not a python wrapper)
@@ -25,13 +20,11 @@ else
     fails=1
 fi
 
-# 2. weasyprint (global CLI or dedicated venv)
+# 2. weasyprint (uv tool install puts it on PATH)
 if command -v weasyprint >/dev/null 2>&1; then
     echo "PASS weasyprint (PATH) $(weasyprint --version 2>/dev/null || echo '')"
-elif [ -x "$WEASYPRINT_VENV/bin/weasyprint" ]; then
-    echo "PASS weasyprint (venv $WEASYPRINT_VENV) $("$WEASYPRINT_VENV/bin/weasyprint" --version 2>/dev/null || echo '')"
 else
-    echo "FAIL weasyprint not found (neither PATH nor $WEASYPRINT_VENV) — bootstrap: uv venv $WEASYPRINT_VENV && uv pip install --python $WEASYPRINT_VENV/bin/python weasyprint"
+    echo "FAIL weasyprint not on PATH — bootstrap: uv tool install weasyprint --with pymupdf"
     fails=1
 fi
 
@@ -44,20 +37,19 @@ else
     fails=1
 fi
 
-# 4. pymupdf (optional — page count in the report; lives in the weasyprint venv)
-if [ -x "$WEASYPRINT_VENV/bin/python" ] && "$WEASYPRINT_VENV/bin/python" -c 'import pymupdf' >/dev/null 2>&1; then
-    echo "PASS pymupdf (in $WEASYPRINT_VENV)"
-elif python3 -c "import fitz" >/dev/null 2>&1; then
+# 4. pymupdf (optional — page count in the report; rides along with the
+#    weasyprint uv-tool env when installed via `--with pymupdf`)
+PAGE_PY=""
+if command -v weasyprint >/dev/null 2>&1; then
+    WP_PY="$(dirname "$(realpath "$(command -v weasyprint)")")/python"
+    [ -x "$WP_PY" ] && "$WP_PY" -c 'import pymupdf' >/dev/null 2>&1 && PAGE_PY="$WP_PY"
+fi
+if [ -n "$PAGE_PY" ]; then
+    echo "PASS pymupdf (weasyprint uv-tool env)"
+elif python3 -c "import pymupdf" >/dev/null 2>&1; then
     echo "PASS pymupdf (system python3)"
 else
-    echo "WARN pymupdf missing — page count will show '?'. Optional: uv pip install --python $WEASYPRINT_VENV/bin/python pymupdf"
-fi
-
-# 5. runtime.conf (optional; only carries WEASYPRINT_VENV override)
-if [ -f "$RUNTIME_CONF" ]; then
-    echo "PASS runtime.conf loaded"
-else
-    echo "WARN runtime.conf absent — using defaults (WEASYPRINT_VENV=$WEASYPRINT_VENV). Copy runtime.conf.example to runtime.conf to override."
+    echo "WARN pymupdf missing — page count will show '?'. Optional: uv tool install weasyprint --with pymupdf (reinstall with the extra)"
 fi
 
 [ "$fails" -eq 0 ] || exit 1
