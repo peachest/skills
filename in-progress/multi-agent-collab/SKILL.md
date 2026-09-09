@@ -35,14 +35,14 @@ Done when: the role split is stated (who leads, who peers) and every peer has a 
 Every inter-session prompt has this shape — the receiver depends on it to learn the reply path:
 
 ```
-/skill:herdr
+/skill:multi-agent-collab
 [caller identity] I am <name> (pane wX:pY, cwd ~/repo; reach me at pane wX:pY)
 [context] background, verified facts, data — mark what you verified yourself
 [tasks] numbered, each independently checkable; include what NOT to redo
 [output + reply] results to <file>; reply via herdr with the path and a summary
 ```
 
-- The `/skill:herdr` prefix on the first message is mandatory: it triggers the receiver's skill injection, which is how the receiver learns the reply path.
+- The first message to a fresh peer starts with `/skill:multi-agent-collab`: the injection teaches the receiver this whole protocol — reply shape, closure signals, waiting behavior — and it reaches the herdr skill for CLI mechanics when it needs to send. (Before this skill existed the prefix was `/skill:herdr`, which only taught the CLI.)
 - The explicit reply request at the end is mandatory — a prompt without it goes unanswered (persistent lesson).
 - Embed a copy-paste reply command in dispatches. Receivers follow it verbatim, so write it complete: a template missing the prefix produces a reply missing the prefix.
 - Address peers by name; sign requests with (name, pane) both.
@@ -103,7 +103,7 @@ Done when: delivery evidence is confirmed at level 1 or 2 — or the reply itsel
 
 A task dispatch to a fresh peer carries nine elements (omit only with a stated reason):
 
-1. `/skill:herdr` prefix + caller identity + "your result is invisible unless you report back"
+1. `/skill:multi-agent-collab` prefix + caller identity + "your result is invisible unless you report back"
 2. Pre-digested context: "Background (already investigated, trust this)" + verified code excerpts — saves the peer re-investigating
 3. Anti-redundancy: what is already done — "do not re-diagnose"; "your first step is to compare, not design from scratch"
 4. Anti-hallucination: "verify everything against the repo; do not trust this prompt blindly"
