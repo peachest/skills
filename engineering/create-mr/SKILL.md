@@ -62,13 +62,25 @@ confirm with the user is always clean.
    Note: `--hostname` is only valid on `glab api` / `glab auth status`, **not**
    on `glab mr` subcommands — use `-R <full remote URL>` there instead.
 
-6. **Title** — derive, then confirm. First commit of `<target>..HEAD`, subject
-   line; if none, transform the branch name (`<type>/<name>` → `Type: name`).
-   Clean title, no draft prefix. Ask the user to confirm or edit.
+6. **Title** — derive, then confirm. Offer a short descriptive title naming
+   the behavior change or symptom (recommended: what the MR *does*, not which
+   files it touches), alongside the first commit's subject line of
+   `<target>..HEAD` as the alternative. If neither works, transform the branch
+   name (`<type>/<name>` → `Type: name`). Clean title, no draft prefix. Ask the
+   user to confirm or edit.
 
 7. **Description** — yours to write, no fixed skeleton (MRs are not all fixes).
    Cover what fits the change: background, approach, verification, files
    touched — organized to suit it.
+
+   **Deferred work → tracking issue.** If this change deliberately defers part
+   of the work — a partial fix, a skipped review finding, an accepted
+   edge-case debt — ask the user, before creating the MR, whether to open a
+   tracking issue for the deferred piece and link it in the MR description.
+   A promise recorded only in prose (MR description, vault entry) has no
+   handle to grab when the bug next appears; an issue does. Carry the
+   reconnect context into the issue: symptom, candidate approaches already
+   ruled out, and the unblock condition. No deferred work — no question.
 
 8. **Push + create** — one explicit confirmation for the push (a standing user
    rule; never push unasked). Then:
