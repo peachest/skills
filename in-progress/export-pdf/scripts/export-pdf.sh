@@ -6,16 +6,6 @@ set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Source runtime.conf if present (WEASYPRINT_VENV, etc.)
-RUNTIME_CONF="${RUNTIME_CONF:-$SKILL_DIR/runtime.conf}"
-[ -f "$RUNTIME_CONF" ] && . "$RUNTIME_CONF"
-WEASYPRINT_VENV="${WEASYPRINT_VENV:-$HOME/.venvs/weasyprint}"
-
-# Make the weasyprint CLI resolvable for --pdf-engine (no-op if already on PATH)
-if [ -x "$WEASYPRINT_VENV/bin/weasyprint" ]; then
-    export PATH="$WEASYPRINT_VENV/bin:$PATH"
-fi
-
 CSS_FILE="$SKILL_DIR/references/style.css"
 TOC_ARGS=(--toc --toc-depth=2)
 TITLE_PREFIX=""
@@ -43,6 +33,14 @@ done
 [ ${#INPUTS[@]} -gt 0 ] || usage
 command -v pandoc >/dev/null || { echo "FAIL pandoc not on PATH" >&2; exit 1; }
 command -v weasyprint >/dev/null || { echo "FAIL weasyprint not on PATH (see SKILL.md bootstrap)" >&2; exit 1; }
+
+# Page-count python: prefer the python in weasyprint's uv-tool venv (has
+# pymupdf via `uv tool install weasyprint --with pymupdf`), fall back to
+# system python3.
+PAGE_PY="python3"
+WP_REAL="$(realpath "$(command -v weasyprint)")"
+WP_PY="$(dirname "$WP_REAL")/python"
+[ -x "$WP_PY" ] && "$WP_PY" -c 'import pymupdf' >/dev/null 2>&1 && PAGE_PY="$WP_PY"
 
 # Expand inputs: dirs → *.md files (always skipping README.md/STYLE-GUIDE.md)
 FILES=()
@@ -84,11 +82,8 @@ for md_file in "${FILES[@]}"; do
     [ -n "$TITLE_PREFIX" ] && title="$TITLE_PREFIX$title"
 
     echo "▶ $base → ${outdir/$HOME/\~}/$filename.pdf"
-    # Page count probe: prefer the venv python (has pymupdf), fall back to system python3
-    PAGE_PY="python3"
-    [ -x "$WEASYPRINT_VENV/bin/python" ] && "$WEASYPRINT_VENV/bin/python" -c 'import pymupdf' >/dev/null 2>&1 && PAGE_PY="$WEASYPRINT_VENV/bin/python"
-    # Filter harmless weasyprint noise: CJK-anchor errors (see SKILL.md key facts)
-    # and unknown-CSS-property warnings ("WARNING: Ignored ...")
+    # Filter harmless weasyprint noise: CJK-anchor errors (see SKILL.md key
+    # facts) and unknown-CSS-property warnings ("WARNING: Ignored ...")
     if pandoc "$md_file" \
         -o "$pdf_file" \
         --pdf-engine=weasyprint \
@@ -97,7 +92,7 @@ for md_file in "${FILES[@]}"; do
         --metadata title="$title" \
         --standalone \
         "${TOC_ARGS[@]}" \
-        2>&1 | grep -viE 'anchor|Links are not available|WARNING: Ignored'; then
+        2>&1 | grep -viE 'anchor|Links are not available|WARNING: Ignored|Using fontTools instead of HarfBuzz-Subset'; then
         :
     fi
 
