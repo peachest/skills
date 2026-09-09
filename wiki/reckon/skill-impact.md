@@ -12,3 +12,4 @@
 | D3 map 行两结果正向表述（空结果→直接查下一数据源） | SKILL.md map 段 | 899ea13 | 待下轮 diagnose 验证 |
 | D4 删 step n/m 模板字段 → 状态描述符 | SKILL.md rule 1 | 899ea13 | 待下轮 diagnose 验证 |
 | D5 rule 3 锚行内容要求（项目+分支+待合并数） | SKILL.md rule 3 | 899ea13 | 待下轮 diagnose 验证 |
+| R1 评审修订：三分支+rule4 坍缩为二元新鲜度测试（上一条位置陈述是否还在 context）；删 position.sh/mr-state.sh 死代码；修 frontier.sh 多号 Closes 只捕获首号 bug | SKILL.md + scripts | 921f910 | 单元回归：多号捕获 [45,109,110,113] ✓；三脚本重冒烟 ✓（!27 merge 后 pending 自动清除=正确） |
