@@ -42,7 +42,7 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 19 | Alternate-screen reads | `--lines` cannot recover rows that left the alternate screen | Fallback: peer writes full response to a file and replies with the path only |
 | 20 | `pane run` is shell-mode | sending "n" executed the `nerdctl` alias into a TUI | TUI keys go through `agent send-keys` / `pane send-keys`, not `pane run` |
 | 21 | intercom broker crash | `Failed to spawn intercom broker: spawn node ENOENT` | herdr CLI is the fallback channel (talks to the server socket) |
-| 22 | `HERDR_ENV` gate blocks scheduled agents | bare `herdr` connects fine without env vars | Don't hard-gate on `test $HERDR_ENV = 1` in non-interactive contexts |
+| 22 | `HERDR_ENV` gate blocks scheduled agents | bare `herdr` connects fine without env vars | The gate is for interactive sessions inside a pane (the herdr skill's rule); scripts and scheduled jobs that invoke the herdr binary directly should probe connectivity instead of hard-gating on `test $HERDR_ENV = 1` |
 | 23 | forked subagents have no herdr | fork sessions carry zero herdr commands (no terminal) | fork = pi channel (results via stdout/files); herdr = terminal channel; never mix expectations |
 
 ## Deprecated API (historical)

@@ -1,6 +1,6 @@
 ---
 name: multi-agent-collab
-description: "Collaboration protocol for coordinating peer pi sessions over Herdr — appoint a leader, bootstrap named agents, message with the five-part prompt, dispatch with the full-context contract, wait background-first without blocking, verify delivery, close loops with receipts. Use when the user mentions multi-agent work, peer sessions, 多个 session 协作/编排, 开 tab 共同完成, herdr session 间通信, or when a task spans multiple projects or branches and would benefit from parallel sessions. CLI mechanics live in the herdr skill."
+description: "Collaboration protocol for peer pi sessions over Herdr — leader appointment, dispatch contracts, background-first waiting, delivery verification, closure receipts. Use when the user mentions 多个 session 协作/编排, 开 tab 共同完成, peer sessions, herdr session 间通信, or a task spanning multiple projects or branches that would benefit from parallel sessions. CLI mechanics live in the herdr skill."
 ---
 
 # Multi-Agent Collaboration
@@ -13,13 +13,14 @@ Peer-ify when the task spans multiple projects, needs multiple branches/worktree
 
 Three roles:
 
-- **Leader** — orchestrates: inventory, bootstrap, dispatch, verify, close. **Appointed by the user, never self-elected.** At 3+ collaborating sessions a leader must exist, named by the user. Leaders defer timing decisions to the user ("notify peers now, or after the deploy finishes?").
+- **Leader** — orchestrates: inventory, read each peer's existing work before dispatching, dispatch, verify, close. **Appointed by the user, never self-elected.** At 3+ collaborating sessions a leader must exist, named by the user. Leaders defer timing decisions to the user ("notify peers now, or after the deploy finishes?").
 - **Peer** — specialist worker (researcher, fixer, writer). Verifies incoming claims against sources before acting, pushes back with file:line evidence, and never answers a user-facing question aimed at another session's user — route it back instead. When a peer's work is being systematically undone by another session (directional conflict, not an accidental touch), it stops, asks the other session's goal over herdr, and treats the answer as conflicting directives rather than hostility — resolve jointly or escalate to the user; a peer that keeps pushing harder converts a routing problem into a turf war.
 - **Explorer** — solo session using herdr for inspection only. No protocol applies.
 
-Bootstrap a named peer (names survive pane churn; pane IDs do not — see pitfalls #14):
+Bootstrap a named peer (names survive pane churn; pane IDs do not — see pitfalls #16):
 
 ```bash
+# right for a wide caller pane, down for a tall one (see the herdr skill's geometry rule)
 herdr pane split --current --direction right --cwd <peer-repo> --no-focus
 # parse .result.pane.pane_id, then:
 herdr agent start <name> --kind pi --pane <pane-id>
@@ -45,13 +46,20 @@ Every inter-session prompt has this shape — the receiver depends on it to lear
 - The explicit reply request at the end is mandatory — a prompt without it goes unanswered (persistent lesson).
 - Embed a copy-paste reply command in dispatches. Receivers follow it verbatim, so write it complete: a template missing the prefix produces a reply missing the prefix.
 - Address peers by name; sign requests with (name, pane) both.
-- Cross-workspace dispatch works (w7 → w13 targets are fine).
+- Cross-workspace dispatch works.
 
 ### Quoting — three safe strategies, in order
 
-1. Shell variable: `MSG=$(cat <<'EOF' ... EOF)` then `herdr agent prompt <target> "$MSG"`
-2. Temp file: `cat > /tmp/task.md <<'EOF'` … then `"$(cat /tmp/task.md)"` — friendliest for versioned resends
-3. CJK brackets 「」 wherever the body would otherwise need ASCII double quotes
+1. Temp file (the two-step form — most robust, friendliest for versioned resends): write first, send second:
+   ```bash
+   cat > /tmp/task.md <<'EOF'
+   ...body with any quotes...
+   EOF
+   herdr agent prompt <target> "$(cat /tmp/task.md)"
+   ```
+2. Shell variable (works when a heredoc inside `$( )` parses cleanly in your shell — that nesting is environment-sensitive and may EOF-error):
+   `MSG=$(cat <<'EOF' ... EOF)` then `herdr agent prompt <target> "$MSG"`
+3. CJK brackets 「」 inside the body wherever it would otherwise need ASCII double quotes
 
 An ASCII `"` inside the body closes the argument early and the tail parses as flags (`unknown option: <body text>`). A heredoc nested inside `$( )` is environment-sensitive (EOF errors) — use the two-step form. `--wait` is a valueless flag: `--wait false` is an error.
 
@@ -71,7 +79,13 @@ Choose by expected duration:
 | scripted context, no bg_run | bounded bash poll loop on the settled trio (idle/done/blocked) |
 | a specific state needed | `herdr agent wait <t> --until blocked --timeout ...` |
 
-`--timeout` is **milliseconds** and requires `--wait`. There is no completion-subscription mechanism (`herdr notification` only shows) — background tasks and polling are the only waiting primitives. Keep the bash tool timeout above the herdr wait (e.g. 700000 > 600000).
+`--timeout` is **milliseconds** and requires `--wait`. There is no completion-subscription mechanism (`herdr notification` only shows) — background tasks and polling are the only waiting primitives. Keep the bash tool's timeout above the herdr wait, both in milliseconds (e.g. herdr `--timeout 600000` needs a bash tool timeout of 700000).
+
+Replies arrive on their own as injected user messages — **push, not pull**. A `--wait` return value is a settled-state convenience, and a background send's notification only tells you the *send* settled; the peer's reply lands later as its own message. So do other work and let the reply interrupt; polling for a reply wastes the concurrency the background-first rule bought you.
+
+A failed or expired background-task notification means the send did not settle — it says nothing about the peer's work. Verify deliverables directly (`agent read`, artifact files) before resending; a blind resend duplicates the task.
+
+A stuck peer escalates in three steps: nudge once with a short prompt; if silent, re-dispatch the task to another peer or take it over yourself; re-bootstrap (fresh named agent) only as a last resort — it costs all accumulated context.
 
 ### Delivery evidence — three levels, cheapest first
 
@@ -99,11 +113,11 @@ A task dispatch to a fresh peer carries nine elements (omit only with a stated r
 8. Agreed artifact paths: "reply with the file path only"
 9. Language directive: reports in English (for agents), conclusions in Chinese (for the user)
 
-Sequenced tasks get an explicit gate: "task 1 first; report and confirm before task 2." Expect the peer to verify your ground truth and push back with file:line evidence — that is the protocol working, not a failure.
+Sequenced tasks get an explicit gate: "task 1 first; report and confirm before task 2." Expect the peer to verify your ground truth and push back with file:line evidence — that is the protocol working, not a failure. Expect mid-task clarification questions too: answer them promptly with verified facts — an unanswered question parks the peer for the duration.
 
 ### Handoff currency and receipts
 
-Commit hashes and MR URLs are the currency: peers hold commits for leader approval, the leader specs the commit message, and hashes echo back in acks. After consuming peer output, send an **integration receipt** — which decision adopted it, which ticket or file it landed in, where the full report is archived. Before writing the receipt, check for a **dissenting peer**: one whose conclusion contradicts the majority. A dissent is evidence to weigh, not a vote to outcount — ask the dissenter for its evidence chain and evaluate it on file:line merit; group consensus that silently drops a peer's unique finding is the classic multi-agent failure (groups score far below their best member when unique information never gets pressed against the prior). Close every thread with a **closure signal**: 任务闭环 / no reply needed / stand down, with a recall clause when the peer may be needed again ("I'll re-contact if review has feedback"). A thread without a closure signal leaves a hanging peer.
+Commit hashes and MR URLs are the currency: peers hold commits for leader approval, the leader specs the commit message, and hashes echo back in acks. After consuming peer output, send an **integration receipt** — which decision adopted it, which ticket or file it landed in, where the full report is archived. Before writing the receipt, check for a **dissenting peer**: one whose conclusion contradicts the rest. A dissent is evidence to weigh, not a vote to outcount — ask the dissenter for its evidence chain and evaluate it on file:line merit; group consensus that silently drops a peer's unique finding is the classic multi-agent failure (groups score far below their best member when unique information never gets pressed against the prior). With exactly two peers there is no majority to lean on — a disagreement stays unresolved until evidence or a third check breaks the tie. Close every thread with a **closure signal**: 任务闭环 / no reply needed / stand down, with a recall clause when the peer may be needed again ("I'll re-contact if review has feedback"). A thread without a closure signal leaves a hanging peer.
 
 When leadership transfers: quiz the successor on its inherited context first ("confirm you can see the map and the frontier"), then send the explicit handoff ("you are now the active X session; I am no longer active"), then `herdr workspace focus <new>` so the user lands on the new leader.
 
@@ -119,4 +133,4 @@ For coordination that outlives individual messages, prefer files over message-pa
 
 ## When something breaks
 
-Consult [pitfalls.md](references/pitfalls.md) — 23 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. Real prompt transcripts (dispatch, reply, integration receipt, termination): [examples.md](references/examples.md).
+Consult [pitfalls.md](references/pitfalls.md) — 23 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. For calibration of tone and density when composing or closing — real transcripts of dispatch, reply, integration receipt, termination, peer-to-peer exchange, and the background-first send pattern: [examples.md](references/examples.md).
