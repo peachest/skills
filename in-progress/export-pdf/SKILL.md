@@ -1,6 +1,6 @@
 ---
 name: export-pdf
-description: Export Markdown documents to self-contained PDF via pandoc + weasyprint (images inlined, fonts embedded). Use when the user asks to 导出 PDF / export to PDF / md 转 pdf / generate a PDF from markdown, whether a single file or a whole directory. Carries the vetted toolchain facts (weasyprint venv layout, the `uv tool run` pandoc trap, Chinese font strategy, harmless anchor warnings) so the agent does not re-derive them.
+description: Export Markdown documents to self-contained PDF via pandoc + weasyprint (images inlined, fonts embedded). Use when the user asks to 导出 PDF / export to PDF / md 转 pdf / generate a PDF from markdown, whether a single file or a whole directory. Carries the vetted toolchain facts (weasyprint via uv tool, the `uv tool run` pandoc trap, Chinese font strategy, harmless anchor warnings) so the agent does not re-derive them.
 ---
 
 # Export Markdown → PDF
@@ -42,18 +42,12 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
 
 ## Environment bootstrap (when check-env FAILs)
 
-- **weasyprint missing** — install into a dedicated venv, NOT into the path
-  that pandoc resolution depends on:
+- **weasyprint missing** — one command, installs to the uv tool standard
+  location with the optional pymupdf extra for page counts:
 
   ```bash
-  uv venv ~/.venvs/weasyprint
-  uv pip install --python ~/.venvs/weasyprint/bin/python weasyprint pymupdf
+  uv tool install weasyprint --with pymupdf
   ```
-
-  The export script prepends `$WEASYPRINT_VENV/bin` (from `runtime.conf`,
-  default `~/.venvs/weasyprint`) to PATH so `--pdf-engine=weasyprint` resolves.
-  That venv also carries pymupdf for page counts (optional). If weasyprint is
-  already on PATH globally, the venv is unnecessary.
 
 - **No Chinese font** — download Noto Sans SC variable font (16.9MB) into
   `~/.fonts` and refresh the cache:
@@ -72,8 +66,8 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
 
 - **`uv tool run --with weasyprint pandoc` is a trap**: it installs the
   *Python* `pandoc` package, which shadows the system pandoc CLI and behaves
-  differently. Always run system pandoc with the weasyprint venv prepended
-  to PATH.
+  differently. Always use system pandoc, with weasyprint provided separately
+  via `uv tool install weasyprint`.
 - **`--embed-resources` is a no-op for PDF** output. Image self-containment
   for PDF is handled by pandoc's internal MediaBag (HTML-family engines go
   through `makeSelfContained` → data URIs; LaTeX-family via `\includegraphics`
@@ -83,6 +77,9 @@ Per-file output goes to `<outdir>/<basename>.pdf`.
 - **weasyprint cannot jump to CJK anchors** and logs `ERROR ... anchor` /
   "Links are not available" lines for internal links like `§` references.
   These are harmless — content renders fine. The export script filters them.
+- **weasyprint ≥ 70 logs `Using fontTools instead of HarfBuzz-Subset`** per
+  embedded CJK font (unless system libharfbuzz-subset is installed). Cosmetic
+  — subsetting still works via fontTools. Filtered by the export script.
 - **`--resource-path=<source dir>`** must point at the directory containing
   the markdown (and its images) so relative image paths resolve.
 
