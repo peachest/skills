@@ -33,6 +33,8 @@ Read the target skill's SKILL.md. Every file it names as load-on-demand (workflo
 
 If `~/skills/wiki/<target-skill>/patterns.md` exists, read it and extract the open-pattern list (状态: open). Two consumers: the Sedimentation axis gets the list in its brief (step 4) — a finding sharing a root cause with an open pattern is that pattern **recurring**, cited as such, not a new finding; and step 6 gets `skill-impact.md` — rejected proposals listed there must not be re-proposed without new evidence overturning the rejection rationale.
 
+Also read `~/skills/wiki/_cross-skill/patterns.md` (cross-skill regularities) the same way — a cross-skill pattern recurring in this trace is evidence for it (an `absent-this-run`-style update flows to it too, via step 5.5).
+
 No wiki dir for this skill → note "cold start" in the report and proceed (step 5.5 creates it).
 
 ### 3. Build the trace index
@@ -47,7 +49,7 @@ python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --i
 
 First verify the analysis agent exists (`subagent({ action: "list" })`): a read-only agent that can read/search files (e.g. `delegate`-style). If none is available, run the three axes inline in sequence and note the degradation in the report.
 
-Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2; Sedimentation additionally gets the open-pattern list from step 2b.
+Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2; Sedimentation additionally gets the open-pattern list from step 2b — both the target skill's and `_cross-skill/` — each entry as `P-### (or X-###) + 根因 + 现象一行`, plus the wiki patterns.md paths themselves (public repo, readable) in case deeper context is needed.
 
 Each brief demands: findings each cited by entry index, quantified waste with its arithmetic named, report in Chinese (the final report is user-facing), under 400 words.
 
@@ -67,7 +69,7 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 > The trace is the session file at `<path>`; navigate with the trace index. Find every inline script the agent wrote into tool-call arguments (heredoc python/bash, one-liner pipelines) and every manual procedure it repeated across turns.
 >
-> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. Wiki open patterns for this skill (from step 2b): <list>. A finding matching one is a recurrence — report it as such (pattern id + fresh evidence), not as a new finding. 报告用中文，每条发现标注 entry 序号。
+> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. Wiki open patterns for this skill (from step 2b): <list of `P-### + 根因 + 现象一行`>. A finding matching one is a recurrence — report it as such (pattern id + fresh evidence), not as a new finding. 报告用中文，每条发现标注 entry 序号。
 
 ### 5. Aggregate
 
@@ -77,8 +79,10 @@ Present the three axis reports under `## 遵循度 (Adherence)`, `## 摩擦点 (
 
 Merge the diagnosis into the persistent knowledge layer at `~/skills/wiki/<target-skill>/` (create the dir on cold start; format and entry spec: `~/skills/wiki/README.md`).
 
-- **Increment-merge into `patterns.md`** — a finding sharing a root cause with an existing pattern *updates* that entry (append 证据 `session-id#entry`, add an 出现 record, refine 方案 if a better one emerged); never a duplicate entry. A new root cause gets the next P-### id. Open patterns not seen this run get an `absent-this-run` note appended to their 出现 line.
-- **Append one line to `logs.md`** — date, input session ids, one-line conclusion.
+- **Increment-merge into `patterns.md`** — a finding sharing a root cause with an existing pattern *updates* that entry (append 证据 `session-id#entry`, add an 出现 record, refine 方案 if a better one emerged); never a duplicate entry. A new root cause gets the next P-### id. Bare entry indices in axis reports convert to `session-id#entry` via each trace's session (from step 3's index). Open patterns not seen this run — judged against **all three axis reports combined**, not Sedimentation alone (an environment-rooted pattern recurs as a Friction finding) — get an `absent-this-run` note appended to their 出现 line. The same merge applies to `_cross-skill/patterns.md`: a regularity confirmed in this run's traces appends evidence (with the skill name); a cross-skill pattern not seen this run gets an `absent-this-run` note only when this skill's trace would have surfaced it.
+- **Append one line to `logs.md`** — date, run number (next # column value), input session ids, 执行数, one-line conclusion.
+- **Promote verified rows in `skill-impact.md`** — when a fix has landed (accepted) and its corresponding pattern now has 2 consecutive `absent-this-run` records, update that row's 验证 cell and 结果 to `verified`, citing the absent records.
+- **Surface closure candidates** — after merging, list patterns that now meet the closure condition (fix landed + 2 consecutive absent runs) alongside the step 6 routing table, and ask the user to confirm closing. Closing without asking leaves the entry silently dangling.
 - **Sanitize before writing (public repo)** — internal domains/IPs → placeholder set from `docs/agents/skill-authoring.md`; internal project names → generic descriptors; credentials → behavior only, never the value; evidence as `session-id#entry`, never absolute paths or raw excerpts.
 - **Gate then commit** — from the skills repo root run gitleaks (`gitleaks dir . --config ~/data/benchmark/config/gitleaks.toml`), then commit the wiki change. Merging is bookkeeping and proceeds automatically; **closing** a pattern (open → closed) is a judgment — only on user confirmation, after the fix landed and the pattern was absent 2 consecutive runs.
 
@@ -96,7 +100,7 @@ Routes:
 - **harness** — not the skill's fault (model, provider, environment); route to the user, nothing to edit
 - **noop** — one-off, not worth a change
 
-Before proposing any fix, read `~/skills/wiki/<target-skill>/skill-impact.md` — a proposal whose shape matches a rejected one must not be re-proposed unless new evidence overturns the original rejection rationale.
+Before proposing any fix, read `~/skills/wiki/<target-skill>/skill-impact.md` — missing file means no rejected proposals to avoid. A proposal whose shape matches a rejected one must not be re-proposed unless new evidence overturns the original rejection rationale.
 
 Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn. After each applied fix, append a row to `skill-impact.md` (提案 / 落点 / commit / 验证命令与结果). Verification semantics: the next diagnose run marking the corresponding pattern `absent-this-run` is the real gate — the practical equivalent of WikiSkill's validation gating.
 

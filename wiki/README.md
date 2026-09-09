@@ -20,7 +20,7 @@ wiki/
 ## 写入者
 
 - `skill-call-diagnose` step 5.5（合并 findings）与 step 6（提案记账）
-- 人工编辑允许，但必须走同样的 sanitize 规则
+- 非 diagnose 来源（人工整理、外部知识提取如 herdr-extract）可直接写入，条目可直接以任意合法状态入库（如 absorbed-into-skill），但必须走同样的 sanitize 规则
 
 ## patterns.md 条目格式
 
@@ -28,10 +28,10 @@ wiki/
 ## P-### 标题
 - 状态: open | absorbed-into-skill | closed
 - 现象: 可观察的行为（脱敏后）
-- 根因: contract gap / agent 即兴 / 环境问题
+- 根因: contract gap | agent 即兴（无契约缺口，含 repeated pattern）| 环境问题 | 知识提取
 - 方案: 对应的沉淀方向（脚本/文档/上游）
-- 证据: <session-id>#<entry>[,<entry>...]   ← 多 session 用逗号分隔
-- 出现: <日期> diagnose#<n> [→ absent-this-run <日期> #<n> ...]
+- 证据: <session-id>#<entry>[,<entry>...]   ← 多 session 用逗号分隔；跨条目引用用 `<skill> P-###` 或 `<skill> diagnose#n`；知识提取来源可用裸 session-id 列表（无 entry，附本地去向说明）
+- 出现: <日期> diagnose#<n> [→ absent-this-run <日期> #<n> ...]   ← diagnose#n = 该 skill logs.md 第 n 行（含表头）
 ```
 
 ### 状态机
@@ -55,6 +55,8 @@ wiki/
 3. 凭证 / token → 只写行为（"凭证内联在 tool-call 参数"），永不写值
 4. 证据只存 `session-id#entry` 引用：不贴命令原文、不存绝对路径、不存 raw 摘录
 5. commit 前从仓库根跑 gitleaks（`gitleaks dir . --config ~/data/benchmark/config/gitleaks.toml`）
+
+**gitleaks 通过 ≠ 脱敏完成**：gitleaks 只覆盖凭证/密钥类；规则 1-4（域名、项目名、凭证行为、证据格式）是人工 checklist，逐条确认后才能 commit。
 
 ## 引用格式
 
