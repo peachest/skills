@@ -11,12 +11,12 @@ GIT=/usr/bin/git
 GLAB="${GLAB_BIN:-$HOME/.nix-profile/bin/glab}"
 
 # Default-branch guess for a repo: remote HEAD if set, else first of main/master/dev.
-default_branch() {
-    local d
-    d=$($GIT symbolic-ref --short "refs/remotes/origin/HEAD" 2>/dev/null | sed 's|^origin/||')
+default_branch_at() {  # in the context of worktree $1
+    local wt="$1" d
+    d=$($GIT -C "$wt" symbolic-ref --short "refs/remotes/origin/HEAD" 2>/dev/null | sed 's|^origin/||')
     [ -n "$d" ] && { echo "$d"; return; }
     for d in main master dev; do
-        if $GIT show-ref --verify --quiet "refs/remotes/origin/$d" 2>/dev/null; then echo "$d"; return; fi
+        if $GIT -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$d" 2>/dev/null; then echo "$d"; return; fi
     done
     echo main
 }
@@ -41,16 +41,6 @@ pos_line() {
     untracked=$($GIT -C "$wt" status --porcelain 2>/dev/null | grep -c '^??')
     last=$($GIT -C "$wt" log -1 --format='%h %s' 2>/dev/null | cut -c1-60)
     printf '%s|%s|%s|%s|%s|%s|%s\n' "$wt" "$branch" "$up" "$ahead" "$dirty" "$untracked" "$last"
-}
-
-default_branch_at() {  # default_branch in the context of worktree $1
-    local wt="$1" d
-    d=$($GIT -C "$wt" symbolic-ref --short "refs/remotes/origin/HEAD" 2>/dev/null | sed 's|^origin/||')
-    [ -n "$d" ] && { echo "$d"; return; }
-    for d in main master dev; do
-        if $GIT -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$d" 2>/dev/null; then echo "$d"; return; fi
-    done
-    echo main
 }
 
 if [ $# -eq 0 ]; then

@@ -28,11 +28,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Project path from the git remote (gitblue ssh form: host:group/project.git)
+# Project path from the git remote (ssh://git@host[:port]/group/project.git or host:group/project.git)
 remote_url=$($GIT -C "$repo" remote get-url origin 2>/dev/null) || { echo "no origin remote: $repo" >&2; exit 1; }
-# strip proto/host, keep group/project
-proj_path=$(printf '%s' "$remote_url" | sed -e 's|.*[:/]||; s|\.git$||; s|^.*://[^/]*/||')
-# robust: take everything after the first colon (ssh) or after host (https), minus .git
 case "$remote_url" in
     ssh://*) proj_path=$(printf '%s' "$remote_url" | sed -e 's|^ssh://[^/]*/||' -e 's/\.git$//') ;;
     *:*) proj_path=$(printf '%s' "$remote_url" | sed -e 's/^[^:]*://' -e 's/\.git$//') ;;

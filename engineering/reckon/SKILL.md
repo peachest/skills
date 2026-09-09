@@ -14,7 +14,7 @@ Orient reads terrain to produce a bearing. Reckon reads the wake you left — co
 
 These rules apply to every response for the rest of the session. Turn them off only when the reader says "stop reckon" or "normal mode"; confirm in one line and return to your default behavior.
 
-Pi `--resume` carries the session forward; the compaction's Constraints section preserves the fact that reckon is active, so the rules survive a resume without re-invocation. If a compaction drops the activation, the first response after compaction re-establishes the baseline (see rule 4). A fresh session (not resumed) starts clean — reckon is opt-in.
+Pi `--resume` carries the session forward; the compaction's Constraints section preserves the fact that reckon is active, so the rules survive a resume without re-invocation. If a compaction drops the activation, the first response after compaction re-establishes the baseline (see Cold start). A fresh session (not resumed) starts clean — reckon is opt-in.
 
 ## What this changes
 
@@ -30,11 +30,10 @@ Five facts drive every rule below:
 
 **Query, never recall.** An injection of reckon is a query trigger. Every invocation re-collects state from the live sources below — answering from session memory is a position error: memory holds where you were, the sources hold where you are. The collection scripts make this one command per project; there is no expensive shortcut to save.
 
-How much to emit depends on why reckon fired — three cases:
+How much to emit rides on one binary test: **is the last position statement (baseline or restate) still present in the context above?**
 
-- **First invocation of a session, after a long gap, or after compaction**: establish the full **baseline** — a position fix across every project this session touches.
-- **Re-injection with fresh position** (position was restated within the last few turns, no compaction since): the query is still mandatory, the full re-emission is not. Queries confirm nothing changed → one line, `位置未变（已复核）`. Queries show a change → emit only the diff.
-- **After compaction**: re-establish the full baseline (rule 4).
+- **Absent** — first invocation, or compaction took it (signal: a compaction summary sits in the context, or recent turns are missing): establish the full **baseline**.
+- **Present**: the queries are still mandatory; the re-emission is not. Queries confirm nothing moved → one line, `位置未变（已复核）`. Queries show a change → emit only the diff.
 
 A session touches a project if it changed cwd there, ran bash against its paths, or operated its worktree. Multiple worktrees of one repository are one project; distinct repositories are distinct projects, each gets its own block.
 
@@ -99,7 +98,3 @@ This is the checkpoint. It lives in the conversation only — do not write it to
 When the cwd changes to a different project, or a bash command operates on a different repository's paths, the switch is the moment position is most likely lost. Append one anchor line before continuing the work, carrying three things — the project switched to, its branch, and how many MRs await merge there:
 
 `→ 切到 <project> · <branch> · 还有 N 个待合并 MR`
-
-### 4. Re-establish baseline after compaction
-
-The compaction signal is concrete: a compaction summary sits in the context, or the recent turns are missing from it. On that signal, re-run the cold start across all projects the session touches. Compaction loss only costs the position since the last change; rule 1's restate fills the rest back in.
