@@ -13,6 +13,8 @@ The skill under diagnosis is the **target skill**; its SKILL.md and referenced d
 - **Friction** — where did execution stutter: failures, retries, re-emissions, cache collapse, stalls?
 - **Sedimentation** — what did the agent improvise (inline scripts, repeated logic) that the target skill should absorb?
 
+Findings do not end in the report: step 5.5 increment-merges them into the persistent wiki (`~/skills/wiki/<target-skill>/` — patterns, run logs, and a proposal ledger that also records rejected proposals). The next diagnosis starts from that wiki; skill edits are gated against it.
+
 ## Process
 
 ### 1. Resolve inputs
@@ -27,6 +29,12 @@ Read the target skill's SKILL.md. Every file it names as load-on-demand (workflo
 
 **Done when**: the contract path list is complete — the Adherence axis needs it.
 
+### 2b. Load wiki context (persistent knowledge layer)
+
+If `~/skills/wiki/<target-skill>/patterns.md` exists, read it and extract the open-pattern list (状态: open). Two consumers: the Sedimentation axis gets the list in its brief (step 4) — a finding sharing a root cause with an open pattern is that pattern **recurring**, cited as such, not a new finding; and step 6 gets `skill-impact.md` — rejected proposals listed there must not be re-proposed without new evidence overturning the rejection rationale.
+
+No wiki dir for this skill → note "cold start" in the report and proceed (step 5.5 creates it).
+
 ### 3. Build the trace index
 
 ```bash
@@ -39,7 +47,7 @@ python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --i
 
 First verify the analysis agent exists (`subagent({ action: "list" })`): a read-only agent that can read/search files (e.g. `delegate`-style). If none is available, run the three axes inline in sequence and note the degradation in the report.
 
-Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2.
+Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2; Sedimentation additionally gets the open-pattern list from step 2b.
 
 Each brief demands: findings each cited by entry index, quantified waste with its arithmetic named, report in Chinese (the final report is user-facing), under 400 words.
 
@@ -59,11 +67,20 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 > The trace is the session file at `<path>`; navigate with the trace index. Find every inline script the agent wrote into tool-call arguments (heredoc python/bash, one-liner pipelines) and every manual procedure it repeated across turns.
 >
-> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. 报告用中文，每条发现标注 entry 序号。
+> Classify each: **one-off** (right to improvise, leave it), **repeated pattern** (same shape written 2+ times in this trace — flag it), **contract gap** (the agent did by hand what the target skill should have provided a script/step for). For every repeated-pattern and contract-gap finding, sketch the sediment: a script or workflow step, its name, its input/output interface, which trace entries it would have replaced. Wiki open patterns for this skill (from step 2b): <list>. A finding matching one is a recurrence — report it as such (pattern id + fresh evidence), not as a new finding. 报告用中文，每条发现标注 entry 序号。
 
 ### 5. Aggregate
 
 Present the three axis reports under `## 遵循度 (Adherence)`, `## 摩擦点 (Friction)`, `## 沉淀机会 (Sedimentation)` — verbatim or lightly cleaned. **Do not merge or rerank across axes**: one axis's finding can mask another's (a perfectly compliant run can still be the expensive one). End with per-axis one-liners: findings count + worst finding within that axis.
+
+### 5.5. Merge into wiki
+
+Merge the diagnosis into the persistent knowledge layer at `~/skills/wiki/<target-skill>/` (create the dir on cold start; format and entry spec: `~/skills/wiki/README.md`).
+
+- **Increment-merge into `patterns.md`** — a finding sharing a root cause with an existing pattern *updates* that entry (append 证据 `session-id#entry`, add an 出现 record, refine 方案 if a better one emerged); never a duplicate entry. A new root cause gets the next P-### id. Open patterns not seen this run get an `absent-this-run` note appended to their 出现 line.
+- **Append one line to `logs.md`** — date, input session ids, one-line conclusion.
+- **Sanitize before writing (public repo)** — internal domains/IPs → placeholder set from `docs/agents/skill-authoring.md`; internal project names → generic descriptors; credentials → behavior only, never the value; evidence as `session-id#entry`, never absolute paths or raw excerpts.
+- **Gate then commit** — from the skills repo root run gitleaks (`gitleaks dir . --config ~/data/benchmark/config/gitleaks.toml`), then commit the wiki change. Merging is bookkeeping and proceeds automatically; **closing** a pattern (open → closed) is a judgment — only on user confirmation, after the fix landed and the pattern was absent 2 consecutive runs.
 
 ### 6. Classify and route
 
@@ -79,7 +96,9 @@ Routes:
 - **harness** — not the skill's fault (model, provider, environment); route to the user, nothing to edit
 - **noop** — one-off, not worth a change
 
-Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn.
+Before proposing any fix, read `~/skills/wiki/<target-skill>/skill-impact.md` — a proposal whose shape matches a rejected one must not be re-proposed unless new evidence overturns the original rejection rationale.
+
+Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn. After each applied fix, append a row to `skill-impact.md` (提案 / 落点 / commit / 验证命令与结果). Verification semantics: the next diagnose run marking the corresponding pattern `absent-this-run` is the real gate — the practical equivalent of WikiSkill's validation gating.
 
 ## Done when
 
@@ -88,3 +107,5 @@ Ask the user which rows to act on. For skill-doc / skill-script rows, the fix fl
 - [ ] Friction findings carry quantified cost with named arithmetic
 - [ ] Every sedimentation finding marked one-off / repeated / contract-gap
 - [ ] Routing table delivered; fixes applied only on user confirmation
+- [ ] Wiki increment-merged (or cold start noted); sanitize gate passed
+- [ ] Applied fixes recorded in skill-impact.md
