@@ -83,7 +83,7 @@ Read `/skill:fix` and execute its full process (gather → recommend → verify 
 
 `/skill:fix` owns the classification logic — verdict definitions, the verify-before-grill ordering, the grilling process, and the fix workflow. Follow it as written. The verify-before-grill, grill-before-fix ordering is what makes verdicts trustworthy; shortcutting it produces shallow classifications.
 
-The output is a classified list — each finding enriched with `classification`, `reason`, `fix_plan`, `priority`, and `resolved` fields. Build this file incrementally as each finding's verdict is finalized — do not assemble it by hand at the end. The fix skill defines the exact format.
+The output is a classified list — each finding enriched with `classification`, `reason`, `fix_plan`, `priority`, and `resolved` fields. Build this file incrementally: write classified.json as soon as the **first** verdict is finalized, then append each subsequent verdict the moment it is decided. An end-of-run assembly is a process violation.
 
 **Isolate per MR.** Write state to `.triage/<MR_OR_PR_ID>/classified.json`, not a shared `.triage/classified.json`. A stale file from a prior MR or a prior round is the common cause of posting labels to the wrong discussion ids. `mkdir -p .triage/<MR_OR_PR_ID>`. Resuming an MR whose directory already exists is fine — `/skill:fix` skips already-resolved findings — but never reuse one MR's file for another.
 
@@ -105,7 +105,7 @@ For each finding: posts a reply with the verdict label + reason/fix-plan, and re
 
 `--mode triage` resolves TP (true-positive) findings, not the default "stay open for tracking". In a triage run the TP fix has already landed and been build-verified in-step, so leaving it open only creates a thread the closure gate will then fail on. Edge and Question stay open in both modes — they are genuinely unresolved.
 
-On failure, fall back to manual commands — see the platform reference doc.
+Run the script first every round — `ocr-post-labels.py` posts verdict replies, resolves threads, and sweeps every remaining resolvable note in each resolved thread (head + replies). Manual `glab api` / `gh api` commands are the fallback for exactly two cases: the script errored on a finding, or the operation is outside its scope (e.g. replying to OCR summary threads). A round that never invokes the script is a process violation.
 
 **Completion criterion**: every finding in `.triage/<MR_OR_PR_ID>/classified.json` has been posted (ok or failed count reported by the script).
 
@@ -115,11 +115,13 @@ On failure, fall back to manual commands — see the platform reference doc.
 python3 <SCRIPTS_DIR>/ocr-verify-resolved.py <MR_OR_PR_ID>
 ```
 
-Exits 0 only when **every resolvable thread** on the MR/PR is resolved. This catches OCR summary discussions that post-labels never touches (they are bot status notices with no finding to classify, so they are not in classified.json, yet they are resolvable threads). It also catches any inline thread whose resolve call silently failed.
+Exits 0 only when every resolvable thread is resolved. This catches OCR summary discussions that post-labels never touches (they are bot status notices with no finding to classify, so they are not in classified.json, yet they are resolvable threads). It also catches any inline thread whose resolve call silently failed.
 
-**Completion criterion**: `ocr-verify-resolved.py` exits 0. This — not post-labels returning ok — is the done condition for the run.
+The gate script is a cache of the platform state; when its output contradicts direct observation (your own note scan shows N open, gate says 0), trust neither blindly — re-examine the scan's counting rules and the script's blind spot before concluding. Resolving the contradiction by rationalizing one side away is a process violation.
 
-If it exits 1: the script lists each open thread with a `[OCR summary]` tag where applicable. For OCR summary threads, reply with the fix/verdict context and resolve them (manual `glab api` / `gh api` — see the platform reference doc), then re-run the gate. Do not declare done while it exits 1.
+**Completion criterion**: `ocr-verify-resolved.py` exits 0.
+
+If it exits 1: the script lists each open thread with a `[OCR summary]` tag where applicable. For OCR summary threads, reply with the fix/verdict context and resolve them (manual `glab api` / `gh api` — see the platform reference doc), then re-run the gate.
 
 ### 5. Re-pull after push (detect new review rounds)
 
@@ -128,15 +130,11 @@ If you force-pushed commits during the run, the reviewer may post a new round of
 - New ids not in the classified file → a new review round arrived. Run Steps 2–4 on the new findings (append to the same `.triage/<MR_OR_PR_ID>/classified.json`).
 - No new ids → the run is genuinely complete.
 
-A stale classified file from an earlier round is the common cause of posting labels to the wrong ids; the per-MR directory and this re-pull together close that gap.
+The per-MR directory plus this re-pull together close the stale-classified-file gap.
 
 ### 6. Wrap up
 
-Present the final state: fixed / failed / skipped counts, changed files, and the verify gate result. Leave changes in the working tree.
-
-### 7. Reflect
-
-If `/skill:fix` surfaced new FP patterns or coding insights, it writes them to `docs/agents/review-knowledge.md` and `docs/agents/coding-patterns.md` in the project. This step is `/skill:fix`'s responsibility; `/skill:triage-mr` only confirms it ran.
+Present the final state: fixed / failed / skipped counts, changed files, and the verify gate result. Leave changes in the working tree. If `/skill:fix` surfaced no new FP patterns or coding insights, skip the reflect step — it is `/skill:fix`'s responsibility, not this skill's.
 
 ## Checkpoints
 
