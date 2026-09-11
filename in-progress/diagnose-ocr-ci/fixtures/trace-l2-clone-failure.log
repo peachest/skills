@@ -1,0 +1,11 @@
+Running with gitlab-runner 15.11.1 (...)
+Preparing the "kubernetes" executor
+Using Kubernetes namespace: gitlab-runner
+Using Kubernetes executor with image harbor.example.com/app-team/base/alpine:3.23.5 ...
+Preparing environment
+Getting source from Git repository
+Fetching changes...
+$ git clone --depth 1 ${GITLAB_URL}/team/platform/nonexistent.git "../common-ci"
+Cloning into '../common-ci'...
+fatal: repository 'http://gitlab-ci-token:[MASKED]@gitlab.red.example/team/platform/nonexistent.git/' not found
+ERROR: Job failed: command terminated with exit code 1

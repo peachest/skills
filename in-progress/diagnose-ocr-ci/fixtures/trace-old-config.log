@@ -1,0 +1,70 @@
+[0KRunning with gitlab-runner 15.11.1 (0d8a024e)[0;m
+[0K  on Kubernetes Runner jJuwHxbB, system ID: r_wqBtk7I4RK7a[0;m
+[0K  feature flags: FF_USE_ADVANCED_POD_SPEC_CONFIGURATION:true[0;m
+section_start:1788354614:prepare_executor
+[0K[0K[36;1mPreparing the "kubernetes" executor[0;m[0;m
+[0KUsing Kubernetes namespace: gitlab[0;m
+[0KUsing Kubernetes executor with image harbor.example.com/app-team/ocr:latest ...[0;m
+[0KUsing attach strategy to execute scripts...[0;m
+section_end:1788354614:prepare_executor
+[0Ksection_start:1788354614:prepare_script
+[0K[0K[36;1mPreparing environment[0;m[0;m
+[0;33mWARNING: Advanced Pod Spec configuration enabled, merging the provided PodSpec to the generated one. This is an alpha feature and is subject to change. Feedback is collected in this issue: https://gitlab.com/gitlab-org/gitlab-runner/-/issues/29659 ...[0;m
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0gdwc4 to be running, status is Pending
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0gdwc4 to be running, status is Pending
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0gdwc4 to be running, status is Pending
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0gdwc4 to be running, status is Pending
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Running on runner-jjuwhxbb-project-24276-concurrent-0gdwc4 via frameworkee29...
+
+section_end:1788354627:prepare_script
+[0Ksection_start:1788354627:get_sources
+[0K[0K[36;1mGetting source from Git repository[0;m[0;m
+[32;1mFetching changes...[0;m
+Initialized empty Git repository in /builds/legacy-group/dept/unit/my-project/.git/
+[32;1mCreated fresh repository.[0;m
+[32;1mChecking out 8635d0f1 as detached HEAD (ref is refs/merge-requests/9/head)...[0;m
+
+[32;1mSkipping Git submodules setup[0;m
+
+section_end:1788354628:get_sources
+[0Ksection_start:1788354628:step_script
+[0K[0K[36;1mExecuting "step_script" stage of the job script[0;m[0;m
+[32;1m$ git config --global --add safe.directory "${CI_PROJECT_DIR}"[0;m
+[32;1m$ export GITLAB_URL="http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}"[0;m
+[32;1m$ git clone --depth 1 ${GITLAB_URL}/team/platform/common-ci.git "../common-ci"[0;m
+Cloning into '../common-ci'...
+[32;1m$ cp -f ../common-ci/scripts/post_review.py /tmp/post_review.py[0;m
+[32;1m$ source ../common-ci/scripts/vibecoding_login.sh[0;m
+>>> 登录 vibecoding 网关获取 API Key...
+✅ API Key 获取成功
+[32;1m$ echo "OpenCodeReview version:" && ocr version || true[0;m
+OpenCodeReview version:
+open-code-review v1.11.2 (5cf97d0d1) linux/amd64
+built at: 2026-09-01T13:31:44Z
+https://github.com/alibaba/open-code-review
+[32;1m$ if [ -z "${OCR_LLM_AUTH_TOKEN:-}" ]; then # collapsed multi-line command[0;m
+[32;1m$ ocr config set custom_providers.internal-gw.url "$OCR_LLM_URL" # collapsed multi-line command[0;m
+Set custom_providers.internal-gw.url = https://internal.example.com/llm-gw/v1
+Set custom_providers.internal-gw.api_key = llmo***f704
+Set custom_providers.internal-gw.protocol = openai
+Set custom_providers.internal-gw.model = openai/glm-5
+Set custom_providers.internal-gw.extra_body = {"thinking": {"type": "disabled"}, "chat_template_kwargs": {"enable_thinking": false}}
+Set provider = internal-gw
+Set language = 中文
+[32;1m$ if ! ocr llm test 2>/tmp/ocr-llm-test.log; then # collapsed multi-line command[0;m
+Source: provider:internal-gw
+URL:    https://internal.example.com/llm-gw/v1
+Model:  glm53-internal
+The user is asking me to answer in one sentence who I am. According to my system prompt, I am open-code-review, a code review assistant developed by Alibaba, running in the user's command-line environment. I should respond in Chinese (中文) as instructed.我是 open-code-review，由阿里巴巴开发的代码审查助手，运行在你的命令行环境中，可以通过运行 `ocr --help` 快速开始使用。
+✓ Connection test successful
+✅ LLM 连通性检查通过。
+[32;1m$ echo "评审 MR: ${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME} → ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" # collapsed multi-line command[0;m
+评审 MR: feat/node-label-bridge → dev
+From http://gitlab.red.example/legacy-group/dept/unit/my-project
+ * branch            dev        -> FETCH_HEAD
