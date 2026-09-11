@@ -1,0 +1,8 @@
+[project]
+name = "tool-call-extract"
+version = "0.1.0"
+description = "Locate pi sessions calling a tool (name + args substring + errors-only filters)"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest>=8"]

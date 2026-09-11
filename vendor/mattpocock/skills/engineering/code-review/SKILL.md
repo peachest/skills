@@ -57,6 +57,8 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 
 ### 4. Spawn both sub-agents in parallel
 
+Before the first dispatch, load the `pi-subagents` skill once (read its SKILL.md and `references/execution-controls.md`) — it holds the verified `runs.run(key, { agent, task })` / `runs.all` signatures and the workflowScript pitfalls (task text never inside nested template literals). Do not write dispatch code from memory.
+
 **Standards sub-agent prompt** — include:
 
 - The full diff command and commit list.

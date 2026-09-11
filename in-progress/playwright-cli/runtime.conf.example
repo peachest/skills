@@ -1,0 +1,9 @@
+# runtime.conf.example — copy to runtime.conf (gitignored) and adjust per node.
+# Discovery notes: paths are the install locations defined in ~/skills/docs/agents/skill-authoring.md.
+# This skill has no secrets; only node-specific paths live here.
+
+# @playwright/cli binary (npm install @playwright/cli — see ~/tools convention)
+PLAYWRIGHT_CLI_BIN=~/tools/playwright-cli/node_modules/.bin/playwright-cli
+
+# playwright library used by screencast-mjpeg.js and the raw-script fallback
+PLAYWRIGHT_CLI_RUNNER=~/tools/playwright-runner

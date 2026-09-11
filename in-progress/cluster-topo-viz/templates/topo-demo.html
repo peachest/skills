@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<!-- topo-demo.html — render harness for cluster topology visualization.
+     Usage: copy this file + topo-base.css into the output directory (or keep
+     single-file: the <style> block below already inlines the tokens), replace
+     the /*__DATA__*/ slot with topology.json (see references/data-contract.md),
+     and adapt the layer sections to what the data actually has.
+     Provenance goes in .sub (collection date, source hosts, tools, ticket). -->
+<head>
+<meta charset="UTF-8">
+<title>集群拓扑 · <cluster></title>
+<style>
+/* inlined from assets/topo-base.css — edit tokens there, not here, if you keep both */
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+--nvlink:#a371f7;--iblink:#39c5cf;--fabric-a:#39c5cf;--fabric-b:#ff9bce;
+--active:#3fb950;--init:#8b949e;--down:#f85149;--numa0:#1f6feb;--numa1:#bf8700}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","Noto Sans SC",sans-serif;padding:24px}
+h1{font-size:20px;margin-bottom:4px}.sub{color:var(--muted);font-size:12px;margin-bottom:14px}
+h2{font-size:14px;color:var(--muted);margin:20px 0 8px;font-weight:600}
+svg text{font-family:inherit}
+.stats{display:flex;gap:12px;margin:10px 0;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:130px}
+.stat b{font-size:20px;display:block}.stat i{font-size:11px;color:var(--muted);font-style:normal}
+.legend{display:flex;gap:18px;margin:8px 0;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>集群拓扑 · <cluster></h1>
+<div class="sub">采集 <date> · <source host> · <tools> · <ticket></div>
+
+<div class="stats" id="stats"></div>
+<div class="legend">
+  <!-- one span per color used below; tokens only -->
+  <span><i class="dot" style="background:var(--fabric-a)"></i>Fabric A</span>
+  <span><i class="dot" style="background:var(--nvlink)"></i>NVLink (NVSwitch)</span>
+  <span><i class="dot" style="background:var(--numa0)"></i>NUMA 0</span>
+  <span><i class="dot" style="background:var(--numa1)"></i>NUMA 1</span>
+  <span><i class="dot" style="background:var(--down)"></i>故障/降级</span>
+</div>
+
+<!-- Adapt sections: keep a section only when the data fills it -->
+<h2>① 集群层 — InfiniBand Fabric</h2>
+<div id="fabricA-view"></div>
+<h2>② 节点层 — GPU 节点矩阵</h2>
+<div id="gpu-grid"></div>
+<h2>③ 代表节点内部</h2>
+<div id="node-detail"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,size=11,fill='var(--text)',anchor='start',weight='normal'){const t=el('text',{x,y,'font-size':size,fill,'text-anchor':anchor,'font-weight':weight},p);t.textContent=s;return t;}
+
+/* stats bar — numbers must be grep-checkable against the data */
+(function(){
+  const d=document.getElementById('stats');
+  const items=[ /* ['<value>','<label>'], ... */ ];
+  for(const [v,l] of items){const s=document.createElement('div');s.className='stat';s.innerHTML=`<b>${v}</b><i>${l}</i>`;d.appendChild(s);}
+})();
+
+/* fabric plane: switches on top, hosts below, low-opacity bezier links.
+   Rail patterns (1 port/switch per HCA vs 2 ports/switch) become visible
+   through the link fan-out — draw every link at opacity ~0.22, never aggregate. */
+function renderFabric(mountId, swNames, color, title){
+  const hosts={};
+  for(const n in DATA.fabric.nodes){
+    const sws=new Set(DATA.fabric.nodes[n].ports.map(p=>p.sw));
+    if(swNames.some(s=>sws.has(s))) hosts[n]=DATA.fabric.nodes[n];
+  }
+  const H=520, SW_W=110, SW_GAP=14, W=Math.max(swNames.length*(SW_W+SW_GAP)+40, 900);
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%'},document.getElementById(mountId));
+  txt(svg,10,16,title,12,color,'start','bold');
+  const SW_Y=46;
+  const hostNames=Object.keys(hosts).sort();
+  const rows=Math.ceil(hostNames.length/6), perRow=Math.ceil(hostNames.length/rows);
+  const HW=Math.min((W-40)/perRow-8,120), HH=64, HGAP=(W-40-perRow*HW)/Math.max(perRow-1,1);
+  const CARD_Y=H-HH-16, CARD_H=HH;
+  const swX=i=>20+i*(SW_W+SW_GAP);
+  swNames.forEach((s,i)=>{
+    const inf=DATA.fabric.switches[s]||{uplinks:0,active:0};
+    el('rect',{x:swX(i),y:SW_Y,width:SW_W,height:44,rx:6,fill:'#21262d',stroke:color},svg);
+    txt(svg,swX(i)+SW_W/2,SW_Y+17,s,11,'var(--text)','middle','bold');
+    txt(svg,swX(i)+SW_W/2,SW_Y+33,`${inf.uplinks} 口 · ${inf.active} Active`,9,'var(--muted)','middle');
+  });
+  const hostXY={};
+  hostNames.forEach((h,i)=>{
+    const r=Math.floor(i/perRow), c=i%perRow;
+    const x=20+c*(HW+HGAP), y=CARD_Y+r*(CARD_H+10);
+    hostXY[h]=[x,y];
+    const gpu=DATA.gpu[h];
+    const isGpu=gpu&&gpu.gpus>0, degraded=gpu&&gpu.gpus<8;
+    el('rect',{x,y,width:HW,height:CARD_H,rx:6,fill:'var(--panel)',
+      stroke:degraded?'var(--down)':(isGpu?'var(--nvlink)':'var(--border)'),'stroke-width':degraded?1.8:1},svg);
+    txt(svg,x+HW/2,y+16,h.split(' ')[0],10.5,'var(--text)','middle','bold');
+    if(isGpu){
+      txt(svg,x+HW/2,y+31,`${gpu.gpus}×GPU ${gpu.gpus<8?'⚠降级':''}`,9,degraded?'var(--down)':'var(--nvlink)','middle');
+      for(let g=0;g<8;g++){  // GPU slot chips, NUMA-colored; red = failed slot
+        el('rect',{x:x+HW/2-40+g*10,y:y+40,width:8,height:8,rx:1.5,
+          fill:g<gpu.gpus?(g<4?'var(--numa0)':'var(--numa1)'):'#3d1d20'},svg);
+      }
+    }
+  });
+  for(const h of hostNames){
+    const [hx,hy]=hostXY[h], anchor=hx+HW/2;
+    for(const p of DATA.fabric.nodes[h].ports){
+      if(!swNames.includes(p.sw))continue;
+      const si=swNames.indexOf(p.sw);
+      el('path',{d:`M ${swX(si)+SW_W/2} ${SW_Y+44} C ${swX(si)+SW_W/2} ${(SW_Y+CARD_Y)/2}, ${anchor} ${(SW_Y+CARD_Y)/2+40}, ${anchor} ${hy}`,
+        fill:'none',stroke:color,'stroke-width':1,opacity:0.22},svg);
+    }
+  }
+}
+/* renderFabric('fabricA-view', DATA.fabricA, 'var(--fabric-a)', 'Fabric A — ...'); */
+
+/* GPU node grid: every node compact; degraded nodes get red border */
+(function(){
+  const names=(DATA.gpuNodes||Object.keys(DATA.gpu||{}));
+  if(!names.length)return;
+  const cols=7, W=1280, HW=(W-20*(cols+1))/cols, HH=74;
+  const rows=Math.ceil(names.length/cols), H=rows*(HH+12)+10;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%'},document.getElementById('gpu-grid'));
+  names.forEach((n,i)=>{
+    const c=i%cols, r=Math.floor(i/cols);
+    const x=20+c*(HW+20), y=r*(HH+12);
+    const g=DATA.gpu[n]||{gpus:0};
+    const full=g.gpus===8;
+    el('rect',{x,y,width:HW,height:HH,rx:8,fill:'var(--panel)',stroke:full?'var(--border)':'var(--down)','stroke-width':full?1:1.8},svg);
+    txt(svg,x+10,y+18,n,11.5,'var(--text)','start','bold');
+    txt(svg,x+10,y+33,`${g.gpus}×${g.model||'GPU'} ${full?'':'⚠'+(8-g.gpus)+' 卡故障'}`,9,full?'var(--muted)':'var(--down)');
+    for(let k=0;k<8;k++){
+      el('rect',{x:x+10+k*((HW-20)/8)+2,y:y+42,width:(HW-20)/8-4,height:16,rx:2,
+        fill:k<g.gpus?(k<4?'rgba(31,111,235,.45)':'rgba(191,135,0,.45)'):'rgba(248,81,73,.25)'},svg);
+    }
+  });
+})();
+
+/* representative node detail: two NUMA rows around a central NVSwitch bar.
+   Full-mesh NVLink renders as GPU→NVSwitch spokes — never n² pairwise lines. */
+(function(){
+  const W=1280,H=330;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%'},document.getElementById('node-detail'));
+  /* see demo-prod.html gpuCard()/node-detail for the tested layout:
+     title + subtitle, NVSwitch bar mid, 8 GPU cards (NUMA rows),
+     GPU→switch spokes at stroke-width 5 opacity .45, per-GPU annotations */
+})();
+</script>
+</body>
+</html>
