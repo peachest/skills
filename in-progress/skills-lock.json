@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "cluster-topo-viz": {
+      "source": "./cluster-topo-viz",
+      "sourceType": "local",
+      "computedHash": "ae006727d755c9a8b5a78858defdcde2c02e2823f2475e76960c7d91ede49341"
+    }
+  }
+}
