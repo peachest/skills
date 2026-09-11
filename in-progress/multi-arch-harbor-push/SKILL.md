@@ -2,11 +2,11 @@
 name: multi-arch-harbor-push
 description: >
   本地用 nerdctl 构建 amd64+arm64 Docker 镜像，fan-out 推送到 Harbor 的
-  aip、aip-amd、aip-arm、aip-mm 四个 repo。
+  app、app-amd、app-arm、app-mm 四个 repo。
 disable-model-invocation: true
 ---
 
-本地用 nerdctl 构建 amd64+arm64 Docker 镜像，fan-out 推送到 Harbor 的四个 repo：`aip`（多架构）、`aip-amd`（amd64）、`aip-arm`（arm64）、`aip-mm`（多架构）。
+本地用 nerdctl 构建 amd64+arm64 Docker 镜像，fan-out 推送到 Harbor 的四个 repo：`app`（多架构）、`app-amd`（amd64）、`app-arm`（arm64）、`app-mm`（多架构）。
 
 ## 前置检查
 
@@ -29,10 +29,10 @@ sudo nerdctl login harbor.example.com
 
 | repo | 内容 | 来源 |
 |------|------|------|
-| `aip-amd` | amd64 单架构 | build amd64 → tag → push |
-| `aip-arm` | arm64 单架构 | build arm64 → tag → push |
-| `aip` | 多架构 manifest | manifest create from 上面两个 |
-| `aip-mm` | 多架构 manifest | 同上，另一 repo 副本 |
+| `app-amd` | amd64 单架构 | build amd64 → tag → push |
+| `app-arm` | arm64 单架构 | build arm64 → tag → push |
+| `app` | 多架构 manifest | manifest create from 上面两个 |
+| `app-mm` | 多架构 manifest | 同上，另一 repo 副本 |
 
 tag 策略：版本号 + `latest`，可选 minor tag。
 
@@ -92,10 +92,10 @@ sudo nerdctl --namespace k8s.io push harbor.example.com/<arm-project>/<IMAGE_NAM
 
 ### 5 — 创建并推送多架构 manifest
 
-对 `aip` 和 `aip-mm` 各做一遍：先删旧 manifest（忽略错误），再 create + push。
+对 `app` 和 `app-mm` 各做一遍：先删旧 manifest（忽略错误），再 create + push。
 
 ```bash
-for REPO in aip aip-mm; do
+for REPO in app app-mm; do
   FULL=harbor.example.com/${REPO}/<IMAGE_NAME>:<IMAGE_TAG>
   LATEST=harbor.example.com/${REPO}/<IMAGE_NAME>:latest
 
@@ -124,14 +124,14 @@ for REPO in aip aip-mm; do
 done
 ```
 
-**完成标准**：`aip` 和 `aip-mm` 各有 `<IMAGE_TAG>` + `latest`（+ 可选 `<MINOR_TAG>`）manifest 推送成功。
+**完成标准**：`app` 和 `app-mm` 各有 `<IMAGE_TAG>` + `latest`（+ 可选 `<MINOR_TAG>`）manifest 推送成功。
 
 ### 6 — 验证
 
 ```bash
 # 抽查一个多架构 manifest
 sudo nerdctl --namespace k8s.io manifest inspect \
-  harbor.example.com/aip-mm/<IMAGE_NAME>:<IMAGE_TAG> | grep -A2 platform
+  harbor.example.com/app-mm/<IMAGE_NAME>:<IMAGE_TAG> | grep -A2 platform
 ```
 
 应看到 `linux/amd64` 和 `linux/arm64` 两个 platform entry。
@@ -144,10 +144,10 @@ sudo nerdctl --namespace k8s.io manifest inspect \
 
 ```
 ✅ <IMAGE_NAME>:<IMAGE_TAG>
-  aip-amd  → amd64  (tag + latest)
-  aip-arm  → arm64  (tag + latest)
-  aip      → multi  (tag + latest [+ minor])
-  aip-mm   → multi  (tag + latest [+ minor])
+  app-amd  → amd64  (tag + latest)
+  app-arm  → arm64  (tag + latest)
+  app      → multi  (tag + latest [+ minor])
+  app-mm   → multi  (tag + latest [+ minor])
 ```
 
 ## 常见问题
