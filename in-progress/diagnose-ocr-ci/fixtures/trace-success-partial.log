@@ -1,0 +1,422 @@
+[0KRunning with gitlab-runner 15.11.1 (0d8a024e)[0;m
+[0K  on Kubernetes Runner jJuwHxbB, system ID: r_wqBtk7I4RK7a[0;m
+[0K  feature flags: FF_USE_ADVANCED_POD_SPEC_CONFIGURATION:true[0;m
+section_start:1788355841:prepare_executor
+[0K[0K[36;1mPreparing the "kubernetes" executor[0;m[0;m
+[0KUsing Kubernetes namespace: gitlab[0;m
+[0KUsing Kubernetes executor with image harbor.example.com/app-team/ocr:latest ...[0;m
+[0KUsing attach strategy to execute scripts...[0;m
+section_end:1788355841:prepare_executor
+[0Ksection_start:1788355841:prepare_script
+[0K[0K[36;1mPreparing environment[0;m[0;m
+[0;33mWARNING: Advanced Pod Spec configuration enabled, merging the provided PodSpec to the generated one. This is an alpha feature and is subject to change. Feedback is collected in this issue: https://gitlab.com/gitlab-org/gitlab-runner/-/issues/29659 ...[0;m
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0lfcnk to be running, status is Pending
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0lfcnk to be running, status is Pending
+	ContainersNotInitialized: "containers with incomplete status: [init-permissions]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0lfcnk to be running, status is Pending
+	ContainersNotInitialized: "containers with incomplete status: [init-permissions]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Waiting for pod gitlab/runner-jjuwhxbb-project-24276-concurrent-0lfcnk to be running, status is Pending
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Running on runner-jjuwhxbb-project-24276-concurrent-0lfcnk via frameworkee29...
+
+section_end:1788355854:prepare_script
+[0Ksection_start:1788355854:get_sources
+[0K[0K[36;1mGetting source from Git repository[0;m[0;m
+[32;1mFetching changes...[0;m
+Initialized empty Git repository in /builds/legacy-group/dept/unit/my-project/.git/
+[32;1mCreated fresh repository.[0;m
+[32;1mChecking out f2eefda4 as detached HEAD (ref is refs/merge-requests/9/head)...[0;m
+
+[32;1mSkipping Git submodules setup[0;m
+
+section_end:1788355855:get_sources
+[0Ksection_start:1788355855:step_script
+[0K[0K[36;1mExecuting "step_script" stage of the job script[0;m[0;m
+[32;1m$ git config --global --add safe.directory "${CI_PROJECT_DIR}"[0;m
+[32;1m$ export GITLAB_URL="http://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}"[0;m
+[32;1m$ git clone --depth 1 ${GITLAB_URL}/team/platform/common-ci.git "../common-ci"[0;m
+Cloning into '../common-ci'...
+[32;1m$ cp -f ../common-ci/scripts/post_review.py /tmp/post_review.py[0;m
+[32;1m$ source ../common-ci/scripts/vibecoding_login.sh[0;m
+>>> 登录 vibecoding 网关获取 API Key...
+✅ API Key 获取成功
+[32;1m$ echo "OpenCodeReview version:" && ocr version || true[0;m
+OpenCodeReview version:
+open-code-review v1.11.2 (5cf97d0d1) linux/amd64
+built at: 2026-09-01T13:31:44Z
+https://github.com/alibaba/open-code-review
+[32;1m$ if [ -z "${OCR_LLM_AUTH_TOKEN:-}" ]; then # collapsed multi-line command[0;m
+[32;1m$ ocr config set custom_providers.internal-gw.url "$OCR_LLM_URL" # collapsed multi-line command[0;m
+Set custom_providers.internal-gw.url = https://internal.example.com/llm-gw/v1
+Set custom_providers.internal-gw.api_key = llmo***f704
+Set custom_providers.internal-gw.protocol = openai
+Set custom_providers.internal-gw.model = openai/glm-5
+Set custom_providers.internal-gw.extra_body = {"thinking": {"type": "disabled"}, "chat_template_kwargs": {"enable_thinking": false}}
+Set provider = internal-gw
+Set language = 中文
+[32;1m$ if ! ocr llm test 2>/tmp/ocr-llm-test.log; then # collapsed multi-line command[0;m
+Source: provider:internal-gw
+URL:    https://internal.example.com/llm-gw/v1
+Model:  glm53-internal
+The user asks me to answer in one sentence who I am. According to my system prompt, I am open-code-review, a code review assistant developed by Alibaba, running in the user's command-line environment. I should respond in Chinese (中文) as specified.
+
+One sentence answer.我是 open-code-review，一个由阿里巴巴开发的代码审查助手，运行在您的命令行环境中。
+✓ Connection test successful
+✅ LLM 连通性检查通过。
+[32;1m$ echo "评审 MR: ${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME} → ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" # collapsed multi-line command[0;m
+评审 MR: feat/node-label-bridge → dev
+From http://gitlab.red.example/legacy-group/dept/unit/my-project
+ * branch            dev        -> FETCH_HEAD
+OCR review 完成。
+--- OCR stderr (tail 50) ---
+[ocr]   ✔ code_search (22ms)
+[ocr]   ▶ code_search search_text=FormatCSV
+[ocr]   ✔ code_search (22ms)
+[ocr]   ▶ code_search file_patterns=[*.go *.md] search_text=default
+[ocr]   ✔ code_search (21ms)
+[ocr]   ▶ file_read file_path=internal/labels/labels.go
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read_diff
+[ocr]   ✔ file_read_diff (0s)
+[ocr]   ▶ file_read
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read_diff path_array=[internal/pricing/pricing.go]
+[ocr]   ✔ file_read_diff (0s)
+[ocr]   ▶ code_search file_patterns=[internal/**/*.go] search_text=func.*NGPUs use_perl_regexp=true
+[ocr]   ✔ code_search (18ms)
+[ocr]   ▶ code_search file_patterns=[internal/**/*.go] search_text=func.*LookupByDCGMModel use_perl_regexp=true
+[ocr]   ✔ code_search (18ms)
+[ocr]   ▶ file_read end_line=130 file_path=internal/appgw/client.go start_line=95
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read end_line=115 file_path=internal/pricing/pricing.go start_line=40
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ code_search file_patterns=[internal/controller/*.go] search_text=RequeueAfter|Requeue
+[ocr]   ✔ code_search (20ms)
+[ocr]   ▶ code_search use_perl_regexp=true file_patterns=[internal/controller/*.go cmd/**/*.go main.go] search_text=Ticker|time\.Tick|reconcile|Reconcile
+[ocr]   ✔ code_search (19ms)
+[ocr]   ▶ code_search file_patterns=[deploy/**] search_text=gpu_types
+[ocr]   ✔ code_search (17ms)
+[ocr]   ▶ code_search use_perl_regexp=true file_patterns=[internal/**/*.go] search_text="[a-z-]+\.[a-z]+/
+[ocr]   ✔ code_search (14ms)
+[ocr]   ▶ file_read end_line=80 file_path=deploy/helm/inference-cost-controller/values.yaml start_line=35
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read file_path=internal/controller/nodelabels_test.go
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read end_line=175 file_path=internal/pricing/pricing_test.go start_line=1
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read
+[ocr]   ✔ file_read (4ms)
+[ocr] Subtask error for group "internal/controller/controller.go": LLM completion error: context deadline exceeded
+[ocr]   ▶ code_comment "internal/labels/labels.go"
+[ocr]   ✔ code_comment (0s)
+[ocr]   ▶ code_comment
+[ocr]   ✔ code_comment (0s)
+[ocr]   ▶ file_read file_path=docs/adr/0006-node-label-bridge.md
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ file_read end_line=40 file_path=CONTEXT.md start_line=20
+[ocr]   ✔ file_read (4ms)
+[ocr]   ▶ code_comment
+[ocr]   ✔ code_comment (0s)
+--- OCR result ---
+{
+  "status": "partial",
+  "llm": {
+    "provider": "internal-gw",
+    "model": "openai/glm-5"
+  },
+  "message": "Review partially complete: 3 finding(s); 1 of 5 selected item(s) failed.",
+  "summary": {
+    "files_reviewed": 5,
+    "comments": 3,
+    "total_tokens": 600086,
+    "input_tokens": 542088,
+    "output_tokens": 57998,
+    "cache_read_tokens": 347072,
+    "elapsed": "16m12s"
+  },
+  "tool_calls": {
+    "total": 52,
+    "by_tool": {
+      "code_comment": 3,
+      "code_search": 18,
+      "file_find": 1,
+      "file_read": 26,
+      "file_read_diff": 4
+    }
+  },
+  "comments": [
+    {
+      "path": "internal/labels/labels.go",
+      "content": "GPUType 的值契约不完整，且整条链路无校验：该值是 pricing table 中用户自定义的 YAML map key（ParseTable 仅 yaml.Unmarshal，无任何校验），被原样写入节点标签值（nodelabels.go 的 patch payload）并作为 CSV 的 InstanceID 列（pricing.go FormatCSV）。若 key 含空格、斜杠或超 63 字符（如 \"NVIDIA H100\"、\"H100 SXM\"——values.yaml 中 dcgm_model_match 正是 \"NVIDIA H100 80GB HBM3\" 这种含空格命名风格），节点 patch 会被 API server 以 422 拒绝，60s Reconcile 循环中每轮重复失败且仅有一条日志，Node Label Bridge 对该节点静默失效（fork 端 GPUType()=\"\" → GPU 定价跳过 → GPU 成本 $0，恰是 ADR-0006 要解决的问题）；含逗号的 key 还会直接破坏 CSV 行结构。建议：在本契约文件中写明值必须满足 Kubernetes label value 语法（≤63 字符、`[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?`、不含逗号），并在 ParseTable 中对 key 做前置校验，使配置错误在加载时快速失败，而非运行期反复 422。",
+      "suggestion_code": "\t// GPUType carries the pricing-table type key (e.g. \"H100\"). OpenCost's\n\t// csvKey.GPUType() reads it via GPUMapFields (CSV gpu rows' InstanceIDField)\n\t// and matches GPUClassPricing.\n\t//\n\t// Value contract: the pricing-table key is written verbatim as a node label\n\t// value and as the CSV InstanceID, so it must be a valid Kubernetes label\n\t// value (≤63 chars, [A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?) and contain no\n\t// comma. ParseTable should reject invalid keys at load time — an invalid\n\t// key makes every node patch fail with 422 in the 60s reconcile loop and\n\t// silently drops that node's GPU pricing.\n\tGPUType = \"example.io/gpu-type\"",
+      "existing_code": "\t// GPUType carries the pricing-table type key (e.g. \"H100\"). OpenCost's\n\t// csvKey.GPUType() reads it via GPUMapFields (CSV gpu rows' InstanceIDField)\n\t// and matches GPUClassPricing.\n\tGPUType = \"example.io/gpu-type\"",
+      "start_line": 8,
+      "end_line": 11,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "internal/controller/nodelabels.go",
+      "content": "Conflicted 节点的陈旧标签永远不会被清理。reconcileNodeLabels 的打标循环对 Conflicted 节点 `continue` 跳过（正确），但 sweepNodeLabels 只清理\"不在 nodes map 中\"的节点——Conflicted 节点仍在 map 里，因此同样被跳过。实际场景：节点 X 之前只承载 H100 worker，已被打上 `example.io/gpu-type=H100`；之后新增一个 A100 类型的 app Worker 落到 X 上，nodeGPU[X] 变为 Conflicted=true，两个循环都跳过它，旧的 H100 标签会一直残留。OpenCost 将持续按旧类型（和旧 count）对这个混合节点计价——这正是注释中\"any single type label would misprice a mixed node\"要避免的结果，且直到 worker 全部离开该节点前都无法自愈（60s Reconcile 也无法修复）。\n\n建议：sweep 时把 Conflicted 节点视为需要清理（该节点带有 gpu-type 标签，会被 HasLabels 列出，可直接复用 null patch 逻辑）：\n\n```go\nif info, ok := nodes[node.Name]; ok \u0026\u0026 !info.Conflicted {\n    continue // still hosts workers with a consistent GPU type\n}\n```\n\n同时建议补充一个测试：节点先以单一类型打标成功，再以 Conflicted 状态 reconcile，断言两个桥接标签被清除（现有 \"conflicted node — labels untouched\" 测试只覆盖了从未打标的情况，未覆盖该转换场景）。",
+      "suggestion_code": "\t\t// Conflicted nodes must be swept too — a label written before the\n\t\t// conflict arose would keep pricing the mixed node with the old type.\n\t\tif info, ok := nodes[node.Name]; ok \u0026\u0026 !info.Conflicted {\n\t\t\tcontinue // still hosts workers with a consistent GPU type\n\t\t}",
+      "existing_code": "\t\tif _, ok := nodes[node.Name]; ok {\n\t\t\tcontinue // still hosts workers\n\t\t}",
+      "start_line": 97,
+      "end_line": 99,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "internal/pricing/pricing.go",
+      "content": "排除 `default` 会让同一变更集里 Node Label Bridge 两端的契约不一致：controller.go 的 Reconcile 把 `LookupByDCGMModel` 返回的 typeKey 原样发布为节点标签 `example.io/gpu-type` 的值，其中 DCGM 型号未命中或 Prometheus 查询失败时为 \"default\"（表中无 default 项时为 \"unknown\"）。而这里把 `default` 从 CSV GPU 行中排除（\"unknown\" 更是永远不会有对应行），这些节点在 OpenCost 侧 `GPUClassPricing[\"default\"]` 必然 miss——按 ticket 03 引用的 fork NodePricing 逻辑（未命中时 hourly 保持 0，totalCost = 0 × count），GPU 成本会静默变为 $0。\n\n这与项目自身的文档矛盾：ADR-0002 明确写 CSV 包含 \"a `default` fallback row\"；CONTEXT.md 的 DCGM Model Discovery 也写明 fallback 后的 resolved type 会经 Node Label Bridge 发布给 OpenCost 消费。同时 vllm-cost-meter 侧仍会拿到 `GPU_HOURLY_COST_default=1.00`（updateInferenceCostConfig），两个消费者定价不一致。\n\n关于 ticket 03 的顾虑（\"default 行会 price-match DCGM 失败的节点\"）：fork 的 NodePricing 以 `GPUType() != \"\"` 为门，未打标的节点不会命中 default 行；会命中的恰是 DCGM fallback 的节点，这正是 default 定价项的用途。建议二选一：(a) 此处不排除 default，为其生成 GPU 行（需同步更新 pricing_test.go 中 TestFormatCSV 第 140-144 行的断言）；(b) 维持排除，但 controller 侧在 typeKey 为 default/unknown 时不得发布 gpu-type 标签，否则发布了一个永远无法定价的标签值。当前两半桥各自为政，fallback 路径静默丢价。",
+      "suggestion_code": "\tfor key := range types {\n\t\tkeys = append(keys, key)\n\t}",
+      "existing_code": "\tfor key := range types {\n\t\tif key == \"default\" {\n\t\t\tcontinue\n\t\t}\n\t\tkeys = append(keys, key)\n\t}",
+      "start_line": 123,
+      "end_line": 128,
+      "category": "bug",
+      "severity": "high"
+    }
+  ],
+  "groups": [
+    {
+      "label": "deploy/helm/inference-cost-controller/templates/resources.yaml",
+      "files": [
+        "deploy/helm/inference-cost-controller/templates/resources.yaml"
+      ]
+    },
+    {
+      "label": "internal/controller/controller.go",
+      "files": [
+        "internal/controller/controller.go"
+      ]
+    },
+    {
+      "label": "internal/controller/nodelabels.go",
+      "files": [
+        "internal/controller/nodelabels.go"
+      ]
+    },
+    {
+      "label": "internal/labels/labels.go",
+      "files": [
+        "internal/labels/labels.go"
+      ]
+    },
+    {
+      "label": "internal/pricing/pricing.go",
+      "files": [
+        "internal/pricing/pricing.go"
+      ]
+    }
+  ],
+  "session_id": "a0a36f62-fc95-4475-85ad-fdff6401f838",
+  "manifest": {
+    "schema_version": "ocr.run-manifest/v1",
+    "run_id": "a0a36f62-fc95-4475-85ad-fdff6401f838",
+    "operation": "review",
+    "terminal_state": "partial",
+    "repository": {
+      "identity_sha256": "e12de423d8f34a780763c0499986c900af47a24b92f27ab4ccd97503575453ef"
+    },
+    "input": {
+      "mode": "range",
+      "requested_from": "origin/dev",
+      "requested_head": "f2eefda4cf42f363fa9dbeafa09d1406d95f6bda",
+      "resolved_base": "cdc1afa617b29800f76ef1025ef3192d6aaf39b8",
+      "resolved_head": "f2eefda4cf42f363fa9dbeafa09d1406d95f6bda",
+      "exact_range": "cdc1afa617b29800f76ef1025ef3192d6aaf39b8..f2eefda4cf42f363fa9dbeafa09d1406d95f6bda",
+      "source_artifact_sha256": "6bf5d6f6b59d402f25735e4efa1c6429fbd8a2470ebd595fe066de30b541acbc"
+    },
+    "execution": {
+      "ocr_version": "v1.11.2",
+      "provider": "internal-gw",
+      "model": "openai/glm-5",
+      "configured_concurrency": 4,
+      "rule_config_sha256": "5bf99f7d69e6bf01b6e52cc1ebd56e8457baedbc5e53767d894edcb685adffd8",
+      "runtime_config_sha256": "aad67729cff12b6a8a2bd6eca7b8aab773980849cb5933ef0ec2eda5635500ef"
+    },
+    "coverage": {
+      "selected": [
+        {
+          "item_id": "32356de01afc3a8c182ea5280362aaac2b2cbf9d0829a8224f57e1fda55a9410",
+          "path": "deploy/helm/inference-cost-controller/templates/resources.yaml",
+          "fingerprint": "0f0def257add33d12130c17cd17a5d55ef7b2d162d6d37827e20229c16587c42"
+        },
+        {
+          "item_id": "49781530067f9f614b90c2b3832e79d4515fbf6f510a7711fca53807ff21c1cb",
+          "path": "internal/labels/labels.go",
+          "fingerprint": "0cd23836956e2a53a689cf1c5b650168d7ce1d508adc8a7ff16dedfc99a25302"
+        },
+        {
+          "item_id": "53850d010b449b9216b580255ed3ca6e491f370eb38d6fad193358e2ae4ab02f",
+          "path": "internal/controller/controller.go",
+          "fingerprint": "cb83615d7be8ca7f747d3b5ac93f8e544216644a3427af0c9f4ac722fd6f06fc"
+        },
+        {
+          "item_id": "dda3a0a19c51c087653f16517240d051f89f3f6c759d7517b02d8d199c0c6c58",
+          "path": "internal/controller/nodelabels.go",
+          "fingerprint": "3c5fc24ac9ef15fd5402b13b2b88c8d3b324e48469e4aba9f146f03aaf60dccb"
+        },
+        {
+          "item_id": "e56f543190bc6ec725d32260a2d3d6c1473e195e72221301692edd819ddaab9e",
+          "path": "internal/pricing/pricing.go",
+          "fingerprint": "7b10872abb4981c248ea34bd9182b3f615c44e383fdc9c668934d17cb7bcebf2"
+        }
+      ],
+      "completed": [
+        {
+          "item_id": "32356de01afc3a8c182ea5280362aaac2b2cbf9d0829a8224f57e1fda55a9410",
+          "path": "deploy/helm/inference-cost-controller/templates/resources.yaml",
+          "fingerprint": "0f0def257add33d12130c17cd17a5d55ef7b2d162d6d37827e20229c16587c42"
+        },
+        {
+          "item_id": "49781530067f9f614b90c2b3832e79d4515fbf6f510a7711fca53807ff21c1cb",
+          "path": "internal/labels/labels.go",
+          "fingerprint": "0cd23836956e2a53a689cf1c5b650168d7ce1d508adc8a7ff16dedfc99a25302"
+        },
+        {
+          "item_id": "dda3a0a19c51c087653f16517240d051f89f3f6c759d7517b02d8d199c0c6c58",
+          "path": "internal/controller/nodelabels.go",
+          "fingerprint": "3c5fc24ac9ef15fd5402b13b2b88c8d3b324e48469e4aba9f146f03aaf60dccb"
+        },
+        {
+          "item_id": "e56f543190bc6ec725d32260a2d3d6c1473e195e72221301692edd819ddaab9e",
+          "path": "internal/pricing/pricing.go",
+          "fingerprint": "7b10872abb4981c248ea34bd9182b3f615c44e383fdc9c668934d17cb7bcebf2"
+        }
+      ],
+      "reused": [],
+      "failed": [
+        {
+          "item_id": "53850d010b449b9216b580255ed3ca6e491f370eb38d6fad193358e2ae4ab02f",
+          "path": "internal/controller/controller.go",
+          "fingerprint": "cb83615d7be8ca7f747d3b5ac93f8e544216644a3427af0c9f4ac722fd6f06fc",
+          "classification": "timeout",
+          "reason": "file review exceeded its time limit"
+        }
+      ],
+      "waived": []
+    },
+    "elapsed_ms": 972251
+  },
+  "retry_report": {
+    "schema_version": "ocr.llm-retry-report/v1",
+    "total_requests": 39,
+    "retried_requests": 2,
+    "total_retries": 2,
+    "recovered_requests": 2,
+    "failed_requests": 2,
+    "cancelled_requests": 0,
+    "requests": [
+      {
+        "logical_request_id": "0ba37ac0a4ec1708f231576b26df3d139c3f3479af6b5c5c7577b1ae1f837887",
+        "provider": "internal-gw",
+        "model": "openai/glm-5",
+        "file_path": "internal/controller/controller.go",
+        "task_type": "main_task",
+        "request_no": 6,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "timeout",
+            "failure_phase": "http",
+            "status_code": 504,
+            "duration_to_headers_ms": 300010
+          }
+        ]
+      },
+      {
+        "logical_request_id": "8f989bb70cdbdef2a54aad17c51e679f05a72a9fe68cbab4c19101c4642e41af",
+        "provider": "internal-gw",
+        "model": "openai/glm-5",
+        "file_path": "internal/controller/nodelabels.go",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "timeout",
+            "failure_phase": "http",
+            "status_code": 504,
+            "duration_to_headers_ms": 300008
+          }
+        ]
+      },
+      {
+        "logical_request_id": "a3e43d22b15ede58f00b79d28494a84c0ff08fb638300eb1043d459f1c4fd9be",
+        "provider": "internal-gw",
+        "model": "openai/glm-5",
+        "file_path": "deploy/helm/inference-cost-controller/templates/resources.yaml",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "recovered",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "provider",
+            "failure_phase": "http",
+            "status_code": 502,
+            "duration_to_headers_ms": 45528
+          },
+          {
+            "attempt": 2,
+            "outcome": "success",
+            "status_code": 200,
+            "observed_backoff_ms": 424,
+            "duration_to_headers_ms": 40741
+          }
+        ]
+      },
+      {
+        "logical_request_id": "e519213905143412bc20906723a36a466c0d72918d47154a2554f159b68fda78",
+        "provider": "internal-gw",
+        "model": "openai/glm-5",
+        "file_path": "internal/controller/controller.go",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "recovered",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "provider",
+            "failure_phase": "http",
+            "status_code": 502,
+            "duration_to_headers_ms": 45514
+          },
+          {
+            "attempt": 2,
+            "outcome": "success",
+            "status_code": 200,
+            "observed_backoff_ms": 383,
+            "duration_to_headers_ms": 73646
+          }
+        ]
+      }
+    ]
+  }
+}
+[32;1m$ if [ -f /tmp/post_review.py ]; then # collapsed multi-line command[0;m
+Successfully posted 3/3 inline comments.
+
+section_end:1788356841:step_script
+[0Ksection_start:1788356841:upload_artifacts_on_success
+[0K[0K[36;1mUploading artifacts for successful job[0;m[0;m
+[32;1mUploading artifacts...[0;m
+ocr-result.json: found 1 matching artifact files and directories[0;m 
+ocr-stderr.log: found 1 matching artifact files and directories[0;m 
+Uploading artifacts as "archive" to coordinator... 201 Created[0;m  id[0;m=3713809 responseStatus[0;m=201 Created token[0;m=uxvQMmJh
+
+section_end:1788356842:upload_artifacts_on_success
+[0K[32;1mJob succeeded[0;m
