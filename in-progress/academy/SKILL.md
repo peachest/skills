@@ -1,0 +1,79 @@
+---
+name: academy
+description: Orchestrate an academy — several teach courses sharing one mission, one OKB, and one asset library, taught by per-course herdr sessions. Manual entry point.
+disable-model-invocation: true
+argument-hint: "[academy] [course or action]"
+---
+
+The user invoked the academy layer: several teach courses under one umbrella topic, sharing one OKB, one asset library, and one mission. This session is the **academy session** — an orchestrator. It never teaches; course sessions do.
+
+## Academy layout
+
+An academy is a directory with an `ACADEMY.md` marker:
+
+```
+<academy-root>/            e.g. ~/teach-lab/llm-inference/
+├── ACADEMY.md             academy mission (same spirit as a course MISSION.md)
+├── CURRICULUM.md          cross-course map (see Curriculum)
+├── okb/                   shared OKB: gold/<course-namespace>/…
+├── assets/                shared lesson components (single source)
+└── courses/<course>/      standard teach workspaces
+```
+
+Resolve the academy root from the argument (a path, `~/teach-lab/<argument>/`, or a human name matched against each `ACADEMY.md` title under the lab root), else by walking up from the cwd looking for `ACADEMY.md`.
+
+Each course under `courses/` is a complete teach workspace; `teach` operates inside it with zero academy awareness. The academy layer owns only: shared `okb/`, shared `assets/`, `CURRICULUM.md`, and session routing.
+
+## Roles
+
+- **Academy session** (this one): surveys progress, routes the user to course sessions, creates and migrates courses, curates the shared layer.
+- **Course session**: one persistent herdr agent per course, named `teach-<course>` (agent names are lowercase ASCII — course dirnames are too), cwd = the course directory, running the teach loop interactively with the user. Reused across lessons. One active session per course at a time — lesson numbering is a filesystem resource.
+- **Skills session** (the ~/skills repo session that authored this academy): owns the vendored teach fork and the academy skill. A course session that hits teach-skill friction reports it via herdr to the skills session and keeps teaching; the skills session lands the fix, runs the skill's tests, re-installs, and announces the change to the reporting session.
+
+## Route a learning session
+
+1. Survey: for each course in `courses/`, read `PLAN.md` (frontier), `UNDERSTANDING-MAP.md` (status summary), and the newest `session-log/*.md` (date). Present a compact overview: course / last session / frontier.
+2. The user picks a course (or names one on invocation).
+3. Find or create its session (next section), bootstrap it with today's goal, then point the user at the pane/tab.
+
+Completion criterion: the user knows which pane holds the course session, and that session has received its bootstrap prompt. The academy session then steps back — teaching content never relays through it.
+
+## Course session protocol
+
+Find: `herdr agent list` → agent named `teach-<course>`. If present and not blocked, reuse it — the course files are the state; session memory is a bonus.
+
+Create: split a pane (with `--cwd` = the course directory) in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace — then `herdr agent start teach-<course> --kind pi --pane <id>`.
+
+Bootstrap prompt (sent with `--wait` before the user takes over). Must include:
+- `/skill:herdr` at the start — so the session knows its reply path back to this academy session
+- the course directory (cwd is already set; have it confirm)
+- `/skill:teach` to load, plus today's goal as the user stated it
+- the shared layer paths: knowledge via its `RESOURCES.md` → `../../okb/`; components via `../assets/` (symlink to the academy assets)
+
+## Create a course
+
+Ask for the course mission first — a course without a mission gets teach's treatment: question the user before scaffolding anything. Then scaffold under `courses/<name>/` (ASCII, dash-case): `MISSION.md`, `RESOURCES.md` (pointers into `../../okb/<namespace>/`), `lessons/`, `session-log/`, `reference/`, `learning-records/`, and `assets` as a symlink → `../../assets`. Register the course in `CURRICULUM.md`. The course's first session runs Probe (teach's flow, unchanged).
+
+## Migrate an existing course
+
+The notify-first protocol — a directory is never moved out from under a live session:
+
+1. Locate any session currently managing the course (`herdr agent list`, match by title, cwd, or course name). Send advance notice via `herdr agent prompt`: start with `/skill:herdr`, state the new course path, and ask it to confirm it is idle. Wait for the ack before moving anything.
+2. Move: `mv <course> <academy-root>/courses/<name>` (ASCII dash-case name; state the rename in the notice when there is one).
+3. Lift a course-local `okb/` into the academy OKB (merge, keep its namespace) and rewrite that course's `RESOURCES.md` pointers to `../../okb/…`.
+4. Dedupe assets: verify the academy `assets/` union covers the course's, then replace the course's `assets/` dir with a symlink → `../../assets`. Lessons keep their `../assets/…` links — they resolve through the symlink.
+5. Register the course in `CURRICULUM.md`.
+6. Notify the managing session of the new path and ask it to `cd` there.
+7. Verify: every `RESOURCES.md` link resolves, and a spot-check of lesson HTML `../assets/` links resolves.
+
+Completion criterion: all seven steps done, and the managing session (if any) acks from the new path.
+
+## Curriculum
+
+`CURRICULUM.md` is the cross-course map. Its format is deliberately minimal — course-level nodes with prose notes for cross-course dependencies (e.g. "tp-cp needs sglang-pp's source anchors") — until practice shows which edges matter. Enrich it when real cross-course references appear; do not invent a heavyweight schema ahead of that evidence. The long-term shape is a drillable layered graph: framework mechanisms (pp, spec-decoding, tp) → engine implementations (sglang, vllm) → cuda programming → gpu architecture, with math foundations (statistics, calculus, linear algebra) hanging off wherever they are actually needed.
+
+## Shared layer
+
+- **OKB**: one per academy, namespaced by course or topic (`okb/gold/sglang-pp/`, `okb/gold/spec-decoding/`, …). Curation (ingest → distill → gold) follows the `okb` skill, unchanged; a course triggers it when its `RESOURCES.md` is thin.
+- **Assets**: single source at the academy root. Courses hold only the symlink, never real asset files; new reusable components land in the academy `assets/`.
+- **Designed later, on demand**: cross-course scheduling (what to learn today), fine-grained cross-course dependency edges, and course→academy progress reporting. When the user asks for any of these, design it against real usage then.
