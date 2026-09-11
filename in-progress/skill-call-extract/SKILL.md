@@ -47,6 +47,22 @@ python3 scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
 
 **Done when**: the trace index exists as a file, with `truncated: false` (or the truncation noted — cap 600 entries).
 
+### 5. Anchor the skill version
+
+Different sessions in the result list ran **different versions of the skill** — the shared checkout moves under them. Before any comparison or eval extraction, resolve what each session actually ran:
+
+```bash
+python3 scripts/version-anchor.py <session-file.jsonl> [--skill <name>]
+```
+
+The script hashes the SKILL.md body inside each injection marker (and the toolResult of each read-load), then resolves the hash against the source repo's git history. One entry per distinct version:
+
+- `commit` — `skill@<commit> (<date>)`: the bytes that ran are a committed version
+- `uncommitted` — the session ran a working-tree state; `matches_current_file: false` means that version now exists **nowhere but this session log** (a diagnosis signal in itself: findings cite a ghost version)
+- `third-party` — installed chain without git history; old bodies survive only in session logs, so **snapshot the body** when archiving an eval case from it
+
+**Done when**: every session in the comparison carries a version verdict, or the file yields no anchorable signal (stated explicitly).
+
 ## Deliverable contract
 
 The consumer (typically `/skill:skill-call-diagnose`) receives:
@@ -54,6 +70,7 @@ The consumer (typically `/skill:skill-call-diagnose`) receives:
 1. The **trace file** path — the raw session jsonl
 2. The **trace index** path — the per-entry map
 3. Per-session stats from the triage list (usage totals feed cost estimates)
+4. The **version anchor** — per-session skill@commit / uncommitted / third-party verdict from step 5; a cross-session comparison is only valid between sessions anchored to the same version
 
 `references/session-jsonl.md` is the format primer (entry structure, marker, usage fields) — consumers reading the raw trace should read it too.
 
@@ -62,3 +79,4 @@ The consumer (typically `/skill:skill-call-diagnose`) receives:
 - [ ] Every match presented with verdict (chosen / skipped with reason)
 - [ ] Chosen trace file stated
 - [ ] Trace index built and its path stated
+- [ ] Version anchor run on the chosen trace; its verdict stated
