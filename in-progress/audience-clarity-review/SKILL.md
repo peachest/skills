@@ -36,9 +36,7 @@ Runtime requirements are identical to html-render-check (Playwright under `~/too
 
 4. **Probe the vision model.** Call `subagent({ action: "models" })` and look for a vision-capable model (id containing `vision`, `4v`, `-v` style multimodal names). If found, Checks 2 and 3 run their subagents with that exact `provider/id` as the `model` override. If none exists, Checks 2 and 3 fall back to DOM-level analysis (see each check).
 
-5. **Verify the review agent, then spawn six sub-agents in parallel.** Before spawning:
-   - Load the `pi-subagents` skill once (read its SKILL.md and `references/execution-controls.md`) — it holds the verified `runs.run`/`runs.all` signatures. Do not write the dispatch script from memory.
-   - Run `subagent({ action: "list" })` to confirm `doc-reviewer` is registered, and check its config (`~/.pi/agent/agents/doc-reviewer.md`) has `acceptance: false` and read-only tools.
+5. **Spawn six sub-agents in parallel with the builtin `delegate` agent.** Before spawning, load the `pi-subagents` skill once (read its SKILL.md and `references/execution-controls.md`) — it holds the verified `runs.run`/`runs.all` signatures. Do not write the dispatch script from memory. **Do not use `doc-reviewer` for this fan-out**: its config declares `bash` in its tools contract, but the review-role effective allowlist omits `bash`, so the contract is unsatisfiable and every child dies as a lane infrastructure failure (verified 2026-09-11). `delegate` passes the same read-only review role with a satisfiable contract. If a future agent-registry change is suspected to have fixed `doc-reviewer`, probe it with a single-child run before switching back.
 
    Each sub-agent gets: the HTML path, the **audience quote**, the screenshot dir + manifest path (vision axes), the `CONTEXT.md` path if found (Check 5), and the check's body as its brief. Use `runs.all` with `context: 'fresh'`. Pass every path explicitly — fresh-context children see only what the brief carries. Per repo convention, each sub-agent writes its findings to a file **and** returns them via stdout.
 
