@@ -2,13 +2,13 @@
     margin: 2cm 1.5cm;
     @bottom-center {
         content: counter(page);
-        font-family: "Maple Mono NF CN", sans-serif;
+        font-family: "Maple Mono Normal NF CN", "Noto Sans SC", sans-serif;
         font-size: 9pt;
         color: #999;
     }
 }
 body {
-    font-family: "Maple Mono NF CN", "WenQuanYi Zen Hei", sans-serif;
+    font-family: "Maple Mono Normal NF CN", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif;
     font-size: 10.5pt;
     line-height: 1.7;
     color: #2b2b2b;
@@ -44,7 +44,7 @@ a {
 }
 
 code {
-    font-family: "Maple Mono NF CN", monospace;
+    font-family: "Maple Mono Normal NF CN", "Noto Sans SC", monospace;
     background: #f4f6f8;
     padding: 1px 5px;
     border-radius: 3px;
@@ -105,4 +105,4 @@ ul, ol { padding-left: 1.5em; }
 li { margin: 0.3em 0; }
 
 /* 行内公式/数学符号微调 */
-.math { font-family: "Maple Mono NF CN", serif; font-size: 10.5pt; }
+.math { font-family: "Maple Mono Normal NF CN", "Noto Sans SC", serif; font-size: 10.5pt; }

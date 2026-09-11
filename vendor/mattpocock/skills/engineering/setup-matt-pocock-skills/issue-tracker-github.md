@@ -11,7 +11,7 @@ Remote: `github.internal.example.com/org/repo.git`
 - **列出 issue**：`gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`，配合 `--label` 和 `--state` 过滤。
 - **评论 issue**：`gh issue comment <number> --body "..."`。
 - **添加/移除标签**：`gh issue edit <number> --add-label "..."` / `--remove-label "..."`。多个标签用逗号分隔：`--add-label "wayfinder:map,triage"`。
-- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，push 到默认分支后 GitHub 自动 close。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。**例外 2**：PR merge 后 GitHub 未自动关闭 Map（漏写 `Closes #<map>` 或 GitHub 未触发），agent 手动 `gh issue close <map>`（先 comment 记录原因）。详见 PR 约定段的「merge 后验证」。
+- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，**commit/PR 落到默认分支后** GitHub 自动 close（GitHub 与 GitLab 同样仅默认分支触发；仓库工作分支非默认分支时永不自动关闭，merge 后验证 + 手动关闭是常态）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。**例外 2**：PR merge 后 GitHub 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitHub 未触发），agent 手动 `gh issue close <n>`（先 comment 记录原因）。详见 PR 约定段的「merge 后验证」。
 - **更新 issue body**：`gh issue edit <number> --body "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--body "$(cat <<'EOF'\n...\nEOF\n)"`。
 - **Pull Request**：使用 `gh pr create`、`gh pr view`、`gh pr comment` 等。
 
@@ -158,8 +158,8 @@ Agent 不主动创建 PR。用户说"提交 PR"或"创建 pull request"时，按
 - **描述**：包含 Map 链接、已完成子 ticket 列表、`Closes #<map>`。
 - **命令**：`gh pr create --title "<map title>" --body "$(cat <<'EOF'\n参见 #<map>。\n\n子 ticket：\n- #<n> <title>\n- #<m> <title>\n\nCloses #<map>\nEOF\n)" --base main`。
 - **确认**：创建前必须向用户展示 PR 描述并等待确认。
-- **关闭 Map**：merge 后 GitHub 根据 PR description 中的 `Closes #<map>` 自动关闭。
-- **merge 后验证**：merge 完成后，agent 必须运行 `gh issue view <map_number> --json state --jq '.state'` 确认 Map 已 closed。若仍为 open（PR description 漏写 `Closes #<map>` 或 GitHub 未触发自动关闭），则手动关闭：先 `gh issue comment <map> --body "..."` 记录原因，再 `gh issue close <map>`。此为 `gh issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
+- **关闭 Map**：merge 后 GitHub 根据 PR description 中的 `Closes #<map>` 自动关闭（仅当 PR 目标分支为默认分支）。
+- **merge 后验证**：merge 完成后，agent 必须对 PR description 中所有 closing pattern 引用的 issue（含 Map 和子 ticket）运行 `gh issue view <number> --json state --jq '.state'` 确认已 closed。若仍为 open——常见原因：仓库工作分支非默认分支（GitHub 必然不触发）、PR description 漏写 closing pattern——则手动关闭：先 `gh issue comment <n> --body "..."` 记录原因，再 `gh issue close <n>`。此为 `gh issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
 
 ## Issue 模板
 

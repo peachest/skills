@@ -8,7 +8,7 @@ builds Rust via `cargo` / `maturin`.
 **Rust workspaces cannot layer COPY the way Go does.** A `cargo fetch --locked`
 step resolves every workspace member's manifest, and `[lib]` sections reference
 `src/lib.rs`. Cargo checks those target files during resolution, so copying only
-`Cargo.toml`/`Cargo.lock` without source fails `cargo fetch`. Proven on the SMG
+`Cargo.toml`/`Cargo.lock` without source fails `cargo fetch`. Proven on a Rust workspace
 project: the manifest-layered-COPY approach built fine in theory and broke at
 `cargo fetch` in practice.
 
@@ -56,6 +56,6 @@ cached at the registry layer.
 
 ## Verified reference
 
-`~/projects/smg/transwarp/docker/Dockerfile.smg.local` — Rust workspace (maturin
+`~/projects/example-rust-service/docker/Dockerfile.rust.local` — Rust workspace (maturin
 build), full COPY + cache mounts, no cargo clean. Read it when the target
 Dockerfile is Rust and you need a concrete shape to mirror.

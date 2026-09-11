@@ -96,6 +96,7 @@ Use these class names as-is. For semantic variations, use CSS variables (e.g. `s
 |---|---|
 | Callouts | `.callout` + `.callout-note/-tip/-warning/-success/-danger` |
 | Quiz | `.quiz-container` > `.quiz` + `.quiz-section/-question/-option/-feedback/-score` |
+| Socratic | `.socratic` + `.socratic-item/-question/-controls/-btn/-hint/-answer` |
 | Compare | `.compare-grid` > `.compare-card`, `.compare-table` |
 | Pipeline | `.pipeline` > `.pipeline-stage` + `.pipeline-arrow` |
 | Flow chart | `.flow-diagram` > `.flow-box` + `.flow-arrow` + `.flow-row` + `.flow-step` + `.flow-num` |
@@ -113,6 +114,14 @@ Use these class names as-is. For semantic variations, use CSS variables (e.g. `s
 ## Domain-Specific Styles
 
 For components not in base.css, use inline `<style>` in the lesson. Extract to base.css when the same pattern appears in ≥2 workspaces.
+
+## Provenance Callouts
+
+Callout semantics double as knowledge-provenance markers (see SKILL.md "Provenance in presentation" and DESIGN.md "Provenance 语义"):
+
+- **Source claims** — `.callout-note`, title `Source` / `原文要点`, body carries claim-level footnotes back to the OKB note.
+- **External material** (current docs, newer versions) — `.callout-note`, title prefixed `外部 · External`; never mixed into a Source callout, never silently replacing one.
+- **AI-derived illustrations** (analogies, mental models, scenarios) — `.callout-tip`, title names the kind and ends with `· AI 衍生` (e.g. `类比 · AI 衍生`).
 
 ## KaTeX
 

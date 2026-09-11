@@ -13,10 +13,10 @@ Commands:
     status  Show wiki coverage summary.
 
 Usage:
-    python3 wiki.py init   [--root .] [--lang auto] [--extensions .go,.py,...]
-    python3 wiki.py check  [--root .] [--fail-on-stale]
-    python3 wiki.py update [--root .]
-    python3 wiki.py status [--root .]
+    python3 wiki.py init   [--root .] [--lang auto] [--extensions .go,.py,...] [--json]
+    python3 wiki.py check  [--root .] [--fail-on-stale] [--json]
+    python3 wiki.py update [--root .] [--json]
+    python3 wiki.py status [--root .] [--json]
 """
 
 from __future__ import annotations
@@ -37,6 +37,19 @@ from pathlib import Path
 
 WIKI_DIR_NAME = "docs/project_wiki"
 CACHE_FILE_NAME = ".review_cache.json"
+
+# Stable finding/signal codes — public contract for CI, hooks, and agents.
+# Keep codes stable; adding new ones is additive, renaming is a breaking change.
+SIGNAL_CODES = {
+    "WIKI-NEW-FILE",                 # file in code, not in SHA baseline
+    "WIKI-DELETED-FILE",             # in baseline, gone from code
+    "WIKI-MODIFIED-FILE",            # SHA changed since last review
+    "WIKI-L3-DRIFT",                 # L3 domain-language link drift
+    "WIKI-MODULE-WIKI-MISSING",      # module has source files but no <module>.md
+    "WIKI-OVERVIEW-MODULE-MISMATCH",  # overview index vs actual module set
+    "WIKI-UNREGISTERED-FILE",        # source file missing from registration table
+    "WIKI-ORPHAN-ENTRY",             # registration row for a file not in code
+}
 
 # Source file extensions by language. "auto" tries all of them.
 LANG_EXTENSIONS: dict[str, list[str]] = {
@@ -141,6 +154,34 @@ class DriftReport:
     @property
     def stale_count(self) -> int:
         return len(self.new_files) + len(self.deleted_files) + len(self.modified_files)
+
+
+# ---------------------------------------------------------------------------
+# Output helpers (human output is suppressed in --json mode)
+# ---------------------------------------------------------------------------
+
+_JSON_MODE = False
+
+
+def say(*values: object, **kwargs: object) -> None:
+    """Human-output printer. Suppressed when --json is active."""
+    if not _JSON_MODE:
+        print(*values, **kwargs)  # type: ignore[arg-type]
+
+
+def emit_json(result: dict) -> None:
+    """Emit the structured result object — the only stdout in --json mode."""
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def make_signal(code: str, path: str, detail: str) -> dict:
+    """Build one stable finding entry (code + path + detail)."""
+    return {"code": code, "path": path, "detail": detail}
+
+
+def sort_signals(signals: list[dict]) -> list[dict]:
+    """Deterministic signal ordering: by code, then path, then detail."""
+    return sorted(signals, key=lambda s: (s["code"], s["path"], s["detail"]))
 
 
 # ---------------------------------------------------------------------------
@@ -576,13 +617,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     lang = args.lang
     if lang == "auto":
         lang = detect_language(root)
-        print(f"Detected language: {lang}")
+        say(f"Detected language: {lang}")
 
     extensions = get_extensions_for_lang(lang)
     if args.extensions:
         extensions = [e.strip() for e in args.extensions.split(",")]
 
-    print(f"Scanning for extensions: {', '.join(extensions)}")
+    say(f"Scanning for extensions: {', '.join(extensions)}")
 
     # Scan project
     files = scan_project(root, extensions)
@@ -591,25 +632,28 @@ def cmd_init(args: argparse.Namespace) -> int:
         return 1
 
     modules = detect_modules(files)
-    print(f"Found {len(files)} source files in {len(modules)} module(s):")
+    say(f"Found {len(files)} source files in {len(modules)} module(s):")
     for name, mod_files in sorted(modules.items()):
-        print(f"  {name}: {len(mod_files)} files")
+        say(f"  {name}: {len(mod_files)} files")
 
     # Create wiki directory
     wiki_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate overview.md
+    generated: list[str] = []
     overview_path = wiki_dir / "overview.md"
     overview_content = generate_overview_content(modules, root)
     overview_path.write_text(overview_content)
-    print(f"\nGenerated: {overview_path.relative_to(root)}")
+    generated.append(str(overview_path.relative_to(root)))
+    say(f"\nGenerated: {overview_path.relative_to(root)}")
 
     # Generate module wikis
     for module_name, mod_files in sorted(modules.items()):
         module_path = wiki_dir / f"{module_name}.md"
         content = generate_module_content(module_name, mod_files)
         module_path.write_text(content)
-        print(f"Generated: {module_path.relative_to(root)}")
+        generated.append(str(module_path.relative_to(root)))
+        say(f"Generated: {module_path.relative_to(root)}")
 
     # Initialize SHA cache
     cache: dict = {"files": {}, "last_updated": None}
@@ -620,9 +664,10 @@ def cmd_init(args: argparse.Namespace) -> int:
             "reviewed": False,
         }
     save_cache(wiki_dir, cache)
-    print(f"Initialized: {wiki_dir / CACHE_FILE_NAME}")
+    say(f"Initialized: {wiki_dir / CACHE_FILE_NAME}")
 
     # Create .gitignore entry for cache if not exists
+    gitignore_updated = False
     gitignore = root / ".gitignore"
     cache_entry = f"{WIKI_DIR_NAME}/{CACHE_FILE_NAME}"
     if gitignore.exists():
@@ -630,17 +675,36 @@ def cmd_init(args: argparse.Namespace) -> int:
         if cache_entry not in content:
             with open(gitignore, "a") as gf:
                 gf.write(f"\n# project-wiki SHA baseline cache\n{cache_entry}\n")
-            print(f"Added '{cache_entry}' to .gitignore")
+            gitignore_updated = True
+            say(f"Added '{cache_entry}' to .gitignore")
     else:
         gitignore.write_text(f"# project-wiki SHA baseline cache\n{cache_entry}\n")
-        print(f"Created .gitignore with '{cache_entry}'")
+        gitignore_updated = True
+        say(f"Created .gitignore with '{cache_entry}'")
 
-    print(f"\n✅ Wiki initialized at {wiki_dir.relative_to(root)}/")
-    print("\nNext steps:")
-    print("  1. Edit each <module>.md to fill in file descriptions")
-    print("  2. Edit overview.md to fill in module responsibilities")
-    print("  3. Run 'python3 scripts/wiki.py update' to mark wiki as reviewed")
-    print("  4. Run 'python3 scripts/wiki.py check' to verify no drift")
+    if _JSON_MODE:
+        emit_json({
+            "command": "init",
+            "ok": True,
+            "summary": {
+                "language": lang,
+                "extensions": sorted(extensions),
+                "files": len(files),
+                "modules": len(modules),
+                "module_names": sorted(modules.keys()),
+                "generated": generated,
+                "gitignore_updated": gitignore_updated,
+            },
+            "signals": [],
+        })
+        return 0
+
+    say(f"\n✅ Wiki initialized at {wiki_dir.relative_to(root)}/")
+    say("\nNext steps:")
+    say("  1. Edit each <module>.md to fill in file descriptions")
+    say("  2. Edit overview.md to fill in module responsibilities")
+    say("  3. Run 'python3 scripts/wiki.py update' to mark wiki as reviewed")
+    say("  4. Run 'python3 scripts/wiki.py check' to verify no drift")
 
     return 0
 
@@ -677,14 +741,17 @@ def cmd_check(args: argparse.Namespace) -> int:
     current_by_path = {f.path: f for f in files}
     cached_paths = set(cached_files.keys())
 
-    # Also parse wiki to see what's registered
-    wiki_entries: set[str] = set()
-    for wiki_file in wiki_dir.glob("*.md"):
+    # Parse module wikis, keyed by file stem (module name)
+    module_wiki_map: dict[str, ModuleWiki] = {}
+    for wiki_file in sorted(wiki_dir.glob("*.md")):
         if wiki_file.name == "overview.md":
             continue
         mw = parse_module_wiki(wiki_file)
         if mw:
-            wiki_entries.update(mw.entries.keys())
+            module_wiki_map[wiki_file.stem] = mw
+    wiki_entries: set[str] = set()
+    for mw in module_wiki_map.values():
+        wiki_entries.update(mw.entries.keys())
 
     # Build drift report
     report = DriftReport()
@@ -693,7 +760,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     for path in sorted(current_paths):
         if path not in cached_paths:
-            # New file — in code but not in baseline cache
+            # New file — in code but not in the baseline cache
             report.new_files.append(path)
         else:
             cached_sha = cached_files[path].get("sha", "")
@@ -708,33 +775,6 @@ def cmd_check(args: argparse.Namespace) -> int:
         if path not in current_paths:
             report.deleted_files.append(path)
 
-    # Output report
-    print("=" * 70)
-    print("PROJECT WIKI DRIFT REPORT")
-    print("=" * 70)
-    print(f"  Tracked files (baseline): {report.total_tracked}")
-    print(f"  Registered in wiki:       {report.total_in_wiki}")
-    print(f"  Current source files:     {len(files)}")
-    print()
-
-    if report.new_files:
-        print(f"🟡 NEW FILES ({len(report.new_files)}) — in code, not yet in wiki:")
-        for p in report.new_files:
-            print(f"    + {p}")
-        print()
-
-    if report.deleted_files:
-        print(f"🔴 DELETED FILES ({len(report.deleted_files)}) — in wiki/baseline, gone from code:")
-        for p in report.deleted_files:
-            print(f"    - {p}")
-        print()
-
-    if report.modified_files:
-        print(f"🟠 MODIFIED FILES ({len(report.modified_files)}) — SHA changed since last review:")
-        for p in report.modified_files:
-            print(f"    ~ {p}")
-        print()
-
     # L3: domain-language connectivity drift
     l3 = detect_l3_artifacts(root)
     overview_content = ""
@@ -742,63 +782,182 @@ def cmd_check(args: argparse.Namespace) -> int:
     if overview_path.exists():
         overview_content = overview_path.read_text(errors="replace")
 
-    l3_stale = False
-    l3_signals: list[str] = []
-
+    l3_details: list[str] = []
     if l3["context_md"]:
         if "CONTEXT.md" not in overview_content:
-            l3_signals.append(
-                f"    + CONTEXT.md exists at {l3['context_md'].relative_to(root)} "
+            l3_details.append(
+                f"CONTEXT.md exists at {l3['context_md'].relative_to(root)} "
                 f"but overview.md doesn't link to it"
             )
-            l3_stale = True
     elif "CONTEXT.md" in overview_content:
-        l3_signals.append("    - overview.md links to CONTEXT.md but the file no longer exists")
-        l3_stale = True
+        l3_details.append("overview.md links to CONTEXT.md but the file no longer exists")
 
     if l3["adrs"]:
         if "docs/adr/" not in overview_content:
-            l3_signals.append(
-                f"    + {len(l3['adrs'])} ADRs exist in docs/adr/ "
+            l3_details.append(
+                f"{len(l3['adrs'])} ADRs exist in docs/adr/ "
                 f"but overview.md doesn't link to them"
             )
-            l3_stale = True
     elif "docs/adr/" in overview_content:
-        l3_signals.append("    - overview.md links to docs/adr/ but no ADR files exist")
-        l3_stale = True
+        l3_details.append("overview.md links to docs/adr/ but no ADR files exist")
 
-    if l3_stale:
-        print(f"🔵 L3 DOMAIN-LANGUAGE DRIFT ({len(l3_signals)}):")
-        for s in l3_signals:
-            print(s)
-        print()
+    # ------------------------------------------------------------------
+    # Wiki self-integrity: overview <-> module wikis <-> registration
+    # ------------------------------------------------------------------
+    modules_from_code = detect_modules(files)
+    module_names = set(modules_from_code.keys())
+    integrity: list[dict] = []
 
-    if not report.has_stale and not l3_stale:
-        print("✅ Wiki is up to date — no drift detected.")
+    # 1. Module in code but its module wiki file is missing
+    for m in sorted(module_names - set(module_wiki_map.keys())):
+        integrity.append(make_signal(
+            "WIKI-MODULE-WIKI-MISSING", m,
+            f"module '{m}' has {len(modules_from_code[m])} source files "
+            f"but {m}.md is missing",
+        ))
+
+    # 2. Overview module index vs actual module set
+    overview_modules: set[str] = set()
+    if overview_path.exists():
+        overview_modules = set(parse_overview(overview_path).keys())
+    for m in sorted(module_names - overview_modules):
+        integrity.append(make_signal(
+            "WIKI-OVERVIEW-MODULE-MISMATCH", m,
+            f"module '{m}' exists in code but is missing from the overview.md module index",
+        ))
+    for m in sorted(overview_modules - module_names):
+        integrity.append(make_signal(
+            "WIKI-OVERVIEW-MODULE-MISMATCH", m,
+            f"module '{m}' is listed in overview.md but has no source files",
+        ))
+
+    # 3. Registration table coverage per module
+    for m in sorted(module_wiki_map.keys()):
+        mw = module_wiki_map[m]
+        code_paths = {f.path for f in modules_from_code.get(m, [])}
+        registered = set(mw.entries.keys())
+        for p in sorted(code_paths - registered):
+            integrity.append(make_signal(
+                "WIKI-UNREGISTERED-FILE", p,
+                f"source file exists in module '{m}' but is not registered in {m}.md",
+            ))
+        for p in sorted(registered - code_paths):
+            integrity.append(make_signal(
+                "WIKI-ORPHAN-ENTRY", p,
+                f"registered in {m}.md but not present in code (module '{m}')",
+            ))
+
+    # ------------------------------------------------------------------
+    # Assemble signals + summary
+    # ------------------------------------------------------------------
+    signals: list[dict] = []
+    for p in report.new_files:
+        signals.append(make_signal("WIKI-NEW-FILE", p, "in code, not yet in wiki"))
+    for p in report.deleted_files:
+        signals.append(make_signal("WIKI-DELETED-FILE", p, "in baseline, gone from code"))
+    for p in report.modified_files:
+        signals.append(make_signal("WIKI-MODIFIED-FILE", p, "SHA changed since last review"))
+    for d in l3_details:
+        signals.append(make_signal("WIKI-L3-DRIFT", "", d))
+    signals.extend(integrity)
+    signals = sort_signals(signals)
+
+    l3_stale = bool(l3_details)
+    integrity_stale = bool(integrity)
+    any_stale = report.has_stale or l3_stale or integrity_stale
+
+    summary = {
+        "tracked": report.total_tracked,
+        "in_wiki": report.total_in_wiki,
+        "current": len(files),
+        "new": len(report.new_files),
+        "deleted": len(report.deleted_files),
+        "modified": len(report.modified_files),
+        "l3_drift": len(l3_details),
+        "integrity": len(integrity),
+    }
+
+    if _JSON_MODE:
+        emit_json({
+            "command": "check",
+            "ok": not any_stale,
+            "summary": summary,
+            "signals": signals,
+        })
+        if args.fail_on_stale and any_stale:
+            return 1
         return 0
 
-    print("-" * 70)
-    total_stale = report.stale_count + len(l3_signals)
-    print(f"TOTAL STALE: {total_stale} "
-          f"({len(report.new_files)} new, "
-          f"{len(report.deleted_files)} deleted, "
-          f"{len(report.modified_files)} modified, "
-          f"{len(l3_signals)} L3 drift)")
-    print()
-    print("Actions:")
-    if report.new_files:
-        print("  • Add new files to the appropriate <module>.md file registration table")
-    if report.deleted_files:
-        print("  • Remove deleted file entries from <module>.md tables")
-    if report.modified_files:
-        print("  • Review modified files and update descriptions if responsibilities changed")
-    if l3_stale:
-        print("  • Run 'python3 scripts/wiki.py update' to re-link L3 domain-language artifacts")
-    if report.has_stale or l3_stale:
-        print("  • Run 'python3 scripts/wiki.py update' after making changes")
-    print("-" * 70)
+    # ----- human output -----
+    say("=" * 70)
+    say("PROJECT WIKI DRIFT REPORT")
+    say("=" * 70)
+    say(f"  Tracked files (baseline): {report.total_tracked}")
+    say(f"  Registered in wiki:       {report.total_in_wiki}")
+    say(f"  Current source files:     {len(files)}")
+    say()
 
-    if args.fail_on_stale and (report.has_stale or l3_stale):
+    if report.new_files:
+        say(f"🟡 NEW FILES ({len(report.new_files)}) — in code, not yet in wiki:")
+        for p in report.new_files:
+            say(f"    + {p}")
+        say()
+
+    if report.deleted_files:
+        say(f"🔴 DELETED FILES ({len(report.deleted_files)}) — in wiki/baseline, gone from code:")
+        for p in report.deleted_files:
+            say(f"    - {p}")
+        say()
+
+    if report.modified_files:
+        say(f"🟠 MODIFIED FILES ({len(report.modified_files)}) — SHA changed since last review:")
+        for p in report.modified_files:
+            say(f"    ~ {p}")
+        say()
+
+    if l3_details:
+        say(f"🔵 L3 DOMAIN-LANGUAGE DRIFT ({len(l3_details)}):")
+        for d in l3_details:
+            say(f"    {d}")
+        say()
+
+    if integrity:
+        say(f"🟣 WIKI INTEGRITY ({len(integrity)}):")
+        for s in integrity:
+            say(f"    ! [{s['code']}] {s['detail']}")
+        say()
+
+    if not any_stale:
+        say("✅ Wiki is up to date — no drift detected.")
+        return 0
+
+    say("-" * 70)
+    total_stale = report.stale_count + len(l3_details) + len(integrity)
+    say(f"TOTAL STALE: {total_stale} "
+        f"({len(report.new_files)} new, "
+        f"{len(report.deleted_files)} deleted, "
+        f"{len(report.modified_files)} modified, "
+        f"{len(l3_details)} L3 drift, "
+        f"{len(integrity)} integrity)")
+    say()
+    say("Actions:")
+    if report.new_files:
+        say("  • Add new files to the appropriate <module>.md file registration table")
+    if report.deleted_files:
+        say("  • Remove deleted file entries from <module>.md tables")
+    if report.modified_files:
+        say("  • Review modified files and update descriptions if responsibilities changed")
+    if l3_stale:
+        say("  • Run 'python3 scripts/wiki.py update' to re-link L3 domain-language artifacts")
+    if any(s["code"] == "WIKI-MODULE-WIKI-MISSING" for s in integrity):
+        say("  • Run 'python3 scripts/wiki.py update' to generate missing module wiki skeletons")
+    if any(s["code"] in ("WIKI-UNREGISTERED-FILE", "WIKI-ORPHAN-ENTRY") for s in integrity):
+        say("  • Sync <module>.md registration tables with the actual file set")
+    if any_stale:
+        say("  • Run 'python3 scripts/wiki.py update' after making changes")
+    say("-" * 70)
+
+    if args.fail_on_stale and any_stale:
         return 1
     return 0
 
@@ -829,6 +988,17 @@ def cmd_update(args: argparse.Namespace) -> int:
     # Re-scan
     files = scan_project(root, extensions)
 
+    # Create module wiki skeletons for modules that lack one
+    # (repair path for WIKI-MODULE-WIKI-MISSING)
+    modules = detect_modules(files)
+    module_wikis_created: list[str] = []
+    for module_name, mod_files in sorted(modules.items()):
+        module_path = wiki_dir / f"{module_name}.md"
+        if not module_path.exists():
+            module_path.write_text(generate_module_content(module_name, mod_files))
+            module_wikis_created.append(f"{module_name}.md")
+            say(f"Created: {module_path.relative_to(root)} (skeleton — fill in descriptions)")
+
     # Build new cache
     new_cache: dict = {"files": {}, "last_updated": None}
     for f in files:
@@ -853,19 +1023,19 @@ def cmd_update(args: argparse.Namespace) -> int:
 
     save_cache(wiki_dir, new_cache)
 
-    print(f"✅ SHA baseline updated at {wiki_dir / CACHE_FILE_NAME}")
-    print(f"   Total files tracked: {len(new_cache['files'])}")
+    say(f"✅ SHA baseline updated at {wiki_dir / CACHE_FILE_NAME}")
+    say(f"   Total files tracked: {len(new_cache['files'])}")
     if added:
-        print(f"   Added: {len(added)}")
+        say(f"   Added: {len(added)}")
     if removed:
-        print(f"   Removed: {len(removed)}")
+        say(f"   Removed: {len(removed)}")
     if sha_changed:
-        print(f"   SHA updated: {len(sha_changed)}")
+        say(f"   SHA updated: {len(sha_changed)}")
 
     # Also update overview.md statistics
+    overview_updated = False
     overview_path = wiki_dir / "overview.md"
     if overview_path.exists():
-        modules = detect_modules(files)
         content = generate_overview_content(modules, root)
         # Preserve existing module descriptions if possible
         old_overview = parse_overview(overview_path)
@@ -883,7 +1053,23 @@ def cmd_update(args: argparse.Namespace) -> int:
             new_row = f"| `{module_name}` | _{file_count} source files_ — {desc} |"
             content = content.replace(old_row, new_row)
         overview_path.write_text(content)
-        print(f"   Updated: {overview_path.relative_to(root)}")
+        overview_updated = True
+        say(f"   Updated: {overview_path.relative_to(root)}")
+
+    if _JSON_MODE:
+        emit_json({
+            "command": "update",
+            "ok": True,
+            "summary": {
+                "tracked": len(new_cache["files"]),
+                "added": len(added),
+                "removed": len(removed),
+                "sha_updated": len(sha_changed),
+                "module_wikis_created": module_wikis_created,
+                "overview_updated": overview_updated,
+            },
+            "signals": [],
+        })
 
     return 0
 
@@ -919,39 +1105,58 @@ def cmd_status(args: argparse.Namespace) -> int:
     # Check for unreviewed files
     unreviewed = sum(1 for v in cached_files.values() if not v.get("reviewed", False))
 
-    print("=" * 50)
-    print("PROJECT WIKI STATUS")
-    print("=" * 50)
-    print(f"  Wiki directory:     {wiki_dir.relative_to(root)}/")
-    print(f"  Module wikis:       {len(module_wikis)}")
-    print(f"  Tracked files:      {len(cached_files)}")
-    print(f"  Wiki entries:       {total_entries}")
-    print(f"  Described entries:  {filled_entries}/{total_entries} "
-          f"({100*filled_entries//total_entries if total_entries else 0}%)")
-    print(f"  Unreviewed files:   {unreviewed}")
-    print(f"  Last updated:       {last_updated}")
-
     # L3: domain-modeling connectivity
     l3 = detect_l3_artifacts(root)
     l3_count = sum(1 for v in l3.values() if v)  # count non-empty L3 sources
-    print(f"  L3 domain language: {'✅ linked' if l3_count else '❌ not found'}")
-    if l3["context_md"]:
-        print(f"    CONTEXT.md:         {l3['context_md'].relative_to(root)}")
-    if l3["adrs"]:
-        print(f"    ADRs:               {len(l3['adrs'])} in {l3['adrs'][0].parent.relative_to(root)}")
-    if l3["glossary"]:
-        print(f"    Hand-curated:       {l3['glossary'].relative_to(root)}")
-    print()
+    needs_attention = bool(unreviewed or filled_entries < total_entries)
 
-    if unreviewed or filled_entries < total_entries:
-        print("⚠️  Wiki needs attention:")
+    if _JSON_MODE:
+        emit_json({
+            "command": "status",
+            "ok": True,
+            "summary": {
+                "module_wikis": len(module_wikis),
+                "tracked": len(cached_files),
+                "entries": total_entries,
+                "described_entries": filled_entries,
+                "unreviewed": unreviewed,
+                "last_updated": last_updated,
+                "l3_linked": l3_count > 0,
+                "needs_attention": needs_attention,
+            },
+            "signals": [],
+        })
+        return 0
+
+    say("=" * 50)
+    say("PROJECT WIKI STATUS")
+    say("=" * 50)
+    say(f"  Wiki directory:     {wiki_dir.relative_to(root)}/")
+    say(f"  Module wikis:       {len(module_wikis)}")
+    say(f"  Tracked files:      {len(cached_files)}")
+    say(f"  Wiki entries:       {total_entries}")
+    pct = 100 * filled_entries // total_entries if total_entries else 0
+    say(f"  Described entries:  {filled_entries}/{total_entries} ({pct}%)")
+    say(f"  Unreviewed files:   {unreviewed}")
+    say(f"  Last updated:       {last_updated}")
+    say(f"  L3 domain language: {'✅ linked' if l3_count else '❌ not found'}")
+    if l3["context_md"]:
+        say(f"    CONTEXT.md:         {l3['context_md'].relative_to(root)}")
+    if l3["adrs"]:
+        say(f"    ADRs:               {len(l3['adrs'])} in {l3['adrs'][0].parent.relative_to(root)}")
+    if l3["glossary"]:
+        say(f"    Hand-curated:       {l3['glossary'].relative_to(root)}")
+    say()
+
+    if needs_attention:
+        say("⚠️  Wiki needs attention:")
         if filled_entries < total_entries:
-            print(f"   • {total_entries - filled_entries} entries still have placeholder descriptions")
+            say(f"   • {total_entries - filled_entries} entries still have placeholder descriptions")
         if unreviewed:
-            print(f"   • {unreviewed} files not yet marked as reviewed")
-        print("   Run 'python3 scripts/wiki.py check' for details.")
+            say(f"   • {unreviewed} files not yet marked as reviewed")
+        say("   Run 'python3 scripts/wiki.py check' for details.")
     else:
-        print("✅ Wiki looks complete and up to date.")
+        say("✅ Wiki looks complete and up to date.")
 
     return 0
 
@@ -989,7 +1194,17 @@ def main() -> int:
     p_status = subparsers.add_parser("status", help="Show wiki coverage summary.")
     p_status.add_argument("--root", default=".", help="Project root directory (default: .)")
 
+    # --json applies to every subcommand: emit one machine-readable JSON
+    # object on stdout instead of human output.
+    for p in (p_init, p_check, p_update, p_status):
+        p.add_argument("--json", action="store_true",
+                       help="Emit a machine-readable JSON object on stdout instead of human output.")
+
     args = parser.parse_args()
+
+    global _JSON_MODE
+    if getattr(args, "json", False):
+        _JSON_MODE = True
 
     if args.command == "init":
         return cmd_init(args)

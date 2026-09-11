@@ -11,14 +11,21 @@ Platform is auto-detected from git remote:
 
 Project/repo resolved automatically from env or git remote.
 
-Scope: this script pulls *actionable findings* to classify — inline issues
-and fallback ("could not be posted inline") notes. OCR summary discussions
-(bot status notices with only stats, no inline finding) are deliberately
-filtered out: they have nothing to classify. They ARE resolvable threads on
-the platform, so they are caught by the **closure gate** — run
-ocr-verify-resolved.py after post-labels; it fails until every resolvable
-thread (including summaries) is resolved. Do NOT widen this filter to pull
-summaries back in.
+Scope: this script pulls *actionable findings* to classify — inline issues,
+fallback ("could not be posted inline") notes, and **general (non-inline)
+reviewer comments** (both OCR bot and human reviewers). General comments
+have no file/line position; they are emitted with file="(general)", line=0.
+This keeps the pull scope aligned with the closure gate
+(ocr-verify-resolved.py), which counts every resolvable thread — a pull
+that drops human general comments would report "0 findings" while the gate
+fails on open threads.
+
+Still deliberately filtered out: OCR summary discussions (bot status
+notices with only stats, no inline finding). They have nothing to classify,
+but they ARE resolvable threads on the platform, so they are caught by the
+**closure gate** — run ocr-verify-resolved.py after post-labels; it fails
+until every resolvable thread (including summaries) is resolved. Do NOT
+widen this filter to pull summaries back in.
 """
 
 import json
@@ -44,10 +51,14 @@ _JUNK_PREFIXES = {
 
 
 def _is_review_content(body):
-    """Check if a body looks like an OCR review issue (not summary/junk).
+    """Check if a body looks like a review finding (not summary/junk).
+
+    Applies to both OCR bot notes and human reviewer comments. Short
+    non-finding chatter ("thanks", "LGTM 🚀") from humans may still pass
+    this filter; /skill:fix classifies those as FP/Question.
 
     OCR summary discussions (🔍/✅/⚠️ OpenCodeReview run reports) are excluded:
-    they carry only stats, no inline finding to classify. They remain
+    they carry only stats, no finding to classify. They remain
     resolvable threads, so the closure gate (ocr-verify-resolved.py) handles
     them — not this pull.
     """
@@ -157,7 +168,7 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
                 # Auth or instance mismatch surfaces as a silent 0-finding pull;
                 # say why so the operator checks auth instead of debugging curl.
                 print(f"WARN: discussions fetch HTTP {status} — check glab auth "
-                      f"(`glab auth status`), CI_SERVER_URL, and OCR_BOT_LOGIN",
+                      f"(`glab auth status`) and CI_SERVER_URL",
                       file=sys.stderr)
             break
 
@@ -175,13 +186,11 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
             if first_note.get("system", False):
                 continue
 
-            # Only process notes from the OCR bot. The bot login is
-            # instance-specific (e.g. gitblue.bot vs ai_bot001) — set
-            # OCR_BOT_LOGIN to filter. Empty = no bot filter (pull everything).
+            # No author filter: pull findings from the OCR bot AND human
+            # reviewers. The closure gate counts every resolvable thread
+            # regardless of author, so filtering by author here would
+            # reintroduce the pull/gate mismatch this script fixed.
             author = first_note.get("author", {}).get("username", "")
-            ocr_bot_login = os.environ.get("OCR_BOT_LOGIN", "")
-            if ocr_bot_login and author != ocr_bot_login:
-                continue
 
             pos = first_note.get("position")
             note_body = first_note.get("body", "")
@@ -194,11 +203,25 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
                         "file": pos.get("new_path", ""),
                         "line": pos.get("new_line", 0),
                         "body": note_body,
+                        "author": author,
                     })
             else:
-                # Fallback note
                 if _is_fallback_body(note_body):
-                    all_issues.extend(_parse_fallback_issues(disc["id"], note_body))
+                    # Fallback note (OCR bot, could not post inline)
+                    for sub in _parse_fallback_issues(disc["id"], note_body):
+                        sub["author"] = author
+                        all_issues.append(sub)
+                elif _is_review_content(note_body) and first_note.get("resolvable", False):
+                    # General reviewer comment (often human, no file/line
+                    # position but a resolvable thread). Chatter in
+                    # non-resolvable notes (resolvable=false) stays out.
+                    all_issues.append({
+                        "discussion_id": disc["id"],
+                        "file": "(general)",
+                        "line": 0,
+                        "body": note_body,
+                        "author": author,
+                    })
 
         if len(body) < 100:
             break
@@ -210,16 +233,25 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
 
 
 def _get_github_bot_login():
-    """Get the OCR bot login to filter review comments."""
+    """Get the OCR bot login to pair with human reviewers."""
     return os.environ.get("OCR_BOT_LOGIN", "github-actions[bot]")
 
 
-def _is_github_bot(comment):
-    """Check if a GitHub review comment is from the OCR bot."""
+def _is_github_reviewer(comment):
+    """Check if a GitHub review comment is pullable review content.
+
+    Pull comments from the configured OCR bot AND from human reviewers
+    (user.type != "Bot"). Other bots (type=Bot, not the configured login)
+    are dropped — their notices are usually status noise. Humans must be
+    included: the closure gate counts every unresolved review thread
+    regardless of author, so a bot-only filter here would report
+    "0 findings" while the gate fails on human threads.
+    """
     bot_login = _get_github_bot_login()
     user = comment.get("user", {})
-    # Match by login or type=Bot
-    return user.get("login") == bot_login or user.get("type") == "Bot"
+    if user.get("login") == bot_login:
+        return True
+    return user.get("type") != "Bot"
 
 
 def _pull_github(pr_number, skip_resolved=True):
@@ -251,8 +283,8 @@ def _pull_github(pr_number, skip_resolved=True):
             break
 
         for comment in body:
-            # Only process bot comments
-            if not _is_github_bot(comment):
+            # Only process reviewer comments (OCR bot + humans)
+            if not _is_github_reviewer(comment):
                 continue
 
             # Only process thread roots (not replies)
@@ -263,6 +295,7 @@ def _pull_github(pr_number, skip_resolved=True):
             filepath = comment.get("path", "")
             line = comment.get("line") or comment.get("original_line") or 0
             note_body = comment.get("body", "")
+            author = comment.get("user", {}).get("login", "")
 
             if _is_review_content(note_body):
                 all_issues.append({
@@ -270,9 +303,12 @@ def _pull_github(pr_number, skip_resolved=True):
                     "file": filepath,
                     "line": line,
                     "body": note_body,
+                    "author": author,
                 })
             elif _is_fallback_body(note_body):
-                all_issues.extend(_parse_fallback_issues(comment_id, note_body))
+                for sub in _parse_fallback_issues(comment_id, note_body):
+                    sub["author"] = author
+                    all_issues.append(sub)
 
         if len(body) < per_page:
             break

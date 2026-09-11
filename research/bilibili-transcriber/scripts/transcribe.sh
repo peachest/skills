@@ -131,7 +131,9 @@ echo "[2/3] Transcribing via whisper-asr (${WHISPER_ENDPOINT}, model=${WHISPER_M
 T2=$(date +%s%N)
 
 NEEDS_CHUNK=0
-if [ "$(echo "$WAV_SIZE_MB > $MAX_FILESIZE_MB" | bc)" -eq 1 ]; then
+# compare raw BYTES, not the scale=1 display value: 25.0199MB truncates to
+# 25.0, passes the "≤ 25" check, and the server rejects the upload at 25.0199
+if [ "$(echo "$WAV_SIZE > $MAX_FILESIZE_MB * 1048576" | bc)" -eq 1 ]; then
   NEEDS_CHUNK=1
 fi
 
@@ -180,6 +182,11 @@ if [ "$NEEDS_CHUNK" -eq 0 ]; then
     exit 1
   fi
   echo "$TEXT" > "$RAW_TEXT_PATH"
+  # preserve the full verbose_json (per-segment timestamps) alongside the
+  # text — downstream dual-transcribe.py harvests segments from here; direct
+  # mode must stay layout-compatible with chunked mode
+  mkdir -p "${OUT_DIR}/chunks/transcripts"
+  echo "$RESPONSE" > "${OUT_DIR}/chunks/transcripts/direct.json"
 fi
 
 T3=$(date +%s%N)

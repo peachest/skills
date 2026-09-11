@@ -7,12 +7,12 @@ Reference for the build command that runs the optimized `Dockerfile.local`.
 1. **buildkitd running** — `sudo systemctl status buildkit` shows active, and
    `/run/buildkit/buildkitd.sock` exists.
 2. **Harbor auth** — `/root/.docker/config.json` contains an `auths` entry for
-   `internal.example.com`. `nerdctl login internal.example.com` has a known bug
-   (`expected acArg to be internal.example.com:443, got internal.example.com`),
+   `harbor.example.com`. `nerdctl login harbor.example.com` has a known bug
+   (`expected acArg to be harbor.example.com:443, got harbor.example.com`),
    even with `:443` appended. Write the config directly:
 
    ```bash
-   echo '{"auths":{"internal.example.com":{"auth":"'$(echo -n 'USER:PASS' | base64 -w0)'"}}}' \
+   echo '{"auths":{"harbor.example.com":{"auth":"'$(echo -n 'USER:PASS' | base64 -w0)'"}}}' \
      | sudo tee /root/.docker/config.json
    ```
 
@@ -30,7 +30,7 @@ sudo nerdctl build \
   --build-arg HTTPS_PROXY=<PROXY> \
   --build-arg NO_PROXY=<NO_PROXY> \
   --build-arg no_proxy=<NO_PROXY> \
-  -t internal.example.com/<project>/<image>:<tag> \
+  -t harbor.example.com/<project>/<image>:<tag> \
   -f <path>/Dockerfile.local \
   . > /tmp/build.log 2>&1 &
 ```
@@ -46,7 +46,7 @@ Include the harbor registry and internal hosts so pushes/pulls and internal
 fetches bypass the proxy:
 
 ```
-NO_PROXY=internal.example.com,localhost,127.0.0.1,<internal-cidr>
+NO_PROXY=harbor.example.com,localhost,127.0.0.1,<internal-cidr>
 ```
 
 ### nerdctl limitations
@@ -58,7 +58,7 @@ NO_PROXY=internal.example.com,localhost,127.0.0.1,<internal-cidr>
 ## Push
 
 ```bash
-sudo nerdctl push internal.example.com/<project>/<image>:<tag>
+sudo nerdctl push harbor.example.com/<project>/<image>:<tag>
 ```
 
 Multi-arch (single manifest list, no per-arch tag noise):

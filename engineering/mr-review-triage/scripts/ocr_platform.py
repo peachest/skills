@@ -33,6 +33,6 @@ def detect_platform():
 
     if "github.com" in url:
         return "github"
-    # gitlab.com or self-hosted GitLab (internal.example.com, etc.)
+    # gitlab.com or self-hosted GitLab (gitlab.blue.example, etc.)
     # Default: anything non-github is treated as gitlab
     return "gitlab"

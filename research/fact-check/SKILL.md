@@ -9,10 +9,12 @@ description: "Extract verifiable claims from documents, route to rule engines or
 
 Agent follows `references/workflow.md` step by step through 8 phases:
 
+**P1 Extract hard constraint:** load `prompts/extract-claims.md` + `references/schema.md` BEFORE producing any claim; claim sets are assembled ONLY by `scripts/build-claims.py` (minimal fields via stdin); on failure re-emit ONLY the failed claims — never rewrite the whole set.
+
 | Phase | Action | Tool |
 |-------|--------|------|
 | **P0 Init** | git/branch/ledger → run.json, detect subagents | `scripts/init.sh` |
-| **P1 Extract** | LLM → locate-claim → check-atomicity → validate loop (max 3) | `scripts/locate-claim.sh`, `scripts/check-atomicity.sh`, `scripts/validate-claims.sh` |
+| **P1 Extract** | load extraction contract 🛑 → smoke test 1 claim → bulk extract → assemble → targeted patch | `scripts/build-claims.py` |
 | **P2 Classify** | regex route + LLM fallback for unmatched | `scripts/route-claims.sh` |
 | **P3a Rule Engine** | 20+ HTTP verifiers for authority claims | `scripts/rule-engine.sh` |
 | **P3b Triage** | alt-provider LLM confidence eval | (LLM) |

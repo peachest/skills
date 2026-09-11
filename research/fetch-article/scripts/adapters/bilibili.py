@@ -67,6 +67,10 @@ def _download_with_aria2c(url: str, output_path: str, output_dir: str):
         "--continue=true",
         "--max-tries=3",
         "--retry-wait=2",
+        # 8 connections ≈ 2.3x single-stream to bilibili CDN (measured 2.6 vs
+        # 1.1-1.6 MB/s); 16 connections measurably slower (CDN per-IP throttle)
+        "--max-connection-per-server=8",
+        "--split=8",
         "--header=Referer: https://www.bilibili.com/",
         "--header=User-Agent: " + HEADERS["User-Agent"],
     ]

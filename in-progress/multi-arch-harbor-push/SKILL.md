@@ -18,7 +18,7 @@ ls /proc/sys/fs/binfmt_misc/qemu-aarch64
 sudo nerdctl --version
 
 # Harbor 已登录
-sudo nerdctl login internal.example.com
+sudo nerdctl login harbor.example.com
 ```
 
 任何一项不满足就停，报告缺什么。
@@ -56,8 +56,8 @@ tag 策略：版本号 + `latest`，可选 minor tag。
 sudo nerdctl --namespace k8s.io build --platform linux/amd64 \
   -f <DOCKERFILE> \
   <BUILD_ARGS> \
-  -t internal.example.com/aip-amd/<IMAGE_NAME>:<IMAGE_TAG> \
-  -t internal.example.com/aip-amd/<IMAGE_NAME>:latest \
+  -t harbor.example.com/<amd-project>/<IMAGE_NAME>:<IMAGE_TAG> \
+  -t harbor.example.com/<amd-project>/<IMAGE_NAME>:latest \
   .
 ```
 
@@ -69,8 +69,8 @@ sudo nerdctl --namespace k8s.io build --platform linux/amd64 \
 sudo nerdctl --namespace k8s.io build --platform linux/arm64 \
   -f <DOCKERFILE> \
   <BUILD_ARGS> \
-  -t internal.example.com/aip-arm/<IMAGE_NAME>:<IMAGE_TAG> \
-  -t internal.example.com/aip-arm/<IMAGE_NAME>:latest \
+  -t harbor.example.com/<arm-project>/<IMAGE_NAME>:<IMAGE_TAG> \
+  -t harbor.example.com/<arm-project>/<IMAGE_NAME>:latest \
   .
 ```
 
@@ -80,12 +80,12 @@ sudo nerdctl --namespace k8s.io build --platform linux/arm64 \
 
 ```bash
 # amd64
-sudo nerdctl --namespace k8s.io push internal.example.com/aip-amd/<IMAGE_NAME>:<IMAGE_TAG>
-sudo nerdctl --namespace k8s.io push internal.example.com/aip-amd/<IMAGE_NAME>:latest
+sudo nerdctl --namespace k8s.io push harbor.example.com/<amd-project>/<IMAGE_NAME>:<IMAGE_TAG>
+sudo nerdctl --namespace k8s.io push harbor.example.com/<amd-project>/<IMAGE_NAME>:latest
 
 # arm64
-sudo nerdctl --namespace k8s.io push internal.example.com/aip-arm/<IMAGE_NAME>:<IMAGE_TAG>
-sudo nerdctl --namespace k8s.io push internal.example.com/aip-arm/<IMAGE_NAME>:latest
+sudo nerdctl --namespace k8s.io push harbor.example.com/<arm-project>/<IMAGE_NAME>:<IMAGE_TAG>
+sudo nerdctl --namespace k8s.io push harbor.example.com/<arm-project>/<IMAGE_NAME>:latest
 ```
 
 **完成标准**：四个 push 全部退出码 0。
@@ -96,29 +96,29 @@ sudo nerdctl --namespace k8s.io push internal.example.com/aip-arm/<IMAGE_NAME>:l
 
 ```bash
 for REPO in aip aip-mm; do
-  FULL=internal.example.com/${REPO}/<IMAGE_NAME>:<IMAGE_TAG>
-  LATEST=internal.example.com/${REPO}/<IMAGE_NAME>:latest
+  FULL=harbor.example.com/${REPO}/<IMAGE_NAME>:<IMAGE_TAG>
+  LATEST=harbor.example.com/${REPO}/<IMAGE_NAME>:latest
 
   sudo nerdctl --namespace k8s.io manifest rm "$FULL" 2>/dev/null || true
   sudo nerdctl --namespace k8s.io manifest rm "$LATEST" 2>/dev/null || true
 
   sudo nerdctl --namespace k8s.io manifest create "$FULL" \
-    internal.example.com/aip-amd/<IMAGE_NAME>:<IMAGE_TAG> \
-    internal.example.com/aip-arm/<IMAGE_NAME>:<IMAGE_TAG>
+    harbor.example.com/<amd-project>/<IMAGE_NAME>:<IMAGE_TAG> \
+    harbor.example.com/<arm-project>/<IMAGE_NAME>:<IMAGE_TAG>
   sudo nerdctl --namespace k8s.io manifest push "$FULL"
 
   sudo nerdctl --namespace k8s.io manifest create "$LATEST" \
-    internal.example.com/aip-amd/<IMAGE_NAME>:<IMAGE_TAG> \
-    internal.example.com/aip-arm/<IMAGE_NAME>:<IMAGE_TAG>
+    harbor.example.com/<amd-project>/<IMAGE_NAME>:<IMAGE_TAG> \
+    harbor.example.com/<arm-project>/<IMAGE_NAME>:<IMAGE_TAG>
   sudo nerdctl --namespace k8s.io manifest push "$LATEST"
 
   # 可选 minor tag
   if [ -n "<MINOR_TAG>" ]; then
-    MINOR=internal.example.com/${REPO}/<IMAGE_NAME>:<MINOR_TAG>
+    MINOR=harbor.example.com/${REPO}/<IMAGE_NAME>:<MINOR_TAG>
     sudo nerdctl --namespace k8s.io manifest rm "$MINOR" 2>/dev/null || true
     sudo nerdctl --namespace k8s.io manifest create "$MINOR" \
-      internal.example.com/aip-amd/<IMAGE_NAME>:<IMAGE_TAG> \
-      internal.example.com/aip-arm/<IMAGE_NAME>:<IMAGE_TAG>
+      harbor.example.com/<amd-project>/<IMAGE_NAME>:<IMAGE_TAG> \
+      harbor.example.com/<arm-project>/<IMAGE_NAME>:<IMAGE_TAG>
     sudo nerdctl --namespace k8s.io manifest push "$MINOR"
   fi
 done
@@ -131,7 +131,7 @@ done
 ```bash
 # 抽查一个多架构 manifest
 sudo nerdctl --namespace k8s.io manifest inspect \
-  internal.example.com/aip-mm/<IMAGE_NAME>:<IMAGE_TAG> | grep -A2 platform
+  harbor.example.com/aip-mm/<IMAGE_NAME>:<IMAGE_TAG> | grep -A2 platform
 ```
 
 应看到 `linux/amd64` 和 `linux/arm64` 两个 platform entry。
@@ -155,4 +155,4 @@ sudo nerdctl --namespace k8s.io manifest inspect \
 - **arm64 build 卡住或超慢** — QEMU 模拟比原生慢 5-10 倍，正常现象。如果 >10min 无输出，检查 binfmt 是否注册。
 - **manifest create 报 "image not found"** — 单架构镜像必须先 push 成功，manifest create 引用的是远端镜像。
 - **manifest rm 报 "not found"** — 首次推送时正常，`|| true` 已处理。
-- **push 报 unauthorized** — `sudo nerdctl login internal.example.com` 重新登录。
+- **push 报 unauthorized** — `sudo nerdctl login harbor.example.com` 重新登录。

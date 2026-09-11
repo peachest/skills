@@ -28,6 +28,8 @@ The map is an **index**, not a store. It lists the decisions made and points at 
 
 The whole map at low resolution, loaded once per session. Open tickets are **not** listed — they are open child issues, found by query.
 
+**Local-markdown tracker only:** the map file `.scratch/<slug>/map.md` carries YAML front matter (title/state/milestone/created_at/closed_at), managed by `tracker map state`. The body sections below follow.
+
 ```markdown
 ## Destination
 
@@ -63,6 +65,8 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 ```
 
 Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)).
+
+**Local-markdown tracker only:** ticket type/status/triage/blocked_by live in YAML front matter (managed by the `tracker` CLI), not `wayfinder:` labels. Type is set at `tracker ticket create --type`.
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 
@@ -100,6 +104,17 @@ Out-of-scope work never graduates — the frontier stops at the destination — 
 
 Ruling something out of scope is a scoping act, not a step on the route. When a ticket that already exists turns out to sit past the destination — mis-scoped in while charting, or exposed by a resolution — **close it** (a closed ticket is unambiguously off the frontier) and leave one line in the **Out of scope** section: the gist plus why it's out of scope, linking the closed ticket. It stays out of **Decisions so far**, which records the route actually walked — a scope boundary isn't a step on it.
 
+## Discovery routing
+
+A work session (implementing tickets, or any session mid-effort) surfaces work the current map cannot hold — a wrong assumption, a new constraint, a whole effort discovered underneath. Route it through the four branches in order; never silently absorb it, never silently charter around it. Full judgment tests and a worked example: [references/discovery-routing.md](references/discovery-routing.md).
+
+1. **External ownership** — the work belongs to someone outside this map (another team, an upstream project). No ticket. One line in the map body: the dependency, and any timing decision it forces on this map.
+2. **Sub-ticket** — the finding is one sharp question, and its answer does not change other tickets' premises. Create it as a child of the current map, wire `blocked_by`, and the frontier handles it.
+3. **New map** — the finding changes premises of open tickets, or outruns the destination (a different altitude of work). Charter a new map via the normal Chart flow, then record the lineage both ways: the new map's Notes open with `Spawned from: <map/ticket link> — one line why`, and the parent map gains a Spawned-maps line. Any parent open ticket whose design the new map's decisions will overturn gets blocked on the new map's corresponding ticket — native blocking where the tracker has it (a GitLab issue can block an issue in another map), a body `Blocked by:` line where it doesn't.
+4. **Not yet gradeable** — cannot tell yet. One `research` ticket in the current map to find out; its resolution re-routes the finding through this list. A temporary issue created before grading **folds**: close it with a `Folded into <link>` comment and a relates_to link — the trail is never deleted.
+
+The agent proposes the branch; the human confirms it before anything is created.
+
 ## Invocation
 
 Two modes. Either way, **never resolve more than one ticket per session** — with the exception of research tickets.
@@ -121,9 +136,9 @@ User invokes with a loose idea.
 User invokes with a map (URL or number). A ticket is **optional** — without one, you pick the next decision, not the user.
 
 1. Load the **map** — the low-res view, not every ticket body.
-2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
+2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work. **Local-markdown tracker only:** claim with `tracker ticket status --map <slug> --id <N> --set claimed` (no assignee field — claimed status *is* the claim; requires `reviewed_at != null`).
 3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/skill:grilling` and `/skill:domain-modeling`.
-4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
-5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
+4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far. **Local-markdown tracker only:** fill the ticket's `## Answer`, append `- [#<id> <title>](issues/<NN>-<slug>.md) — <gist>` to the map's `## Decisions so far`, then `tracker ticket status --map <slug> --id <N> --set resolved` (thin CRUD, G-Q15 -- the CLI only sets status; body edits are the agent's job).
+5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets. If the finding cannot be held by this map at all, route it per [Discovery routing](#discovery-routing) before creating anything.
 
 The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.

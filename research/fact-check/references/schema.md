@@ -2,6 +2,11 @@
 
 LLM 从文本文档中提取结构化 claim 的 JSON schema。
 
+> **装配分工（R24）**：LLM 只产出最小字段（`claim_text` 逐字 + `type` + `expected_verifier`），
+> 完整 schema 由 `scripts/build-claims.py` 装配填充（`claim_id`/`source_location`/`content_hash`/
+> `decomposition_mode`/`compound_flag`）。下表是装配后的最终形态，供校验与理解用，
+> 不要求 LLM 手写全部字段。
+
 ## 提取格式
 
 ```json

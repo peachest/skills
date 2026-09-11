@@ -47,10 +47,43 @@ any low-confidence segments (`avg_logprob < -1.0`).
 
 ### Step 3: Clean the Transcript (LLM)
 
-The raw transcript is continuous text without punctuation. Feed it to an
-LLM for homophone correction, punctuation, and paragraph segmentation.
-See [`references/llm-cleanup.md`](references/llm-cleanup.md) for the
-prompt template and pre-marking low-confidence segments.
+The raw transcript is continuous text without punctuation. Two automated
+paths — both need `CLEAN_LLM_BASEURL` / `CLEAN_LLM_MODEL` (+ optional
+`CLEAN_LLM_KEY`) in runtime.conf:
+
+**Mono-lingual audio** (Chinese dub only):
+
+```bash
+cd <SKILL_DIR> && uv run python scripts/clean-transcripts.py <manifest-or-dirs>
+```
+
+Chunks the body (~3000 chars), cleans via an OpenAI-compatible endpoint,
+per-chunk ±25% length validation (rejects silent summarizing), escalation
+ladder for stubborn chunks (halve → sampling escape temp 0.7/fp 0.6 — flash
+models deterministically repetition-loop on some dense chunks at temp 0),
+resumable (`transcript.raw.md` marker), failures → `clean-failures.json`.
+
+**Bilingual dual-audio** (English original + condensed Chinese voice-over
+mixed in one track — common for translated channels; a zh-hinted single pass
+bleeds both languages into one messy text):
+
+```bash
+cd <SKILL_DIR> && uv run python scripts/dual-transcribe.py <targets.json>
+```
+
+Re-runs ASR with `WHISPER_LANG=en` in a scratch root (zh side reuses the
+existing chunk JSONs), aligns both timelines into ~90s windows, then one LLM
+merge per 4 windows: cleaned zh + full EN translation + `[对照存疑]` flags
+where the dub skips content or the EN original corrects an ASR homophone
+(汉玛→Hanuman, 夏天宝座→Summer Palace — the EN side doubles as ground
+truth for proper nouns). Output is the interleaved format the user chose:
+`## [mm:ss - mm:ss]` window → zh paragraphs → `> **EN 原声（译文）**`
+blockquote → optional flag line. Previous text is kept as
+`transcript.mixed.md`; resumable via `dual-state.json`.
+
+Bilingual detection: scan transcripts for ASCII ratio > 10% — anything
+above is a dual-pass candidate. Manual prompt template and pre-marking
+workflow live in [`references/llm-cleanup.md`](references/llm-cleanup.md).
 
 Done when: transcript has paragraph breaks, punctuation, and corrected
 homophones — every raw ASR segment accounted for.
@@ -83,3 +116,54 @@ OUT=$(python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
   --json | python3 -c "import sys,json; print(json.load(sys.stdin)['raw_path'])") && \
 bash <SKILL_DIR>/scripts/transcribe.sh "$OUT"
 ```
+
+## Environment Check
+
+`runtime.conf` is the runtime record: the ASR endpoint, model, and language the
+pipeline assumes. Assumptions rot when the service moves, the pod restarts, or
+you switch dev nodes. Validate them before a long batch — or whenever a
+transcription run surprises you:
+
+```bash
+bash <SKILL_DIR>/scripts/check-env.sh
+```
+
+PASS/WARN lines are informational; any FAIL exits 1. It probes: runtime.conf
+values, aria2c/ffmpeg/python3 (with requests+numpy+aiohttp), the ASR endpoint
+via `/v1/models` (model id included), the LLM cleanup endpoint (Step 3),
+bilibili.com reachability (direct, then proxy), and the `bili` CLI credential
+(enumeration only). Run it inside the uv env for a green pass:
+`cd <SKILL_DIR> && uv run bash scripts/check-env.sh`.
+
+## Batch Mode
+
+Transcribing a whole channel: enumerate the uploader's videos into a manifest,
+filter it to taste, then run the resumable queue.
+
+```bash
+# 1. Enumerate (credential REQUIRED — anonymous space-API calls hit 412)
+~/.local/share/uv/tools/bilibili-cli/bin/python <SKILL_DIR>/scripts/enumerate-uploader.py \
+  --bv BV1iz4R6EEFk --out ~/research/<topic>/manifest.json
+#    (or --mid <mid> directly)
+
+# 2. Filter the manifest (jq / python) — drop vlogs, keep the teaching videos
+
+# 3. Queue — pipeline version (RECOMMENDED): fetch and ASR run as independent
+#    worker pools connected by queues/ (pending → ready → done); downloads of
+#    upcoming videos overlap ASR of the current one, crash-safe via atomic
+#    rename claims + startup requeue, resumable, same status.jsonl schema.
+mkdir -p ~/research/<topic> && cd ~/research/<topic>
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/pipeline-queue.py "$PWD" manifest.json \
+  --fetch-workers 2 --asr-workers 1
+
+#    Serial fallback (simpler, no pipelining):
+#    bash <SKILL_DIR>/scripts/run-queue.sh "$PWD" manifest.json
+```
+
+The queue runs on the skill's uv env (`uv sync` once in `<SKILL_DIR>`; every
+script below runs as `cd <SKILL_DIR> && uv run python scripts/<x>.py` so
+children inherit the full dep set). Two non-obvious rules baked into the
+scripts: loop children never inherit stdin (a downloader once ate bytes from
+the redirected input and truncated every following BV id), and WAV
+intermediates are deleted after each success while the source audio and
+metrics are kept.

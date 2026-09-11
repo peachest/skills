@@ -36,7 +36,7 @@ func HaveFieldName(expected string) types.GomegaMatcher {
 
 ### 1. Plan the matcher
 
-- Identify the **target type** (e.g., `*v1alpha1.NodeXpu`, `resource.Quantity`)
+- Identify the **target type** (e.g., `*v1alpha1.NodeDevice`, `resource.Quantity`)
 - Identify the **assertion** (field check, status check, condition check)
 - Decide: single-parameter or multi-parameter matcher?
 - Decide: does the assertion need a type-conversion helper?
@@ -108,7 +108,7 @@ var _ = Describe("HaveFieldName", func() {
 ```go
 func BeHealthy() types.GomegaMatcher {
     return gcustom.MakeMatcher(func(actual any) (bool, error) {
-        nx, err := toNodeXpu(actual)
+        nx, err := toNodeDevice(actual)
         if err != nil { return false, err }
         return nx.Status.Health, nil
     })
@@ -120,7 +120,7 @@ func BeHealthy() types.GomegaMatcher {
 ```go
 func HaveConditionStatus(conditionType string, status metav1.ConditionStatus) types.GomegaMatcher {
     return gcustom.MakeMatcher(func(actual any) (bool, error) {
-        nx, err := toNodeXpu(actual)
+        nx, err := toNodeDevice(actual)
         if err != nil { return false, err }
         cond := findCondition(nx.Status.Conditions, conditionType)
         if cond == nil { return false, nil }
