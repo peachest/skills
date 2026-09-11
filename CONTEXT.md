@@ -10,8 +10,10 @@ _Avoid_: codebase (too generic), project state
 - **Compass**: The requirement — it points the direction but is not the map. Can be wrong about the terrain.
 _Avoid_: spec, requirement (use when discussing the metaphor)
 
-- **Intent map**: INTENT.md at the repo root — the compass made durable plus the route skeleton: what is being built, for whom, and what done means, as releases of stories. Two maps, two altitudes: the intent map indexes **stories** (what to build); a wayfinder map indexes **decisions** (what to settle before building).
+- **Intent map**: INTENT.md at the repo root — the compass made durable plus the route skeleton: what is being built, for whom, and what done means, as releases of stories. Three altitudes, three artifacts: the intent map indexes **stories** (what to build); an intent file records **one change's intent**; a wayfinder map indexes **decisions** (what to settle before building).
 _Avoid_: product spec, roadmap, PRD
+- **Intent file**: `intent/<slug>.md` at the repo root, committed — the intake record of one effort entering development: Problem, Proposed outcome, Constraints, and Open questions. The durable counterpart to the disposable `.scratch/` working artifacts; its git history is the governance trail. The Open questions section is the router: sharp questions become wayfinder decision tickets, unsharp ones go to Not yet specified; a fog-free intake goes straight to spec. The trailhead of an effort — registered on entry, retired to `status: done` on verified completion.
+_Avoid_: mini-spec, ticket description, requirements doc
 - **Story**: One capability from the user's point of view on the intent map — a stable id, priority, effort, and *Done when* criteria that are single verifiable statements. The unit of work: picked up, implemented, and reported on by id. Completed stories drop off the map, which keeps it a record of the route ahead, not the route walked.
 _Avoid_: feature, ticket (a ticket is a slice of work cut to deliver a story)
 - **Fog check**: The to-intent test for story sharpness — a *Done when* that cannot be stated as a single verifiable statement means the how is still undecided. The story is fog, not a story: park it in a later release, or hand its release to wayfinder and let decisions clear the fog first.
@@ -20,7 +22,7 @@ _Avoid_: feasibility check, definition-of-done review
 - **Bearing**: The compact grounding summary orient produces from reading terrain. Carries terms, constraints, conventions, seams, landmarks, waymarks, gaps, and calibration. Consumed by wayfinder as the basis for charting the map.
 _Avoid_: summary, context, overview
 
-- **Map**: The shared artifact wayfinder creates on the issue tracker — an index of decisions made and pointers to tickets that hold their detail. An index, not a store. The decision-altitude map; the intent map is the story-altitude counterpart — same metaphor, two altitudes.
+- **Map**: The shared artifact wayfinder creates on the issue tracker — an index of decisions made and pointers to tickets that hold their detail. An index, not a store. The decision-altitude map; the intent map is the story-altitude counterpart and the intent file the effort-altitude intake — same metaphor, three altitudes.
 _Avoid_: plan, checklist
 
 - **Chart**: The codebase survey artifact project-wiki produces — a structured map of modules and files with SHA-based drift detection. The persistent form of terrain that orient reads from instead of surveying blindly.
