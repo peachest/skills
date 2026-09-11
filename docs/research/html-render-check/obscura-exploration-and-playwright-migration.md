@@ -55,7 +55,7 @@ load and screenshot); SSRF guard blocks loopback without
 | PhantomJS / SlimerJS | Unmaintained |
 | Cypress / Percy / visual-regression suites | Web-app test runners / SaaS — wrong shape for artifact verification |
 
-## 3. Playwright feasibility record (this node, llm12)
+## 3. Playwright feasibility record (this node)
 
 1. `npm install playwright` — works via corporate proxy (http://203.0.113.10:3128).
 2. `npx playwright install chromium --only-shell` — downloads to `~/.cache/ms-playwright` (~266MB incl. ffmpeg).

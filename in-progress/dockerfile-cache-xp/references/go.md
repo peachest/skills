@@ -58,7 +58,7 @@ passthrough and routes `go mod download` to the fast internal mirror.
 
 ## Verified reference
 
-`~/projects/kube-nodexpu-manager/dev/Dockerfile.local` — Go project, layered
+`~/projects/example-go-service/Dockerfile.local` — Go project, layered
 COPY (`go.mod`/`go.sum` → `go mod download` → source), GOMODCACHE cache mount,
 BUILDPLATFORM cross-arch. Read it when the target Dockerfile is Go and you need
 a concrete shape to mirror.
