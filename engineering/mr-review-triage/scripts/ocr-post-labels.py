@@ -211,6 +211,36 @@ def _build_body(cleaned):
 # ── GitLab backend ──
 
 
+def _sweep_notes_gitlab(base, disc_id, curl):
+    """Resolve every remaining resolvable-unresolved note in a thread.
+
+    GitLab threads carry per-note resolvable/resolved flags, and the
+    discussion-level PUT only resolves the thread head — reply notes
+    (including the verdict label just posted) stay open and trip the closure
+    gate. Called after a successful thread resolve so the script leaves
+    nothing for a manual fallback.
+    """
+    status, disc, _ = curl(f"{base}/discussions/{disc_id}")
+    if status != 200 or not isinstance(disc, dict):
+        print(f"[WARN] note sweep {disc_id[:12]}: fetch HTTP {status} — head resolved, notes unswept", file=sys.stderr)
+        return
+    swept = 0
+    for note in disc.get("notes", []):
+        if note.get("resolvable") and not note.get("resolved"):
+            note_id = note.get("id")
+            st, _, _ = curl(
+                f"{base}/discussions/{disc_id}/notes/{note_id}",
+                method="PUT",
+                data={"resolved": True},
+            )
+            if 200 <= st < 300:
+                swept += 1
+            else:
+                print(f"[WARN] note sweep {disc_id[:12]}/{note_id}: HTTP {st}", file=sys.stderr)
+    if swept:
+        print(f"[OK] swept {swept} open reply note(s) in {disc_id[:12]}", file=sys.stderr)
+
+
 def _post_gitlab(mr_iid, items, resolved_map=None):
     from ocr_gitlab import curl, get_project_id
 
@@ -253,6 +283,7 @@ def _post_gitlab(mr_iid, items, resolved_map=None):
                 data={"resolved": True},
             )
             if 200 <= status < 300:
+                _sweep_notes_gitlab(base, disc_id, curl)
                 ok += 1
                 label = _CLASSIFICATION_LABELS.get(cls, cls)
                 print(f"[OK] {label} resolved {disc_id[:12]}" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
