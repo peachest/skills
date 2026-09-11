@@ -44,15 +44,27 @@ def _preview(body, limit=160):
     return body[:limit] + ("…" if len(body) > limit else "")
 
 
+def _open_note_count(resolvable_notes):
+    """Suffix for the human output: open resolvable notes when the thread
+    has more than one — flags the resolved-head-but-open-reply trap."""
+    open_n = sum(1 for n in resolvable_notes if not n.get("resolved", False))
+    if not open_n or len(resolvable_notes) < 2:
+        return ""
+    return f" [{open_n}/{len(resolvable_notes)} notes open]"
+
+
 # ── GitLab backend ──
 
 
 def _unresolved_gitlab(mr_iid):
     """Return unresolved resolvable discussions from a GitLab MR.
 
-    A discussion is resolvable when notes[0].resolvable is true; it is
-    unresolved when resolvable and not notes[0].resolved. Pagination follows
-    the same scheme as ocr-pull-discussions.py.
+    GitLab semantics: every note in a discussion carries its own resolvable/
+    resolved flags, and the thread counts as closed only when ALL resolvable
+    notes are resolved. Reply notes posted during the triage run (verdict
+    labels) are resolvable too — checking only notes[0] yields a false
+    gate=0 while reply notes hang open. Pagination follows the same scheme
+    as ocr-pull-discussions.py.
     """
     from ocr_gitlab import curl, get_project_id
 
@@ -81,9 +93,10 @@ def _unresolved_gitlab(mr_iid):
             if not notes:
                 continue
             first = notes[0]
-            if not first.get("resolvable", False):
+            resolvable_notes = [n for n in notes if n.get("resolvable", False)]
+            if not resolvable_notes:
                 continue
-            if first.get("resolved", False):
+            if not any(n.get("resolved", False) is False for n in resolvable_notes):
                 continue
             note_body = first.get("body", "")
             unresolved.append({
@@ -91,7 +104,7 @@ def _unresolved_gitlab(mr_iid):
                 "author": first.get("author", {}).get("username", ""),
                 "resolvable": True,
                 "resolved": False,
-                "body_preview": _preview(note_body),
+                "body_preview": _preview(note_body) + _open_note_count(resolvable_notes),
                 "is_ocr_summary": _is_ocr_summary(note_body),
             })
 
