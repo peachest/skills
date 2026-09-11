@@ -1,0 +1,68 @@
+/* topo-base.css — canonical stylesheet for cluster topology visualizations.
+   Copy to the output directory as ./topo-base.css and link it:
+   <link rel="stylesheet" href="topo-base.css">
+   Single-file mode: paste this block into the page's <style>. */
+
+:root {
+  /* Surfaces (dark bg is the default for topology pages) */
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+
+  /* Interconnect semantics — one token per link type, never reuse across meanings */
+  --nvlink: #a371f7;      /* intra-node GPU interconnect + GPU-node accent */
+  --iblink: #39c5cf;      /* inter-node IB links (generic) */
+  --fabric-a: #39c5cf;    /* fabric plane A */
+  --fabric-b: #ff9bce;    /* fabric plane B */
+
+  /* Link states */
+  --active: #3fb950;      /* Active / healthy */
+  --init: #8b949e;        /* Initialize — physically up, protocol not negotiated */
+  --down: #f85149;        /* Down / failed GPU or node */
+
+  /* NUMA domains */
+  --numa0: #1f6feb;
+  --numa1: #bf8700;
+
+  /* Font scale — reference tokens only, no literal font-size */
+  --fs-title: 20px;       /* page title */
+  --fs-section: 14px;     /* layer headings (muted) */
+  --fs-card: 11px;        /* card titles / node names */
+  --fs-label: 10px;       /* card subtitles, switch stats */
+  --fs-caption: 9px;      /* badges, slot chips, footnotes */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  padding: 24px;
+}
+
+h1 { font-size: var(--fs-title); margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: var(--fs-label); margin-bottom: 14px; }
+h2 { font-size: var(--fs-section); color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+
+svg text { font-family: inherit; }
+
+/* ---- Components ---- */
+
+/* Stats bar: one .stat per number */
+.stats { display: flex; gap: 12px; margin: 10px 0; flex-wrap: wrap; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+        padding: 10px 16px; min-width: 130px; }
+.stat b { font-size: 20px; display: block; }
+.stat i { font-size: 11px; color: var(--muted); font-style: normal; }
+
+/* Legend: <span><i class="dot" style="background:var(--nvlink)"></i>label</span> */
+.legend { display: flex; gap: 18px; margin: 8px 0; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* Light mode override — topology pages are dark-first; add this only on request */
+body.light {
+  --bg:#ffffff; --panel:#f6f8fa; --border:#d0d7de; --text:#1f2328; --muted:#656d76;
+}
