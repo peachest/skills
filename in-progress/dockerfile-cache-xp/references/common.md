@@ -21,7 +21,7 @@ survives across builds; without it the step pays the full cost every time.
 Prefix with the project name:
 
 ```dockerfile
---mount=type=cache,id=smg-cargo-target,target=/opt/smg/target,sharing=locked
+--mount=type=cache,id=app-cargo-target,target=/opt/app/target,sharing=locked
 ```
 
 Without an `id=`, buildkit derives one from the target path, which collides

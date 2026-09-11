@@ -77,7 +77,7 @@ its ticket.
 
 ## Worked example (real, 2026-09)
 
-HA-refactor map (#15) on kube-nodexpu-manager, mid-execution:
+HA-refactor map (#15) on example-manager, mid-execution:
 
 1. A design question about a newly-added status field led to the discovery that the
    project had not aligned with upstream HAMi v2.10's initContainer design.

@@ -162,7 +162,7 @@ def get_project_id():
             path = url.split(":", 1)[-1]
         path = path.strip("/").removesuffix(".git")
         if "/" in path:
-            # Encode namespace/project for API: llm/llmops/hami/ppu-device-plugin → llm%2Fllmops%2Fhami%2Fppu-device-plugin
+            # Encode namespace/project for API: team/platform/my-project → team%2Fplatform%2Fmy-project
             encoded = quote_plus(path, safe="")
             cmd = ["glab", "api", f"projects/{encoded}"]
             if host:

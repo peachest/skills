@@ -32,7 +32,7 @@ Override with `OCR_PLATFORM=gitlab|github` env var.
 The GitLab host, scheme (http/https), and token are derived automatically from the
 git remote + glab config, so self-hosted instances (e.g. `gitlab.red.example`)
 work without extra env vars. The OCR bot login is instance-specific — set
-`OCR_BOT_LOGIN` when the bot isn't `gitblue.bot` (see the GitLab reference).
+`OCR_BOT_LOGIN` when the bot isn't `review-bot` (see the GitLab reference).
 
 Platform-specific commands, API endpoints, and data formats:
 

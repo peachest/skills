@@ -33,7 +33,7 @@ glab auth status   # 检查已配置的实例和认证状态
 
 **token 优先取 glab config 里该 host 的 token**，避免误用别的实例的 token 导致 401。跑之前先 `glab auth status` 确认目标实例已认证。
 
-OCR bot 登录名是实例相关的（如 `gitblue.bot` 或 `ai_bot001`）。
+OCR bot 登录名是实例相关的（如 `review-bot` 或 `ai-bot-001`）。
 
 > **注**：GitLab 后端已不再按作者过滤（`OCR_BOT_LOGIN` 对 GitLab 已废弃）——人类
 > 评审的 general 评论同样拉取，否则 pull 与 closure gate 口径不一致（gate 统计所有
@@ -68,7 +68,7 @@ python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
     {
       "id": 12345,
       "body": "issue text",
-      "author": {"username": "ai_bot001"},
+      "author": {"username": "ai-bot-001"},
       "position": {
         "position_type": "text",
         "new_path": "path/to/file.go",

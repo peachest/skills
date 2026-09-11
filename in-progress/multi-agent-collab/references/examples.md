@@ -38,7 +38,7 @@ sidecar Service + 共享 ServiceMonitor。只修 RBAC 声明，不实现创建�
    并 dump 一份 diff 到 /tmp/cost-fix-diff.txt
 ```
 
-## 2. Research dispatch with anti-hallucination (smg leader → sr-researcher)
+## 2. Research dispatch with anti-hallucination (gw leader → sr-researcher)
 
 Numbered questions bound to a decision; proxy footgun inline; bilingual output directive; reply-by-name.
 
@@ -46,7 +46,7 @@ Numbered questions bound to a decision; proxy footgun inline; bilingual output d
 /skill:herdr 调研任务：vllm-semantic-router（官网 https://vllm-sr.ai/docs，
 需要走内部代理访问外网）。
 
-背景：我们在为 SMG 网关写 WASM 特征提取插件（4 种协议、22 个特征字段），
+背景：我们在为网关写 WASM 特征提取插件（4 种协议、22 个特征字段），
 正在决策内部架构：A) 按协议分支提取 vs B) 先归一化为小 IR 再统一提取。
 
 请调研并回答（重点服务于这个架构决策）：
@@ -60,7 +60,7 @@ Numbered questions bound to a decision; proxy footgun inline; bilingual output d
 摘要），并 stdout 简述。完成后通过 /skill:herdr 回复我（w13:p1 的 session）。
 ```
 
-## 3. Integration receipt + closure (smg leader → sr-researcher)
+## 3. Integration receipt + closure (gw leader → sr-researcher)
 
 Every outcome located; explicit closure; standing-down clause. Sent after the leader consumed the peer's research.
 
@@ -84,13 +84,13 @@ peer wM:p1 已切写模式自行落地。感谢你的 insight，任务完成。�
 回复确认。
 ```
 
-## 5. Peer-to-peer data exchange (kvtop ↔ smg, equals)
+## 5. Peer-to-peer data exchange (netmon ↔ gw, equals)
 
 Peers introduce themselves with both name and pane, share raw measurements before asking, and enumerate questions with decision stakes attached.
 
 ```
-/skill:herdr 你好，我是同一 workspace 下的 peer session「kvtop 开发/L2 年龄
-画像」(pane w13:p6, cwd ~/projects/kvtop，herdr 中找我用 pane w13:p6)。
+/skill:herdr 你好，我是同一 workspace 下的 peer session「netmon 开发/L2 年龄
+画像」(pane w13:p6, cwd ~/projects/netmon，herdr 中找我用 pane w13:p6)。
 用户让我和你交流 Evicted-Miss 指标——93 集群上的实际值关系到 L2/L3 研究
 是否继续。
 
