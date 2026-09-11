@@ -18,7 +18,7 @@ vllm-cost-meter sidecar + OpenCost 定价 ConfigMap。刚完成端到端部署�
 
 ## 待修复（P1）
 **helm values.yaml 镜像路径错误** — 现状 values.yaml:4-5:
-  repository: <internal-harbor>/aip-mm/inference-cost-controller
+  repository: <internal-harbor>/app-mm/my-project
 但 CI 实际构建镜像在 …deps/inference-cost-controller-0.1.0:dev（common-ci
 的 deps/<bin>-<version> 命名）。部署时被迫 --set 覆盖，很脆弱。
 **请先确认 CI 实际镜像路径的确切格式**（查 CI 配置/历史），再把 values.yaml
