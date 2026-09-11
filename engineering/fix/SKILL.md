@@ -67,6 +67,8 @@ Before any grilling or fixing, check that the finding holds up. This is the step
 
 A refuted finding becomes ❌ FP with the counter-evidence as reason. An insufficient-detail finding becomes ⏸️ Question.
 
+**The suggested fix is a second, independent claim.** A confirmed finding does not validate the fix code attached to it: reviewers have no runtime, so their proposed patch is pattern-intuition (measured 2026-09: `default`/`coalesce` falsy-swallow suggestions recurs across three review rounds; a peer session logged 4 regressions introduced by adopting suggestions for confirmed findings). Verify a suggestion with the same standard as the finding itself — polarity tests, caller grep, baseline comparison — before adopting it. When the existing code carries a design-decision comment (`// GD26 ...`-style), the suggestion usually reintroduces the very pit the comment documents; check the decision log before "simplifying" it.
+
 **Completion criterion**: every ✅ TP and 🟡 Edge finding is resolved — confirmed, refuted (with evidence), or reclassified ⏸️ Question (uncertainty stated). Verified findings carry the evidence in their `reason` field.
 
 ### 4. Grill the fix plan
