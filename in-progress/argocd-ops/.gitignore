@@ -1,0 +1,2 @@
+# Real environment values — never commit
+.env
