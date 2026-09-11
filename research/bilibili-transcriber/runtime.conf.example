@@ -16,3 +16,20 @@
 WHISPER_ENDPOINT=http://<node-ip>:<node-port>/v1
 WHISPER_MODEL=<model-id>
 WHISPER_LANG=zh
+
+# ── LLM cleanup endpoint (Step 3: clean-transcripts.py / dual-transcribe.py) ──
+# Any OpenAI-compatible chat endpoint. Model choice matters:
+#   - prefer a FAST non-reasoning model (flash-class): cleanup is many small
+#     calls; reasoning models spend minutes per chunk thinking
+#   - the escalation ladder covers flash repetition-loop failures
+#
+# How to discover a usable endpoint/model on the internal gateway:
+#   1. List models:
+#      curl -s http://<llm-host>:<port>/v1/models -H "Authorization: Bearer <key>"
+#   2. Smoke-test one (expect ~10s for a 2500-char chunk, not minutes):
+#      curl -s http://<llm-host>:<port>/v1/chat/completions -H "Authorization: Bearer <key>" \
+#        -H 'Content-Type: application/json' \
+#        -d '{"model":"<model-id>","messages":[{"role":"user","content":"回复OK"}]}'
+CLEAN_LLM_BASEURL=http://<llm-host>:<port>/v1
+CLEAN_LLM_MODEL=<fast-chat-model-id>
+CLEAN_LLM_KEY=<api-key>

@@ -1,0 +1,8 @@
+[project]
+name = "skill-call-extract"
+version = "0.1.0"
+description = "Locate pi sessions that invoked a given skill (marker + read-load signals)"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest>=8"]

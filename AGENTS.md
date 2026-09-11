@@ -18,6 +18,18 @@
 
 A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present (`uv run pytest` from the skill directory). A green run is the completion criterion for the change; a skill with no tests is exempt.
 
+## Skill Wiki（改 skill 前后必走）
+
+`wiki/` 是持久知识层（条目格式、状态机、sanitize 规范见 `wiki/README.md`）。`<skill-name>` = skill 目录名（如 `engineering/mr-review-triage` → `wiki/mr-review-triage/`）。
+
+- **改 skill 前**：`wiki/<skill-name>/` 存在时先读——`patterns.md` 的 open 条目是该 skill 已知问题（修改方案别与其冲突、能顺带吸收则吸收）；`skill-impact.md` 里的被拒提案不得无新证据重提。目录不存在 = 冷启动，直接动手。
+- **改 skill 后（commit 时）**：向 `skill-impact.md` 追加一行（提案/落点/commit hash/验证）；用户否决的方案记 rejected（含理由）。行为性修改必记；纯错别字/排版豁免。无 wiki 目录则连同本次修改创建。
+- **写入 sanitize**：wiki 在公共仓库——证据只写 `session-id#entry`，内网域名/项目名/凭证按 `docs/agents/skill-authoring.md` 占位符脱敏，commit 前跑 gitleaks。
+
+## 运行时与环境（脚本型 skill）
+
+Script skill 的 runtime/环境约定（runtime.conf 模式、check-env.sh、敏感数据规则）全在 `docs/agents/skill-authoring.md`：创建或改造 script skill、把 skill 移出 in-progress、或提交任何含 endpoint/域名/配置的文件前必读（本仓库为 public）。换节点第一步：`bash scripts/check-all-env.sh`。
+
 ## Agent skills
 
 ### Issue tracker

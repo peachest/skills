@@ -66,7 +66,7 @@ rg '\bDevice\b' hgml/hgml.go  # verify — only field name Device remains
 
 **Phase 1**: `gopls definition hgml/lib.go:#DeviceInterface` → `hgml/lib.go:10:6`.
 
-**Phase 3**: `gopls references hgml/lib.go:11:6` → refs in `lib.go`, `mock/mock.go`, `hglib/hglib.go`, `server.go`, `util/ppu.go` — ~15 refs, all within same workspace. No cross-package visibility issues since we already freed `Device` in step 1.
+**Phase 3**: `gopls references hgml/lib.go:11:6` → refs in `lib.go`, `mock/mock.go`, `hglib/hglib.go`, `server.go`, `util/device.go` — ~15 refs, all within same workspace. No cross-package visibility issues since we already freed `Device` in step 1.
 
 **Phase 4A** (gopls):
 ```bash
