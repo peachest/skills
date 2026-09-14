@@ -57,13 +57,13 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 > Ground truth: the target skill's SKILL.md and every doc it references (paths listed below — read them all). The trace is the session file at `<path>`; navigate with the trace index, read raw entries only where it points.
 >
-> Reconstruct the executed flow: which documented phases/steps ran, in what order, with which prescribed tools. Then report: (a) **skipped or reordered steps** — what the doc required, what the trace shows instead, entry indices; distinguish a step the doc made optional from a violation of a mandatory one; (b) **improvised alternatives** — where the agent replaced a prescribed tool/flow with its own; (c) one line on what was followed correctly. A step whose precondition made skipping it *legal* (e.g. the doc gates it on document size) still counts as followed — note the gate, don't flag it. 报告用中文，每条发现标注 entry 序号。
+> Reconstruct the executed flow: which documented phases/steps ran, in what order, with which prescribed tools. Tag every contract step with an evidence state: **followed** (trace shows it ran), **violated** (trace shows it did not), or **documented-but-unobservable** (the doc requires it but the trace cannot show it — e.g. an internal judgment with no tool footprint). Then report: (a) **violated steps** — what the doc required, what the trace shows instead, entry indices; distinguish a step the doc made optional from a violation of a mandatory one; (b) **documented-but-unobservable steps** — listed separately, never counted as violations; (c) **improvised alternatives** — where the agent replaced a prescribed tool/flow with its own; (d) one line on what was followed correctly. A step whose precondition made skipping it *legal* (e.g. the doc gates it on document size) still counts as followed — note the gate, don't flag it. 报告用中文，每条发现标注 entry 序号。
 
 #### Axis 2 — Friction
 
 > The trace is the session file at `<path>`; navigate with the trace index. Hunt the waste signals defined in the trace-signals reference: re-emitted payloads, tool failure loops, verbose error echo, prefix-cache collapse, wall-clock stalls.
 >
-> Per friction cluster report: what happened, entry indices, and a cost estimate that names its arithmetic — wasted output tokens (duplicate rounds × output), context re-read (sum of in= on cache-collapse turns), minutes stalled. Attribute cause where visible: skill design (e.g. verbose error output) vs harness/environment (network, model provider). 报告用中文，每条发现标注 entry 序号和量化成本。
+> Per friction cluster report: what happened, entry indices, and a cost estimate that names its arithmetic — wasted output tokens (duplicate rounds × output), context re-read (sum of in= on cache-collapse turns), minutes stalled. Attribute every cluster to one of seven causes: **Harness** (pi/extension/provider plumbing), **Repository** (repo state the skill could not foresee — missing files, dirty worktree), **Model** (retry loops, verbose output, reasoning depth), **Requirement** (the ask itself was ambiguous/conflicting), **External** (network, internal services, CI), **Task complexity** (inherent to the job, nobody's fault), **Unknown** (evidence insufficient — say so, don't guess). 报告用中文，每条发现标注 entry 序号、量化成本和归因类别。
 
 #### Axis 3 — Sedimentation
 
@@ -79,7 +79,7 @@ Present the three axis reports under `## 遵循度 (Adherence)`, `## 摩擦点 (
 
 Merge the diagnosis into the persistent knowledge layer at `~/skills/wiki/<target-skill>/` (create the dir on cold start; format and entry spec: `~/skills/wiki/README.md`).
 
-- **Increment-merge into `patterns.md`** — a finding sharing a root cause with an existing pattern *updates* that entry (append 证据 `session-id#entry`, add an 出现 record, refine 方案 if a better one emerged); never a duplicate entry. A new root cause gets the next P-### id. Bare entry indices in axis reports convert to `session-id#entry` via each trace's session (from step 3's index). Open patterns not seen this run — judged against **all three axis reports combined**, not Sedimentation alone (an environment-rooted pattern recurs as a Friction finding) — get an `absent-this-run` note appended to their 出现 line. The same merge applies to `_cross-skill/patterns.md`: a regularity confirmed in this run's traces appends evidence (with the skill name); a cross-skill pattern not seen this run gets an `absent-this-run` note only when this skill's trace would have surfaced it.
+- **Increment-merge into `patterns.md`** — a finding sharing a root cause with an existing pattern *updates* that entry (append 证据 `session-id#entry`, add an 出现 record, refine 方案 if a better one emerged); never a duplicate entry. A new root cause gets the next P-### id. Every open pattern must carry a **passCheck** — a single executable pass criterion (a command, or a directly observable condition) that would hold if the fix landed; when merging, a pattern without one gains it now, and `absent-this-run` judgments align with it (this run's trace satisfies the passCheck → absent; still violates it → the pattern recurred, evidence citing the entries that fail it). Bare entry indices in axis reports convert to `session-id#entry` via each trace's session (from step 3's index). Open patterns not seen this run — judged against **all three axis reports combined**, not Sedimentation alone (an environment-rooted pattern recurs as a Friction finding) — get an `absent-this-run` note appended to their 出现 line. The same merge applies to `_cross-skill/patterns.md`: a regularity confirmed in this run's traces appends evidence (with the skill name); a cross-skill pattern not seen this run gets an `absent-this-run` note only when this skill's trace would have surfaced it.
 - **Append one line to `logs.md`** — date, run number (next # column value), input session ids, 执行数, one-line conclusion.
 - **Promote verified rows in `skill-impact.md`** — when a fix has landed (accepted) and its corresponding pattern now has 2 consecutive `absent-this-run` records, update that row's 验证 cell and 结果 to `verified`, citing the absent records.
 - **Surface closure candidates** — after merging, list patterns that now meet the closure condition (fix landed + 2 consecutive absent runs) alongside the step 6 routing table, and ask the user to confirm closing. Closing without asking leaves the entry silently dangling.
@@ -95,6 +95,8 @@ One table, one row per finding:
 
 Routes:
 
+Friction findings arrive pre-attributed (step 4 seven-way taxonomy); attribution maps to routes: Model/External/Harness → **harness**; Task complexity/Unknown → **noop** unless the cost is recurring; Requirement → **harness** (route to the user); Repository → **harness**, or **skill-doc** if the skill's contract should have handled that repo state; skill-design findings (the former "skill design" bucket, now split) land in skill-doc / skill-script as before. Adherence and Sedimentation findings route unchanged.
+
 - **skill-doc** — the target skill's markdown must change (workflow steps, ordering, mandatory gates)
 - **skill-script** — the target skill needs a new/extended script (sedimentation findings land here)
 - **harness** — not the skill's fault (model, provider, environment); route to the user, nothing to edit
@@ -102,7 +104,9 @@ Routes:
 
 Before proposing any fix, read `~/skills/wiki/<target-skill>/skill-impact.md` — missing file means no rejected proposals to avoid. A proposal whose shape matches a rejected one must not be re-proposed unless new evidence overturns the original rejection rationale.
 
-Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn. After each applied fix, append a row to `skill-impact.md` (提案 / 落点 / commit / 验证命令与结果). Verification semantics: the next diagnose run marking the corresponding pattern `absent-this-run` is the real gate — the practical equivalent of WikiSkill's validation gating.
+Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn. After each applied fix, append a row to `skill-impact.md` (提案 / 落点 / commit / 验证命令与结果).
+
+**Post-fix independent verification** (same day, not next use): after the fix lands, spawn one fresh read-only subagent with the original trace path, the updated contract (SKILL.md + referenced docs), and the pattern's passCheck. It renders a verdict: **verified** (executing the updated contract over this trace would not hit the finding), **partial** (fix addresses part of it), or **blocked** (cannot tell from this trace). Record the verdict in the skill-impact row. Long-run verification stays as before: the next diagnose run marking the corresponding pattern `absent-this-run` (per its passCheck) is the real gate — the two checks run in parallel: same-day verdict for immediate feedback, behavioral confirmation for closure.
 
 ## Done when
 
@@ -110,6 +114,6 @@ Ask the user which rows to act on. For skill-doc / skill-script rows, the fix fl
 - [ ] All three axis reports present, every finding carrying entry indices
 - [ ] Friction findings carry quantified cost with named arithmetic
 - [ ] Every sedimentation finding marked one-off / repeated / contract-gap
-- [ ] Routing table delivered; fixes applied only on user confirmation
-- [ ] Wiki increment-merged (or cold start noted); sanitize gate passed
-- [ ] Applied fixes recorded in skill-impact.md
+- [ ] Routing table delivered (Friction rows carry their seven-way attribution); fixes applied only on user confirmation
+- [ ] Wiki increment-merged (or cold start noted); open patterns carry passCheck; sanitize gate passed
+- [ ] Applied fixes recorded in skill-impact.md, each with its post-fix verification verdict (verified/partial/blocked)
