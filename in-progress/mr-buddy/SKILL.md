@@ -79,10 +79,19 @@ branch — get explicit confirmation for that force-push).
 
 For each slice in order:
 
-1. **Branch**: slice 1 — `git branch -f <orig-branch> <slice-1-tip>` from the
-   rebased/rebuilt commits; slices 2..N — `git checkout -b <type>/<name>-<n>` at the
-   previous slice's tip. Build each slice from the target branch by cherry-picking
-   its commit group (`git cherry-pick <shas>`), not by rewinding the original.
+1. **Branch — one wt worktree per slice** (worktrunk-managed repos, per the
+   Worktree 管理 rules in AGENTS.md: never hand-roll `git worktree add`):
+   slice 1 — `wt switch <orig-branch>`, then rebuild it in place
+   (`git reset --hard <target>` + `git cherry-pick <shas>` — this rebuild is the
+   force-push that shrinks the original MR); slices 2..N —
+   `wt switch -c <type>/<name>-<n> -b <prev-slice-branch>`, cherry-pick that
+   slice's commit group onto the previous slice's tip. Each slice keeps its own
+   worktree: verify runs in place (no checkout thrashing between slices),
+   project hooks (`.config/wt.toml` pre-start) auto-install deps, and
+   `wt list --full` tracks the whole stack's CI after push.
+   Plain-git fallback for repos outside the wt system (e.g. `~/third-party/*`
+   study clones): `git checkout -b` per slice in the one checkout, strictly
+   sequential.
 2. **Verify**: run the project's verify entry (per its AGENTS.md; `make verify` or
    equivalent) locally **before pushing**. Red → fix forward with commit-buddy-style
    commits inside the slice, re-verify.
@@ -100,6 +109,8 @@ merge order).
 Report the stack table with MR URLs and merge order. Note GitLab behavior: merging
 slice *n* and deleting its branch auto-retargets slice *n+1* to the merged target —
 merge bottom-up, mark each ready (`glab mr ready <iid>`) as review passes.
+After a slice merges, `wt remove <branch>` reclaims its worktree (or
+`wt step prune` once the whole stack is in).
 
 ## Integration with the ticket pipeline
 
