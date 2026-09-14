@@ -1,6 +1,6 @@
 ---
 name: okb
-description: Manage OKB — the open-knowledge-base that is the source of truth for what the agent knows, organized as bronze → silver → gold (source snapshot → distilled note → fact-checked note). Use when ingesting a source, distilling a note, fact-checking knowledge, querying the knowledge base, or auditing a claim's provenance.
+description: Manage OKB, a bronze → silver → gold knowledge base (source snapshot → distilled note → verified note). Use when ingesting a source, distilling a note, fact-checking knowledge, querying the knowledge base, auditing a claim's provenance, or auditing the knowledge base's health (stale notes, broken links, taxonomy, topology).
 ---
 
 # OKB (open-knowledge-base)
@@ -17,25 +17,18 @@ Three **distinct directories**, linked by `sources[].resource` (the derivation e
 | **Silver** | `silver/<topic>/<concept>.md` | the **only rewrite layer** — distilled note, every fact preserved, sourced, unverified |
 | **Gold** | `gold/<topic>/<concept>.md` | a **verification overlay** — verified events pointing back to silver, no rewritten body |
 
-**Only silver touches content.** Distill writes silver from bronze (rewriting content once, preserving every fact); factcheck writes a gold *verification overlay* (verified events + source pointer), never a second content copy.
+**Only silver touches content.** Distill writes silver from bronze; factcheck writes a gold *verification overlay* (see §gold note).
 
 ## Directory layout
 
-```
-okb/
-├── bronze/<topic>/<source-slug>.md
-├── silver/<topic>/<concept>.md
-├── gold/<topic>/<concept>.md
-├── index.md
-└── log.md
-```
+Layer paths are as in the table above. Two more files live at the okb root:
 
-`<topic>`, `<concept>`, and `<source-slug>` are kebab-case.
+**index.md** — one section per topic: layer note counts and `ingests_since_status: <n>`. The counter is load-bearing — Ingest increments it, Status watches it.
 
-**log.md** is the append-only operation record: one line per curation step —
+**log.md** — the append-only operation record, one line per curation step:
 `<ISO 8601> | <op> | <topic> | <what>`, e.g.
 `2026-09-12T09:00Z | distill | llm-wiki-pattern | merged 'compiled-knowledge' into silver/concept.md`.
-Ops: `ingest | distill | factcheck | status`. log.md answers "what happened when" without walking frontmatter.
+Ops: `ingest | route | distill | factcheck | status`. Append a line when a step's done-criterion is met, not before. log.md answers "what happened when" without walking frontmatter.
 
 ## Frontmatter
 
@@ -64,11 +57,11 @@ tags: [ ... ]
 status: draft            # draft | stable | deprecated; promoted by factcheck or user confirmation
 generated: { by: process:okb-distill, at: <ISO 8601> }
 updated: <ISO 8601>      # last concept-aggregation merge
-conflicts_with: []       # concepts whose facts contradict this note; both versions kept
+conflicts_with: []       # slugs of notes contradicting this note; both versions kept
 verified: []             # empty ⇒ unverified
-stale_after: <ISO 8601>
+stale_after: <ISO 8601>  # distill sets it: evergreen sources ~12mo, fast-moving topics 1-3mo
 sources:                 # derivation edge; [^id] footnotes key into these ids
-  - id: <source-slug>
+  - id: <source-slug>    # globally unique across the okb; the overlap audit depends on it
     resource: ../bronze/<topic>/<source-slug>.md
     title: ...
 ---
@@ -76,35 +69,53 @@ sources:                 # derivation edge; [^id] footnotes key into these ids
 
 **gold note** — no body content. It is a **verification overlay** on silver: `verified` events (machine-confirmed, or human-reviewed once a `human:` actor verifies), optional claim-level `verdicts`, `status: stable`, and `sources[].resource` pointing at the silver note. The knowledge lives in silver; gold only records that it was verified.
 
+```yaml
+---
+status: stable
+verified:
+  - { by: process:okb-factcheck, at: <ISO 8601>, method: source-walk }
+  - { by: human:<name>, at: <ISO 8601>, method: user-confirmation }
+verdicts: []              # optional, claim-level: { claim: <quote>, verdict: confirmed|refuted|unverifiable }
+sources:
+  - id: <concept-slug>
+    resource: ../silver/<topic>/<concept>.md
+---
+```
+
+*Legacy corpus:* an okb created before this schema may carry gold bodies or non-slug `sources[].id`s — on the next factcheck, strip the gold body to the overlay and normalize the id.
+
 **type** — `concept` (a mechanism or idea; default) or `reference` (compressed reference: glossary, algorithm, syntax, checklist).
 
 ## Curation
 
-Build knowledge for a topic by running these in order. Each step is done on its completion criterion.
+Build knowledge for a topic by running these in order. Each step is done on its completion criterion. An empty okb starts as the three directories plus empty `index.md` and `log.md`; a topic is named at first ingest — kebab-case, confirmed with the user when the boundary is ambiguous.
 
-1. **Ingest** a source — fetch it and save a bronze snapshot.
+1. **Ingest** a source — fetch it (e.g. via the fetch-article skill) and save a bronze snapshot.
+   `<source-slug>` derives from the source title, kebab-case; `author` falls back to the account/publisher, else `unknown`; `sha256` hashes the saved snapshot body — the bytes under the frontmatter.
    Mirror check first: an existing bronze with the same `author` + `title` is the same work syndicated on another channel — add the URL to its `mirrors:` and skip the fetch.
    Done when `bronze/<topic>/<source-slug>.md` exists with `source`, `author`, `title`, `fetched_at`, `sha256` set, the verbatim content saved, and the topic's `ingests_since_status` counter in `index.md` incremented.
 
 2. **Distill** — build silver from the bronze snapshot in two passes. **Silver is the only rewrite layer.**
-   **Pass A — route, no writing.** Scan the topic's existing silver notes and produce a routing decision for every concept in the source: merge into an existing note (name the slug) or open a new one. One concept under two slugs is the failure state this pass exists to prevent — decide before writing, so the write pass never guesses.
-   **Pass B — write.** Apply the route. Merge appends to `sources[]`, folds the new facts into the body, and refreshes `updated`; new opens a note. In every note written, link directly related silver notes of the same topic using Markdown hyperlinks — `[concept](./<concept>.md)` in the body, **never `[[wikilink]]`** — so later steps can traverse note-to-note without re-reading bronze. Only link notes that are genuinely about the same concept chain; a link is a navigation edge, not decoration.
+   **Pass A — route, no writing.** Scan the topic's existing silver notes and produce a routing decision for every concept in the source: merge into an existing note (name the slug) or open a new one. The invariant is **one concept, one slug**. Append the route to log.md (one `route` line per concept) before any write — the route line survives a crash and claims the slugs against concurrent sessions. Done when every concept has a route: merge (slug named) or open.
+   **Pass B — write.** Re-validate the route against current silver (concurrent sessions share this tree), then apply it. Merge appends to `sources[]`, folds the new facts into the body, refreshes `updated`, and rewrites inbound links to a retired slug; new opens a note. In every note written, link directly related silver notes using Markdown hyperlinks in the body — same topic `[concept](./<concept>.md)`, cross-topic `[concept](../<topic>/<concept>.md)` — **never `[[wikilink]]`**. A link is a navigation edge, not decoration.
    When the new source contradicts an existing note, keep both versions in the body and set `conflicts_with` on each side — resolution belongs to the user.
    Distill always writes `status: draft`.
-   Done when every concept from the bronze snapshot is merged or newly opened, `silver/<topic>/<concept>.md` carries a non-empty `type` and `description`, `sources` lists the bronze snapshot, every fact in the bronze snapshot is preserved (no compression, no dropped claims), and any note that has a genuinely related sibling note links to it. Attribute body claims with `[^id]` footnotes keyed to `sources[].id`.
+   Done when every concept from the bronze snapshot is merged or newly opened, `silver/<topic>/<concept>.md` carries a non-empty `type` and `description`, `sources` lists the bronze snapshot, every fact is preserved (`reference` notes may compress — that is their job), and any note with a genuinely related sibling links to it. Attribute body claims with `[^id]` footnotes keyed to `sources[].id`.
 
 3. **Fact-check** — verify the silver note and write a gold **verification overlay** (not content).
-   Done when `gold/<topic>/<concept>.md` exists, its `sources[].resource` points at the silver note, and `verified` is non-empty. Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory. The gold note carries no rewritten body — it only records verification + back to silver.
-   Verification promotes the silver note `draft → stable`; a one-line user confirmation of a draft promotes it too.
+   Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory.
+   Done when `gold/<topic>/<concept>.md` exists, its `sources[].resource` points at the silver note, and every claim in the silver note is covered by a `verified` event or a `verdicts` entry.
+   Verification promotes the silver note `draft → stable`; a one-line user confirmation promotes it too — record it as a `human:` verified event in gold.
 
-4. **Query** — read notes back out, filtered by `topic`, `status`, or `verified`. When a matched note links to directly related notes via body Markdown hyperlinks, follow them one hop to pull those notes in as well — the link graph is the recall mechanism, bronze is never re-read at query time.
-   Done when the matching notes are returned.
+4. **Query** — read notes back out, filtered by `topic`, `status`, or `verified`. If the matched note is gold, descend to its silver note first (gold has no body), then follow body Markdown hyperlinks one hop to pull linked notes in — the link graph is the recall mechanism, bronze is never re-read at query time.
+   Done when the matching notes plus their one-hop linked notes are returned, each labeled with `status` and `verified`.
 
-5. **Status** — report layer distribution plus the stale (`now >= stale_after`) and broken-link list, a **taxonomy health audit** over all three directories (same-level distinguishable / same-level related / parent covers children / distance reflects relevance / structure serves retrieval, not itself), and a **topology audit** over silver notes — all computable from frontmatter and body links, no judgment calls:
-   - *isolated notes*: no Markdown hyperlink in or out — first candidates for linking or retirement;
-   - *thinly linked notes*: exactly one link in or out;
+5. **Status** — report layer distribution plus the stale (`now >= stale_after`) and broken-link list (body hyperlinks and `sources[].resource` edges both count), a **taxonomy health audit** over all three directories (judgment-based: same-level distinguishable / same-level related / parent covers children / distance reflects relevance / structure serves retrieval, not itself), and a **topology audit** over silver notes (mechanical — computable from frontmatter and body links):
+   - *isolated notes*: no link in or out — first candidates for linking or retirement;
+   - *thinly linked notes*: exactly one distinct linked peer, in ∪ out;
    - *unlinked source-overlap pairs*: two silver notes sharing ≥2 `sources[]` ids but not linking each other — missed links or merge candidates.
-   Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
+   A *link* is a Markdown hyperlink between silver notes (`./<concept>.md` or `../<topic>/<concept>.md`); `[^id]` footnotes and external URLs don't count. Audit per topic, plus cross-topic links.
+   Done when every report lists every note violating its check. Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
 
 ## Evidence chain (invariant)
 
