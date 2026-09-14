@@ -1,4 +1,4 @@
-# Pitfalls — 23 failure modes with real evidence
+# Pitfalls — 24 failure modes (23 observed in real sessions, #24 doc-derived)
 
 Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by category; CLI-mechanics rows cross-reference the `herdr` skill. Consult when a send fails, a parse crashes, or a peer seems stuck.
 
@@ -26,6 +26,7 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 13 | `agent_blocked` misread | submission rejected, nothing delivered — target sits at an approval/question UI | Inspect the blocked UI, ask the user; do not resend blindly |
 | 14 | Long-task foreground `--wait` | whole turn parked while a peer works minutes; peers idle in series | Background-first: bg_run the send with `--timeout 1800000` (SKILL.md waiting table) |
 | 15 | Misleading `|| echo ok` fallback | printed `status= ok` on a real timeout | Delete fallbacks that mask failures |
+| 24 | Mid-task dispatch lands in the peer's steering queue | message injected between tool calls → peer may weave task A and B together (pi `steer` semantics; herdr `agent prompt` = text + Enter, no followUp mode) | For "after current task": `agent wait <t> --until idle` first, then send. For corrections/blockers: send directly — steer is the right semantics there. (pi docs rpc.md/extensions.md, not session-observed) |
 
 ## Addressing
 
