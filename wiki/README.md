@@ -30,6 +30,7 @@ wiki/
 - 现象: 可观察的行为（脱敏后）
 - 根因: contract gap | agent 即兴（无契约缺口，含 repeated pattern）| 环境问题 | 知识提取
 - 方案: 对应的沉淀方向（脚本/文档/上游）
+- passCheck: 一条可执行的通过判据（命令或可直接观察的条件）——修复落地后本条不再犯的机器可核证据；open 条目必填，历史条目在下次 diagnose 合并时补齐
 - 证据: <session-id>#<entry>[,<entry>...]   ← 多 session 用逗号分隔；跨条目引用用 `<skill> P-###` 或 `<skill> diagnose#n`；知识提取来源可用裸 session-id 列表（无 entry，附本地去向说明）
 - 出现: <日期> diagnose#<n> [→ absent-this-run <日期> #<n> ...]   ← diagnose#n = 该 skill logs.md 第 n 行（含表头）
 ```
