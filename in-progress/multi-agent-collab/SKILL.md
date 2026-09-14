@@ -65,6 +65,13 @@ An ASCII `"` inside the body closes the argument early and the tail parses as fl
 
 Done when: the message is sent and quoting survived (no `unknown option` in the result).
 
+### Steer semantics: what a send to a busy peer means
+
+`agent prompt` types text + Enter into the peer's TUI. In pi, Enter during a running turn queues the message into the peer's **steering queue** — injected after the current tool batch, before the next LLM call. herdr has no followUp mode (queue-until-idle), so a dispatch to a busy peer always lands inside its active task context and the peer may weave both tasks together. Two mitigations:
+
+- **"Do this after you finish"** → wait for idle first: `herdr agent wait <t> --until idle --timeout ...`, then send. The message arrives as a clean new task instead of mid-task noise.
+- **Corrections, blockers, answers to its questions** → send directly. Steer is exactly right there — you *want* it seen mid-task.
+
 ## Waiting: background-first
 
 The rule: **keep this session concurrent — never park the current turn on a peer's long work.** A foreground `--wait` blocks the whole turn; a leader serially waiting three peers triples the idle time; a peer waiting for its next instruction while its leader waits for a reply deadlocks both.
@@ -133,4 +140,4 @@ For coordination that outlives individual messages, prefer files over message-pa
 
 ## When something breaks
 
-Consult [pitfalls.md](references/pitfalls.md) — 23 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. For calibration of tone and density when composing or closing — real transcripts of dispatch, reply, integration receipt, termination, peer-to-peer exchange, and the background-first send pattern: [examples.md](references/examples.md).
+Consult [pitfalls.md](references/pitfalls.md) — 24 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. For calibration of tone and density when composing or closing — real transcripts of dispatch, reply, integration receipt, termination, peer-to-peer exchange, and the background-first send pattern: [examples.md](references/examples.md).
