@@ -42,7 +42,7 @@ Completion criterion: the user knows which pane holds the course session, and th
 
 Find: `herdr agent list` → agent named `teach-<course>`. If present and not blocked, reuse it — the course files are the state; session memory is a bonus.
 
-Create: split a pane (with `--cwd` = the course directory) in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace — then `herdr agent start teach-<course> --kind pi --pane <id>`.
+Create: one **tab** per course in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace. `herdr tab create --cwd <course-dir>` (root pane hosts the agent, full screen for teaching, one-key switch between courses), then `herdr agent start teach-<course> --kind pi --pane <root-pane-id>`. The academy session stays in its own tab.
 
 Bootstrap prompt (sent with `--wait` before the user takes over). Must include:
 - `/skill:herdr` at the start — so the session knows its reply path back to this academy session
@@ -53,6 +53,21 @@ Bootstrap prompt (sent with `--wait` before the user takes over). Must include:
 ## Create a course
 
 Ask for the course mission first — a course without a mission gets teach's treatment: question the user before scaffolding anything. Then scaffold under `courses/<name>/` (ASCII, dash-case): `MISSION.md`, `RESOURCES.md` (pointers into `../../okb/<namespace>/`), `lessons/`, `session-log/`, `reference/`, `learning-records/`, and `assets` as a symlink → `../../assets`. Register the course in `CURRICULUM.md`. The course's first session runs Probe (teach's flow, unchanged).
+
+## Incubate a topic
+
+When the user arrives with a new subject to learn ("X has been released, I want to learn X and its lineage — research and assign lessons"), this is topic incubation: research, split into courses, batch-spawn sessions. Flow:
+
+1. **Survey**: read `CURRICULUM.md` and existing courses' missions; note which existing courses the new topic extends (adjacency decides dependency notes later).
+2. **Research**: search + extract primary sources (paper, tech report, release notes, credible deep-dives) and produce an evolution-mainline conclusion — what bottleneck each generation solved — not a link list. Index the sources into session knowledge; they land in RESOURCES later.
+3. **Split by concept direction**: one direction = one course (MoE routing, latent attention, training infra, …), **not one topic per lesson** inside a single course. Mark the cross-course dependency mainline in `CURRICULUM.md` prose notes.
+4. **Ask only decisions the user must own**: mission wording and split shape (one coarse course vs several direction courses). If the user declines the questions and instead injects a skill (e.g. multi-agent-collab), read that as the answer — in this lab the user chose multi-course dispatch by injecting the collab protocol — and proceed without re-asking.
+5. **Scaffold in batch** (Create-a-course shape per course). Distribute the user's existing notes (`~/ai`, obsidian vaults, TOREAD lists) and any mid-flight articles they hand over into the right courses' RESOURCES — their open questions are Probe-start gold. Materials that arrive mid-incubation are routed the same way, not queued.
+6. **Spawn one tab + `teach-<course>` session per course** (Course session protocol), bootstrap prompts in parallel with `--wait`, each following the multi-agent-collab dispatch contract.
+7. **Wait for every bootstrap receipt** (N/N). Each course self-reports: workspace state, user-notes preread, planned Probe starting point. Chase late receipts (`herdr agent list` / prompt status) instead of assuming failure. A missing receipt means the course is not ready — do not declare done.
+8. **Close**: memory note (series layout + tabs), summary table (tab / session / direction / Probe start), a recommended learning order (mainline first, others interleaved), then step back — sessions wait for the user, teaching never relays through the academy session.
+
+Completion criterion: N/N receipts in hand, CURRICULUM registered, user knows which tab holds which course.
 
 ## Migrate an existing course
 
