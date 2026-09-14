@@ -8,20 +8,17 @@ Everything needed before building, testing, or contributing to {project} locally
 
 ## Source setup
 
-<!-- clone + (fork posture: internal remote vs upstream, which remote to push to) -->
-
 ```bash
 # {clone command}
 ```
 
-## Branch naming
+Branch and remote model (which remote to push, feature branch scheme) is defined in [DEVELOPMENT.md](../../DEVELOPMENT.md).
 
-<!-- the scheme: e.g. <type>/<name> (feat/, fix/, refactor/, chore/) or upstream branch family -->
+## Code style tools
 
-## Code style
-
-<!-- formatter/linter + how to run it: e.g. pre-commit, ruff, golangci-lint; link to style guide if any -->
+<!-- formatter/linter + how to run it: e.g. pre-commit, ruff, golangci-lint; installation + run commands -->
 
 ```bash
+# {install hooks}
 # {lint/format command}
 ```
