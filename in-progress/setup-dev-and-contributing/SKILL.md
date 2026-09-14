@@ -59,7 +59,8 @@ Show drafts of DEVELOPMENT.md and every contributing page — seed templates ada
 Write `DEVELOPMENT.md` at repo root and `docs/contributing/*.md`. Then make agents find them:
 
 - If an `## Agent skills` section exists in `AGENTS.md`/`CLAUDE.md`, add a `### Development and contributing` sub-block pointing to both (one line each).
-- Else add a two-line pointer near the top of whichever file exists. Create neither if the repo has none.
+- Else if either file exists, add a two-line pointer near its top.
+- If neither exists (fresh repo), **ask the user which to create — don't pick for them** (recommend `AGENTS.md` as the cross-tool entry point; a bare pointer block is enough, no `## Agent skills` scaffolding needed). Don't silently skip: without an entry file, nothing auto-loads the docs for future agents and the whole setup loses its effect.
 
 Never duplicate content owned by `CONTRIBUTING.md` — link to it from `docs/contributing/README.md`.
 
