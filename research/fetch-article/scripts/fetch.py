@@ -31,6 +31,8 @@ def classify_url(url: str) -> str:
         return "weixin"
     if "bilibili.com/video" in url_lower or "b23.tv" in url_lower:
         return "bilibili"
+    if ("youtube.com" in url_lower or "youtu.be" in url_lower):
+        return "youtube"
     return "generic"
 
 

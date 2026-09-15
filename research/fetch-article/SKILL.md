@@ -53,6 +53,7 @@ python3 <SKILL_DIR>/scripts/fetch.py \
 | --------- | --------- | ---------- |
 | `mp.weixin.qq.com` | `adapters/weixin.py` | curl + Referer header → to_md.py (markitdown) |
 | `bilibili.com/video` | `adapters/bilibili.py` | WBI-signed API → download audio only |
+| `youtube.com` / `youtu.be` | `adapters/youtube.py` | yt-dlp subtitles if available, else best-audio download |
 | anything else | `adapters/generic.py` | Scrapling CLI first, curl + html2text fallback |
 
 ## Adapters
@@ -71,6 +72,14 @@ If CC subtitles are available, saves them directly (skip ASR).
 Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
 
 See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR.
+
+### YouTube
+
+yt-dlp based. Subtitles (manual preferred over auto) are the deliverable —
+no audio download when present, the VTT is deduped into plain text. No
+subtitles → downloads `bestaudio` as `audio.mp4` for ASR (set
+`WHISPER_LANG=en` — the transcriber's default is zh). Proxy: export
+`https_proxy` when YouTube is not directly reachable.
 
 ### Generic (Scrapling + curl)
 
@@ -103,6 +112,7 @@ can adopt it as needed.
 - markitdown (`pip install markitdown`)
 - beautifulsoup4 (`pip install beautifulsoup4`)
 - requests (for WBI-signed Bilibili API)
+- yt-dlp (for YouTube)
 - scrapling (optional, for generic fallback with anti-bot)
 - curl (system)
 
