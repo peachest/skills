@@ -21,7 +21,7 @@ rg -il '<keywords>' ~/ops/*.md
 
 A hit that covers this issue means an earlier entry exists: update it in place — fill empty sections, refine labels and index — never fork a second trail. (Extraction and migration routes converge here: many sessions, or a session plus a legacy note, on one issue yield one entry.)
 
-Otherwise create `~/ops/<title>.md` from `~/ops/template.md` (delete the template comments; they are the per-section filling guide — follow them while filling). Title = the symptom in one Chinese line, no prefix. Body in Chinese: **terse prose around a full trail** — 排查过程 is the experience being persisted, so it carries the loop command with its red output, every probe and the hypothesis it killed, and the dead ends that took real work to rule out; commands and outputs verbatim in fenced blocks, trimmed to the lines that carry the signal. `source: diagnosis`.
+Otherwise create `~/ops/<title>.md` from `~/ops/template.md` (delete the template comments; they are the per-section filling guide — follow them while filling). Title = the symptom in one Chinese line, no prefix. Body in Chinese: **terse prose around a full trail** — 排查过程 is the experience being persisted, and it reads like the investigation unfolded: each observation with its evidence pasted as-is (command output, node annotations, log lines, screenshots — trim noise, never substance), the mechanism that observation earned (quote the actual source functions when the trail reaches code; a mermaid sketch when the call chain matters), every probe and the hypothesis it killed, and the repro harness in full when it took real work to build. `source: diagnosis`.
 
 ## Step 3 — Assign labels
 
@@ -48,3 +48,4 @@ Invoked standalone (not via `/skill:diagnosing-bugs-with-docs` Phase 6)? The dia
 - [ ] `~/ops` working tree clean (entry committed, message `diag: <标题>`, nothing mixed in)
 - [ ] Every claim in 结论 traces to evidence quoted in 排查过程
 - [ ] 排查过程 carries the full trail — every probe and the hypothesis it killed, not just the evidence 结论 cites; ruled-out directions that took real work each earn a line
+- [ ] Evidence pasted as-is (outputs, annotations, source excerpts), not paraphrased; repro harness included when nontrivial
