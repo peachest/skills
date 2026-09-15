@@ -45,7 +45,9 @@ If the conversation is about the product as a whole — releases, story cuts, pr
 
 When a single effort (a change, a fix, an incident response) needs to enter development, write its intake record instead: `intent/<slug>.md` at the repo root, **committed** — the git history is the governance: author, timestamp, revision trail. Synthesize, do not interview; if the effort is still a loose idea rather than a discussed one, say so and suggest grilling first.
 
-1. **Gather context.** Read the product `INTENT.md` if present: an effort cut from a story carries that story's id in frontmatter (`origin: story-<id>`); an effort with no story ancestor records its true origin (`origin: idea | incident | diagnosis | ticket`).
+**Write from what the user already stated; verify later.** The user's stated intent (what they want, in what order, under which constraints) is complete intake material on arrival — write it down first. Facts the agent verifies along the way (a model pairing, a resource inventory, a data audit) are **downstream work**: they enter the file as Constraints and Open questions when known, and their full verification belongs to the spec / wayfinder / implementation that follows. An investigation is never a precondition for the file to exist — a 30-minute intake that ends without the file written is a failed run, however good the investigation was.
+
+1. **Gather context — intake only.** Read the product `INTENT.md` if present: an effort cut from a story carries that story's id in frontmatter (`origin: story-<id>`); an effort with no story ancestor records its true origin (`origin: idea | incident | diagnosis | ticket`). This step reads one file and classifies the origin — execution-level investigation (resource checks, compatibility audits, data archaeology) is downstream work, not intake.
 
 2. **Draft the intake.** Four fields, in the originator's terms, per `<effort-template>`:
 
@@ -54,9 +56,9 @@ When a single effort (a change, a fix, an incident response) needs to enter deve
    - **Constraints** — the boundaries the change must respect (security, external dependencies, no-restart policies). These flow into a wayfinder map's Notes or a spec's Implementation Decisions.
    - **Open questions** — what is genuinely undecided. This section is the **router**: questions already sharp become wayfinder decision tickets directly; questions still unsharp go to the map's Not yet specified.
 
-3. **Quiz the user.** Confirm the four fields and the origin. Committing the file is the accept gate — the effort enters development on commit.
+3. **Quiz the user — on the four fields, not the how.** Confirm Problem, Proposed outcome, Constraints, and the origin. Implementation questions (which pipeline to start, where data lives) belong to the downstream spec or wayfinder session — even when they feel urgent, they are not this quiz. Committing the file is the accept gate — the effort enters development on commit.
 
-4. **Write the file.** `intent/<slug>.md`, committed. Frontmatter carries `status: draft → accepted → done` — `done` when the change is verified, closing the effort's loop.
+4. **Write the file — one of exactly two locations.** The product map `INTENT.md` at the repo root, or the effort file `intent/<slug>.md` at the repo root. There is no third location: a `plans/` directory, a todo list, or the conversation log is **not** persistence — the todo tool is session-scoped by design and loses the intent the moment the session ends. Frontmatter carries `status: draft → accepted → done` — `done` when the change is verified, closing the effort's loop.
 
 5. **Hand off by Open questions.** Empty or all answerable in one sitting → `/skill:to-spec` directly. Questions sharp but unresolved → `/skill:wayfinder` chart: destination from Proposed outcome, first decision tickets from the sharp questions, fog from the rest — the chart's grill is shorter because the intake already did it. Either way the story id (if any) travels with it.
 
