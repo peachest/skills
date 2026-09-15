@@ -42,6 +42,12 @@ gitleaks config is node-specific and lives outside the repo
 (`~/data/benchmark/config/gitleaks.toml`); if it or the `gitleaks` binary is
 missing, the sweep reports WARN instead of FAIL.
 
+Since 4e9bd07 this is a **hard rule at the tool level**: a `pre-push` hook
+(`scripts/githooks/pre-push`, active via `core.hooksPath`) gitleak-scans the
+exact commits being pushed and blocks the push on any finding. Manual
+pre-commit scans remain good practice (earlier feedback), but the hook is
+the enforcement of last resort — no longer "agent must remember".
+
 ## Runtime configuration (`runtime.conf`)
 
 When a skill has node-specific values — service endpoints, credential file
