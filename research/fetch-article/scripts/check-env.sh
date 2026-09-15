@@ -38,6 +38,14 @@ else
   fail "aria2c not found (PATH or ~/scripts/aria2c) — bilibili audio download will fail (CC-subtitle-only videos still work)"
 fi
 
+# 2b. yt-dlp — youtube adapter's only engine, no fallback path (subtitle
+#     text when available, best-audio download otherwise)
+if command -v yt-dlp > /dev/null 2>&1; then
+  say "PASS  yt-dlp: $(command -v yt-dlp)"
+else
+  fail "yt-dlp not found on PATH — youtube adapter will fail (pip install yt-dlp)"
+fi
+
 # 3. ffmpeg — mirrors adapters/bilibili.py _resolve_ffmpeg(): imageio_ffmpeg
 #    pip package first, then system PATH; needed only for multi-segment durl concat
 if command -v python3 > /dev/null 2>&1 && python3 -c "import imageio_ffmpeg" 2>/dev/null; then
