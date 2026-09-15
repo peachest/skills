@@ -23,6 +23,8 @@ A hit that covers this issue means an earlier entry exists: update it in place �
 
 Otherwise create `~/ops/<title>.md` from `~/ops/template.md` (delete the template comments; they are the per-section filling guide — follow them while filling). Title = the symptom in one Chinese line, no prefix. Body in Chinese: **terse prose around a full trail** — 排查过程 is the experience being persisted, and it reads like the investigation unfolded: each observation with its evidence pasted as-is (command output, node annotations, log lines, screenshots — trim noise, never substance), the mechanism that observation earned (quote the actual source functions when the trail reaches code; a mermaid sketch when the call chain matters), every probe and the hypothesis it killed, and the repro harness in full when it took real work to build. `source: diagnosis`.
 
+Fill `sessions` with the current session id (from the `PI_` environment variables or the session file's `<timestamp>_<uuid>` name) — the audit trail back to the raw session JSONL. Updating an existing entry (the merge case): **append** the session id, keep the earlier ones; a merged entry carries every session that worked the issue.
+
 ## Step 3 — Assign labels
 
 Read `~/ops/labels.md` and run **one pass per axis** — component (what broke, family-level), failure-type (how it broke), vendor (whose hardware). Multi-value axes take all that apply.

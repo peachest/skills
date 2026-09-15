@@ -36,7 +36,7 @@ Per confirmed session, gather from the entries:
 - **Trail** — feedback-loop commands and their red/green outputs (tool calls + results), the surviving hypothesis and the fix (closing assistant messages)
 - **Environment** — from the session's cwd and any version commands shown; 未记录 where absent
 
-Then run `/skill:diag-write` per diagnosis. Its find-or-create step is the dedup: multiple sessions on one issue produce one entry, updated in place.
+Then run `/skill:diag-write` per diagnosis. Its find-or-create step is the dedup: multiple sessions on one issue produce one entry, updated in place. Extracted entries carry `sessions` = the source session ids (from the JSONL filenames); a merged entry carries all of them.
 
 ## Done when
 
