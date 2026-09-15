@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# pre-push — hard rule (never-do layer): no secrets/internal IPs leave this
+# repo. Enforced at the tool level, not by convention or memory.
+#
+# Scans the commits being pushed (not the working tree — gitignored local
+# files like runtime.conf/.env are fine to keep locally, just not to push).
+#
+# Install: git config core.hooksPath scripts/githooks   (done in this repo)
+# Config:  ~/data/benchmark/config/gitleaks.toml — if missing, falls back
+#          to gitleaks default rules (weaker: no internal-IP/domain rules).
+
+set -u
+GITLEAKS_CONFIG="$HOME/data/benchmark/config/gitleaks.toml"
+
+cmd=(gitleaks git --redact)
+if [ -f "$GITLEAKS_CONFIG" ]; then
+    cmd+=(-c "$GITLEAKS_CONFIG")
+else
+    echo "pre-push: WARN custom gitleaks config not found ($GITLEAKS_CONFIG) — using default rules (no internal-IP/domain checks)" >&2
+fi
+cmd+=(.)
+
+# stdin lines: <local_ref> <local_sha> <remote_ref> <remote_sha>
+# remote_sha all-zeros = new branch → scan everything not already on a remote.
+fail=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_sha" =~ ^0+$ ]]; then
+        log_opts="$local_sha --not --remotes --first-parent"
+    else
+        log_opts="$remote_sha..$local_sha"
+    fi
+    if ! "${cmd[@]}" --log-opts="$log_opts" >&2; then
+        echo "pre-push: BLOCKED — gitleaks found issues in $local_ref ($log_opts). Remove them (git rebase/filter) and push again." >&2
+        fail=1
+    fi
+done
+
+exit "$fail"
