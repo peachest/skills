@@ -1,0 +1,13 @@
+# Copy to runtime.conf (gitignored) and fill per node.
+# Leave a value empty when not needed.
+
+# HTTP(S) proxy for nodes without direct internet. Leave empty when direct.
+HF_PROXY=
+
+# Mirror endpoint, e.g. https://hf-mirror.com. Leave empty for huggingface.co.
+# Same value can be passed inline: HF_ENDPOINT=... hfd <org/repo> ...
+HF_ENDPOINT=
+
+# Hugging Face credentials for gated repos (or pass --hf_username/--hf_token per call).
+HF_USERNAME=
+HF_TOKEN=
