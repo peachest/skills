@@ -1,0 +1,46 @@
+# Gitleaks custom rules — <REPO> credential gate.
+# Replace the placeholder patterns with this repo's real secret families
+# (harvest: git log -p, .env/runtime.conf, handoff docs). Real patterns live
+# here in the gated repo — never commit them to a public repo.
+
+title = "<REPO> credential check"
+
+[[rules]]
+id = "example-credential"
+description = "Placeholder — replace with a real secret family"
+regex = '''EXAMPLE-SECRET-PLACEHOLDER'''
+tags = ["password", "internal"]
+
+[[rules]]
+id = "inline-secret-cli"
+description = "Inline literal password on a CLI flag (use -e / env var instead; $VAR usage is fine)"
+regex = '''sshpass\s+-p\s+['"]?[A-Za-z0-9][A-Za-z0-9@!._-]*['"]?\s'''
+tags = ["password", "internal"]
+
+[[rules]]
+id = "private-key-block"
+description = "Embedded private key"
+regex = '''-----BEGIN [A-Z ]*PRIVATE KEY-----'''
+tags = ["key", "crypto"]
+
+[[rules]]
+id = "db-connection-string"
+description = "Database connection strings"
+regex = '''(?:mysql|postgresql|redis)://\w+:[^@\s]+@'''
+tags = ["password", "database"]
+
+[allowlist]
+description = "Self-match, secret home, caches, vendored code — every entry needs a why"
+paths = [
+    '''\.git/.*''',
+    '''gitleaks\.toml''',                # rule file contains its own patterns
+    '''scripts/sanitize-check\.sh''',    # checker self-match
+    '''\.env''',                         # credentials live here by design
+    '''\.env\.example''',                # template with placeholder values only
+    '''__pycache__/.*''',
+    '''\.venv/.*''',
+    '''\.pi/.*''',                       # agent session state
+    '''\.pi-subagents/.*''',
+    '''\.scratch/.*''',
+    '''node_modules/.*''',
+]
