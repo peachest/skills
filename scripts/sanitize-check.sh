@@ -39,6 +39,7 @@ rc=0
 echo "== pattern scan (${#files[@]} files, mode=$mode) =="
 hits=0
 for f in "${files[@]}"; do
+    [[ "$f" == scripts/sanitize-check.sh ]] && continue   # checker contains PATTERNS by construction
     while IFS= read -r line; do
         echo "PATTERN  $line"
         hits=$((hits+1))
@@ -54,15 +55,15 @@ if [[ -f "$GITLEAKS_CONFIG" ]] && command -v gitleaks >/dev/null 2>&1; then
     if gitleaks dir . --config "$GITLEAKS_CONFIG" --report-format json --report-path "$report" >/dev/null 2>&1; then
         echo "gitleaks findings: 0"
     else
-        target_set="{$(printf '%s,' "${files[@]}");}"   # awk membership
-        n=$(python3 -c "
-import json,sys
+        out=$(python3 -c "
+import json
 finds = json.load(open('$report'))
 targets = set('''${files[*]}'''.split())
 mine = [f for f in finds if f['File'] in targets]
 for f in mine: print(f\"GITLEAKS {f['File']}:{f['StartLine']} {f['RuleID']}\")
-print(len(mine), file=sys.stderr)" 2>&1 >/dev/null)
-        echo "$n"
+print('FINDINGS ' + str(len(mine)))")
+        echo "$out" | grep -v '^FINDINGS'
+        n=$(echo "$out" | grep '^FINDINGS' | cut -d' ' -f2)
         [[ "$n" != "0" ]] && rc=1
     fi
     rm -f "$report"
