@@ -85,6 +85,26 @@ Bilingual detection: scan transcripts for ASCII ratio > 10% — anything
 above is a dual-pass candidate. Manual prompt template and pre-marking
 workflow live in [`references/llm-cleanup.md`](references/llm-cleanup.md).
 
+**English-reference re-clean** (zh-dub video whose original English
+transcript is retrievable — e.g. via yt-dlp auto-subs on the source video;
+use when plain cleanup still leaves mangled proper nouns):
+
+```bash
+# fetch the English reference first (proxy may be needed for YouTube)
+yt-dlp --skip-download --write-auto-subs --sub-langs en -o ref "<EN_VIDEO_URL>"
+# then re-clean: raw (transcript.raw.md) + EN ref per aligned chunk -> <stem>-reclean.md
+cd <SKILL_DIR> && uv run python scripts/reclean-en.py \
+  <transcript-dir>/transcript.raw.md ref.txt \
+  [--glossary glossary.txt] [--out <transcript-dir>/transcript.md]
+```
+
+Same `CLEAN_LLM_*` config as clean-transcripts.py. The EN reference is the
+ground truth for names/terms (ASD-STE100, Mike Hostetler — ASR writes these
+as "ASTST100", "迈克·哈斯特勒"). The zh raw only fixes segmentation order and
+tone; numbers/examples must survive verbatim. A >40%-shorter-than-EN output
+triggers a summarization warning. Optional glossary file: one
+term/translation per line, injected into the prompt.
+
 Done when: transcript has paragraph breaks, punctuation, and corrected
 homophones — every raw ASR segment accounted for.
 
