@@ -40,11 +40,21 @@ is a cleaned-up diff, not a findings list.
 ## Load-bearing patterns (keep regardless of length)
 
 - issue / decision references ("(#114)", "mirrors NVIDIA's gate in
-  register.go") — they point to the *why* outside the code
+  register.go") — they point to the *why* outside the code. Only
+  resolvable forms qualify: full-path refs (org/repo#N) and external-repo
+  MR/issue numbers are durable; the **own MR's number and "pre-!N" change
+  history never go into resident comments** (unresolvable after merge —
+  they belong in the commit message / MR description); short-form spec
+  refs with no repo path ("spec #39") do not either.
 - truth tables and lifecycle contracts ("remove: the node still carries
   the annotation but no fresh payload backs it")
 - explicit decoupling rationale ("SCORE writes X, FULL_TOPOLOGY writes Y —
   neither implies the other")
+- implicit cross-file coupling — the fact's readers live in another file
+  than its cause ("every value in this map — including the legacy alias —
+  is also claimed by the extender managedResources", where the extender
+  template is a different file). The side effect is not derivable from
+  this file alone.
 - cross-implementation alignment/difference notes
 - anti-simplification trap notes — the comment defends code that looks
   like an unnecessary guard ("explicit 0 is a valid enum value that
@@ -75,15 +85,23 @@ ruling; trimming is judgment, not a quota.
    class, or the load-bearing fact? Verdict per comment: keep / trim to
    the fact / rewrite / drop entirely. Stale-but-load-bearing statements
    (e.g. an assert-count header an MR just invalidated) get corrected in
-   place, not deleted.
+   place, not deleted. Rewrite direction for assertion comments: state
+   the invariant plus the regression-guard reason ("a legacy pin here
+   would degrade split requests to whole-card semantics"), never the
+   change history.
 
 3. **Apply the edits** with the edit tool, comment-only — never touch code
    lines in the same pass.
 
-4. **Sweep for internal-reference leaks** while in there (same pass, near
-   zero cost): grep the diff for internal node names, internal doc/ADR
-   numbers, company domains — anything a public-repo reader cannot
-   resolve. Found most often in comments and bench/test files.
+4. **Sweep for unresolvable references** while in there (same pass, near
+   zero cost). Classes to remove from resident comments: internal node
+   names, company domains, short-form spec refs without a repo path,
+   local-process references (grilling Q numbers, local tracker
+   map/ticket ids, wayfinder), and review-finding hashes (for the latter,
+   state the problem it solved directly instead of the pointer). Keep:
+   full-path refs (org/repo#N) and external-repo MR/issue numbers —
+   durable cross-repo facts. Found most often in comments and bench/test
+   files.
 
 5. **Verify**: build, test, lint the touched packages once — comment-only
    edits still run the checks; they catch a stray edit that hit code.
@@ -106,4 +124,6 @@ ruling; trimming is judgment, not a quota.
 
 Go-specific (function detection via `^func` + brace balancing). The
 classification rules transfer; the scanner needs a per-language function
-matcher first.
+matcher first. For YAML/shell/helm templates there is no scanner — run
+the ruling pass manually over the PR-introduced files (this is how the
+helm-chart run that produced the class 2/4 rules was done).
