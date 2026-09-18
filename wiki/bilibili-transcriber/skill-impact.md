@@ -1,0 +1,5 @@
+# bilibili-transcriber — impact ledger
+
+| date | proposal | landing | verification |
+|------|----------|---------|--------------|
+| 2026-09-18 | New capability: English-reference re-clean for zh-dub videos with mixed EN speech. Plain LLM cleanup cannot fix mangled proper nouns/terminology (ASD-STE100 → "ASTST100"/"SDA"/"SDE"; Mike Hostetler → "迈克·哈斯特勒"; Orwell, researcher names all garbled) because the raw ASR is already wrong. Fix: fetch the original video's English transcript (yt-dlp auto-subs) as ground truth, feed raw zh + EN reference per aligned chunk to the CLEAN_LLM, rebuild each sentence from EN. First proven on BV1Xn3w6dEb3 (one-off script in ~/tmp, since replaced). | scripts/reclean-en.py + SKILL.md "English-reference re-clean" section | tests/test_reclean_en.py (7 pure-function tests incl. config-less auth header guard); end-to-end rerun on the BV1Xn3w6dEb3 raw reproduced the manual-reclean quality. Summarization guard compares output vs zh raw body (50%), NOT vs EN char count — zh is denser, EN-baseline gives false positives. |
