@@ -35,16 +35,17 @@ Done when: the role split is stated (who leads, who peers) and every peer has a 
 Every inter-session prompt has this shape — the receiver depends on it to learn the reply path:
 
 ```
-/skill:multi-agent-collab
+/skill:multi-agent-collab   ← bootstrap only (first contact); later messages start at [caller identity]
 [caller identity] I am <name> (pane wX:pY, cwd ~/repo; reach me at pane wX:pY)
 [context] background, verified facts, data — mark what you verified yourself
 [tasks] numbered, each independently checkable; include what NOT to redo
 [output + reply] results to <file>; reply via herdr with the path and a summary
 ```
 
-- The first message to a fresh peer starts with `/skill:multi-agent-collab`: the injection teaches the receiver this whole protocol — reply shape, closure signals, waiting behavior — and it reaches the herdr skill for CLI mechanics when it needs to send. (Before this skill existed the prefix was `/skill:herdr`, which only taught the CLI.)
+- The `/skill:multi-agent-collab` prefix is a **bootstrap signal, sent once per peer context**: the injection teaches the receiver this whole protocol — reply shape, closure signals, waiting behavior — and it reaches the herdr skill for CLI mechanics when it needs to send. (Before this skill existed the prefix was `/skill:herdr`, which only taught the CLI.) Every later message in the thread — reply, receipt, clarification, closure — goes **bare, no prefix**: both sides already hold the protocol, and a repeated injection burns the receiver's context for nothing. Re-prefix only when the peer's protocol context may be gone (rebooted agent, fresh re-bootstrap).
 - The explicit reply request at the end is mandatory — a prompt without it goes unanswered (persistent lesson).
-- Embed a copy-paste reply command in dispatches. Receivers follow it verbatim, so write it complete: a template missing the prefix produces a reply missing the prefix.
+- Embed a copy-paste reply command in dispatches. Receivers follow it verbatim, so write it complete — identity signature in, protocol prefix out (the receiver was just injected by your dispatch; a prefixed reply would re-inject you, who already holds the skill):
+  `herdr agent prompt <my-pane> "<receiver-name> (pane wX:pY) → <result summary + artifact path>"`
 - Address peers by name; sign requests with (name, pane) both.
 - Cross-workspace dispatch works.
 
@@ -110,7 +111,7 @@ Done when: delivery evidence is confirmed at level 1 or 2 — or the reply itsel
 
 A task dispatch to a fresh peer carries nine elements (omit only with a stated reason):
 
-1. `/skill:multi-agent-collab` prefix + caller identity + "your result is invisible unless you report back"
+1. Bootstrap prefix (first contact with this peer only — later messages bare) + caller identity + "your result is invisible unless you report back"
 2. Pre-digested context: "Background (already investigated, trust this)" + verified code excerpts — saves the peer re-investigating
 3. Anti-redundancy: what is already done — "do not re-diagnose"; "your first step is to compare, not design from scratch"
 4. Anti-hallucination: "verify everything against the repo; do not trust this prompt blindly"
