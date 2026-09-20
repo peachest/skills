@@ -26,7 +26,7 @@ Each course under `courses/` is a complete teach workspace; `teach` operates ins
 
 ## Roles
 
-- **Academy session** (this one): surveys progress, routes the user to course sessions, creates and migrates courses, curates the shared layer.
+- **Academy session** (this one): surveys progress, routes the user to course sessions, creates and migrates courses, curates the shared layer. It never authors course content: after an incubation closes (N/N receipts) — or any time teaching is underway — it only orchestrates (CURRICULUM, routing, progress). Course-content questions (source-code checks, lesson-design verdicts, errata) take the correction path: verify with a fresh read-only subagent → send the verdict to the owning course session via `herdr agent prompt` → let it apply and report back. The academy relays verdicts, it does not produce technical analysis itself.
 - **Course session**: one persistent herdr agent per course, named `teach-<course>` (agent names are lowercase ASCII — course dirnames are too), cwd = the course directory, running the teach loop interactively with the user. Reused across lessons. One active session per course at a time — lesson numbering is a filesystem resource.
 - **Skills session** (the ~/skills repo session that authored this academy): owns the vendored teach fork and the academy skill. A course session that hits teach-skill friction reports it via herdr to the skills session and keeps teaching; the skills session lands the fix, runs the skill's tests, re-installs, and announces the change to the reporting session.
 
@@ -44,7 +44,7 @@ Find: `herdr agent list` → agent named `teach-<course>`. If present and not bl
 
 Create: one **tab** per course in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace. `herdr tab create --cwd <course-dir>` (root pane hosts the agent, full screen for teaching, one-key switch between courses), then `herdr agent start teach-<course> --kind pi --pane <root-pane-id>`. The academy session stays in its own tab.
 
-Bootstrap prompt (sent with `--wait` before the user takes over). Must include:
+Bootstrap prompt (send and return — do **not** use `--wait`: its stdout carries only a `status` field, while the real receipt arrives asynchronously as an injected user message; waiting on stdout is idle wall-clock). Must include:
 - `/skill:herdr` at the start — so the session knows its reply path back to this academy session
 - the course directory (cwd is already set; have it confirm)
 - `/skill:teach` to load, plus today's goal as the user stated it
@@ -63,8 +63,8 @@ When the user arrives with a new subject to learn ("X has been released, I want 
 3. **Split by concept direction**: one direction = one course (MoE routing, latent attention, training infra, …), **not one topic per lesson** inside a single course. Mark the cross-course dependency mainline in `CURRICULUM.md` prose notes.
 4. **Ask only decisions the user must own**: mission wording and split shape (one coarse course vs several direction courses). If the user declines the questions and instead injects a skill (e.g. multi-agent-collab), read that as the answer — in this lab the user chose multi-course dispatch by injecting the collab protocol — and proceed without re-asking.
 5. **Scaffold in batch** (Create-a-course shape per course). Distribute the user's existing notes (`~/ai`, obsidian vaults, TOREAD lists) and any mid-flight articles they hand over into the right courses' RESOURCES — their open questions are Probe-start gold. Materials that arrive mid-incubation are routed the same way, not queued.
-6. **Spawn one tab + `teach-<course>` session per course** (Course session protocol), bootstrap prompts in parallel with `--wait`, each following the multi-agent-collab dispatch contract.
-7. **Wait for every bootstrap receipt** (N/N). Each course self-reports: workspace state, user-notes preread, planned Probe starting point. Chase late receipts (`herdr agent list` / prompt status) instead of assuming failure. A missing receipt means the course is not ready — do not declare done.
+6. **Spawn one tab + `teach-<course>` session per course** (Course session protocol), bootstrap prompts sent in parallel (no `--wait` — receipts arrive as injected messages), each following the multi-agent-collab dispatch contract.
+7. **Wait for every bootstrap receipt** (N/N), counted from the injected messages — not from any prompt stdout. Each course self-reports: workspace state, user-notes preread, planned Probe starting point. Chase late receipts (`herdr agent list` / prompt status) instead of assuming failure. A missing receipt means the course is not ready — do not declare done.
 8. **Close**: memory note (series layout + tabs), summary table (tab / session / direction / Probe start), a recommended learning order (mainline first, others interleaved), then step back — sessions wait for the user, teaching never relays through the academy session.
 
 Completion criterion: N/N receipts in hand, CURRICULUM registered, user knows which tab holds which course.
