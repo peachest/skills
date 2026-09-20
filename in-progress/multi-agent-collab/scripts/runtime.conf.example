@@ -1,0 +1,5 @@
+# herdr peer tools runtime configuration (copy to runtime.conf, gitignored)
+# Node-specific overrides. Defaults work when `herdr` is on PATH.
+
+# herdr binary (default: herdr). Used by herdr-resolve.py / herdr-send.py / herdr-peer.sh.
+HERDR_BIN=herdr
