@@ -8,4 +8,4 @@
 - 根因: 注入机制 + 会话结构——长多主题会话中 skill 契约不在上下文里
 - 方案: 方向性启示（非单点修复）：多主题长会话中需要再次调用某 skill 时，重新注入或显式 read 其 SKILL.md；skill 作者可将硬规则写成不可绕过的 gate（脚本强制）而非依赖 agent 记忆
 - 证据: create-mr diagnose#1（01a06bcd 长会话 vs 01a07f1f/01a07fc6 短会话对照，无单 entry 锚点）
-- 出现: 2026-09-09 diagnose#1（create-mr）→ absent-this-run 2026-09-10 #1（reckon：4 trace/13 注入，多日长会话中规则跨天不衰减，采集全执行） → absent-this-run 2026-09-20 #1（academy：同轮注入 #173 立即执行，跨 2.5h+ 空档与多轮协议复跑不衰减）
+- 出现: 2026-09-09 diagnose#1（create-mr）→ absent-this-run 2026-09-10 #1（reckon：4 trace/13 注入，多日长会话中规则跨天不衰减，采集全执行） → 2026-09-20 diagnose#1（okb：部分复现——01a062a0#359 #361，skill 单次注入 3 天后凭记忆复跑约定，链接深度写错靠翻旧课自救，无强制确认类硬违规） → absent-this-run 2026-09-20 #1（academy：同轮注入 #173 立即执行，跨 2.5h+ 空档与多轮协议复跑不衰减）
