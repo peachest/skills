@@ -1,0 +1,9 @@
+[project]
+name = "deslop"
+version = "0.1.0"
+description = "Bilingual (zh/en) AI-slop audit + fix: audit-first scoring, per-rule adjudication, machine-checked conservation"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
