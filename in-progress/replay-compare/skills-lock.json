@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "replay-compare": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "4dbe3abfad5bce69dfa90f36c8bcff037c38deb735e15c7b8687c5a8e7f52000"
+    }
+  }
+}
