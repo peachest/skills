@@ -1,4 +1,4 @@
-# Pitfalls — 24 failure modes (23 observed in real sessions, #24 doc-derived)
+# Pitfalls — 27 failure modes (25 observed in real sessions, #24/#26/#27 partly doc/mining-derived)
 
 Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by category; CLI-mechanics rows cross-reference the `herdr` skill. Consult when a send fails, a parse crashes, or a peer seems stuck.
 
@@ -16,6 +16,9 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 8 | `agent read` / `pane read` piped to `json.load` | `json.decoder.JSONDecodeError` — read output is terminal text, not JSON | Only `agent list/get/prompt` return JSON envelopes; pipe reads to `tail -N` or a file |
 | 9 | `workspace create --name` | nonexistent flag → usage text → downstream `JSONDecodeError` | Use `--label` |
 | 10 | Unbounded pipe output | multi-KB JSON dumps flooding context | Cap every herdr call: `2>&1 \| head -N` / `tail -N` |
+| 25 | "Command aborted" counted as a tool error | user aborted the bash call mid-run; herdr never answered | Not a herdr failure — never cite it as evidence of send/wait breakage; re-run only if the task still needs it (mining: 7/138 `agent get` "errors" were these) |
+| 26 | Envelope-parse crashes recur despite #5/#7/#8 | `KeyError: 'result'/'agents'`, `JSONDecodeError` mined across 5 op classes and 4 months (40+ crashes) — the docs were read ~never (1 read-load in 29 sessions) | Stop hand-rolling: `scripts/herdr-resolve.py` / `herdr-send.py` branch error-first internally. Raw-CLI parsing only for shapes the scripts don't cover. Re-audit anytime: `references/mining/mine-herdr-ops.py` (baseline: `mining-evidence-2026-09-20.md`) |
+| 27 | Pane ids assumed global across runtimes; bare `herdr` aliases to the current runtime | with herdr default/dev/agent + orca live at once, `agent prompt w1:p2` may hit the wrong runtime's peer or `pane_not_found` — same address exists in several runtimes (real case: peer in agent runtime pane-read `w6:p1` while the target lived at `w1B:p1` in default). Worse: a bare `herdr agent list` follows `HERDR_SOCKET_PATH` and silently queries the CURRENT runtime — a wrapper that omits `--session` for the "default" runtime never queries it (this exact bug made herdr-resolve.py miss targets for a day) | Know your runtime (`$HERDR_SESSION` / `orca worktree current`); qualify cross-runtime targets (`herdr:<session>:<pane>`, `orca:<worktree-id>`); when scripting, pass `--session <name>` EXPLICITLY for every runtime including `default`; resolve globally (default): `herdr-resolve.py` scans all runtimes and tags matches |
 
 ## Lifecycle and waiting
 
@@ -26,7 +29,7 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 13 | `agent_blocked` misread | submission rejected, nothing delivered — target sits at an approval/question UI | Inspect the blocked UI, ask the user; do not resend blindly |
 | 14 | Long-task foreground `--wait` | whole turn parked while a peer works minutes; peers idle in series | Background-first: bg_run the send with `--timeout 1800000` (SKILL.md waiting table) |
 | 15 | Misleading `|| echo ok` fallback | printed `status= ok` on a real timeout | Delete fallbacks that mask failures |
-| 24 | Mid-task dispatch lands in the peer's steering queue | message injected between tool calls → peer may weave task A and B together (pi `steer` semantics; herdr `agent prompt` = text + Enter, no followUp mode) | For "after current task": `agent wait <t> --until idle` first, then send. For corrections/blockers: send directly — steer is the right semantics there. (pi docs rpc.md/extensions.md, not session-observed) |
+| 24 | Mid-task dispatch lands in the peer's steering queue | message injected between tool calls → peer may weave task A and B together (pi `steer` semantics; herdr `agent prompt` = text + Enter, no followUp mode) | `herdr-send.py` defaults to followUp (idle/done gate + send, one step; the idle window can be a turn boundary — it's enough). Corrections/blockers: `--steer` — steer is the right semantics there. (pi docs rpc.md/extensions.md, not session-observed) |
 
 ## Addressing
 
