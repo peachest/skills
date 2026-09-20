@@ -24,4 +24,4 @@ Source: ASD-STE100 mechanical rules (sentence caps, punctuation, modals) plus th
 
 ## strict mode addition
 
-For procedures, error messages, and agent output: also run the installed `ste100` skill's checker (`python3 ~/.pi/agent/skills/ste100/scripts/ste_checker.py --file <f> --type procedure`) and treat its rule hits as flags under the same adjudication contract.
+For procedures, error messages, and agent output: if the `ste100` skill is installed, also run its checker (`python3 ~/.pi/agent/skills/ste100/scripts/ste_checker.py --file <f> --type procedure`) and treat its rule hits as flags under the same adjudication contract. Without it, EN-1..EN-7 are the full strict surface — the subset already covers the cap/punctuation/modal rules; only the 900-word dictionary lock is lost.
