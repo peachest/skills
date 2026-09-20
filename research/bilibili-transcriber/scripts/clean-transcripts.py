@@ -2,7 +2,10 @@
 """clean-transcripts.py — Step 3 (LLM cleanup) automation for the transcriber.
 
 Cleans raw ASR transcripts (no punctuation, homophone errors) into readable
-Chinese text via an OpenAI-compatible chat endpoint. Per-transcript flow:
+text via an OpenAI-compatible chat endpoint. Language is auto-detected
+per-transcript (CJK ratio; override with CLEAN_LANG=zh|en): zh uses the
+Chinese homophone-proofreading prompt, en uses an English proofreading
+prompt (no translation). Per-transcript flow:
 
   read transcript.md -> backup to transcript.raw.md -> chunk body (~3000
   chars, split at natural boundaries) -> clean each chunk with the LLM ->
@@ -46,6 +49,7 @@ def load_conf() -> dict:
         "CLEAN_LLM_KEY": os.environ.get("CLEAN_LLM_KEY", ""),
         "CLEAN_LLM_FALLBACK": os.environ.get("CLEAN_LLM_FALLBACK", ""),
         "CLEAN_LLM_EFFORT": os.environ.get("CLEAN_LLM_EFFORT", ""),
+        "CLEAN_LANG": os.environ.get("CLEAN_LANG", ""),
     }
     rc = Path(__file__).resolve().parent.parent / "runtime.conf"
     if rc.is_file():
@@ -103,12 +107,49 @@ PROMPT_TMPL = (
     "原始文本：\n{raw}"
 )
 
+PROMPT_TMPL_EN = (
+    "You are a technical talk transcript proofreader.\n"
+    "Topic: {title}\n\n"
+    "Rules:\n"
+    "1. Keep the language English — do NOT translate\n"
+    "2. Fix transcription errors (technical terms, product names, names) "
+    "using topic context\n"
+    "3. Add punctuation and split into paragraphs at natural boundaries\n"
+    "4. Do not change meaning, do not add information, do not delete content, "
+    "no summarizing; NEVER repeat a sentence or paragraph\n"
+    "5. Output must correspond sentence-by-sentence to the input; length "
+    "similar to input\n"
+    "6. Output only the corrected text — no preamble, numbering, or code fences\n\n"
+    "Raw transcript:\n{raw}"
+)
 
-async def clean_one_chunk(sess, conf, title, raw, sem, retries=3, model=None, temp=0.0, fp=0.3):
+
+def detect_lang(body: str, conf: dict) -> str:
+    """Pick the proofreading prompt language. CLEAN_LANG env/runtime.conf wins;
+    otherwise CJK-char ratio over letters (0.15 threshold separates zh ASR text
+    from latin-script ASR text; mixed bilingual dual-audio goes to zh, which is
+    the main language the dual pipeline re-transcribes anyway)."""
+    forced = conf.get("CLEAN_LANG", "").strip().lower()
+    if forced in ("zh", "en"):
+        return forced
+    cjk = sum(1 for ch in body if "\u4e00" <= ch <= "\u9fff")
+    letters = sum(1 for ch in body if ch.isascii() and ch.isalpha())
+    return "zh" if cjk >= 0.15 * max(1, cjk + letters) else "en"
+
+
+def has_repeated_sentences(text: str, min_len: int = 40) -> bool:
+    """True if any long sentence appears more than once — LLM repetition-loop
+    signature that can hide inside an in-ratio output."""
+    sents = [s.strip().lower() for s in re.split(r"(?<=[.!?。！？])\s+", text)
+             if len(s.strip()) >= min_len]
+    return len(sents) != len(set(sents))
+
+
+async def clean_one_chunk(sess, conf, title, raw, sem, retries=3, model=None, temp=0.0, fp=0.3, tmpl=None):
     async with sem:
         payload = {
             "model": model or conf["CLEAN_LLM_MODEL"],
-            "messages": [{"role": "user", "content": PROMPT_TMPL.format(title=title, raw=raw)}],
+            "messages": [{"role": "user", "content": (tmpl or PROMPT_TMPL).format(title=title, raw=raw)}],
             "temperature": temp,
             "frequency_penalty": fp,
             "max_tokens": 32000,
@@ -146,7 +187,7 @@ def is_cleaned(d: Path) -> bool:
          json.loads((d / "dual-state.json").read_text(encoding="utf-8")).get("merged"))
 
 
-async def _clean_with_ladder(sess, conf, title, raw, args):
+async def _clean_with_ladder(sess, conf, title, raw, args, tmpl=None):
     """Escalation ladder for a failing chunk:
     1. primary model, full chunk (lo, hi ratio)
     2. primary model, chunk split in half (looser ratio per half)
@@ -157,14 +198,14 @@ async def _clean_with_ladder(sess, conf, title, raw, args):
     loops, the reasoning fallback handles bilingual audio where one track
     is inevitably folded."""
     fallback = conf.get("CLEAN_LLM_FALLBACK", "")
-    out = await clean_one_chunk(sess, conf, title, raw, args._sem)
-    if 0.75 * len(raw) <= len(out) <= 1.25 * len(raw):
+    out = await clean_one_chunk(sess, conf, title, raw, args._sem, tmpl=tmpl)
+    if 0.75 * len(raw) <= len(out) <= 1.25 * len(raw) and not has_repeated_sentences(out):
         return out, False
     halves = chunk(raw, max(200, len(raw) // 2))
     outs = []
     for h in halves:
-        o = await clean_one_chunk(sess, conf, title, h, args._sem)
-        if not (0.70 * len(h) <= len(o) <= 1.30 * len(h)):
+        o = await clean_one_chunk(sess, conf, title, h, args._sem, tmpl=tmpl)
+        if not (0.70 * len(h) <= len(o) <= 1.30 * len(h)) or has_repeated_sentences(o):
             outs = []
             break
         outs.append(o)
@@ -173,12 +214,12 @@ async def _clean_with_ladder(sess, conf, title, raw, args):
     # sampling escape: flash models deterministically repetition-loop on some
     # dense chunks at temp 0; high-temp + strong freq penalty breaks the loop
     for temp, fp, lo, hi in ((0.7, 0.6, 0.75, 1.25), (1.0, 0.8, 0.75, 1.30)):
-        out = await clean_one_chunk(sess, conf, title, raw, args._sem, temp=temp, fp=fp)
-        if lo * len(raw) <= len(out) <= hi * len(raw):
+        out = await clean_one_chunk(sess, conf, title, raw, args._sem, temp=temp, fp=fp, tmpl=tmpl)
+        if lo * len(raw) <= len(out) <= hi * len(raw) and not has_repeated_sentences(out):
             return out, False
     if fallback:
-        out = await clean_one_chunk(sess, conf, title, raw, args._sem, model=fallback)
-        if 0.60 * len(raw) <= len(out) <= 1.50 * len(raw):
+        out = await clean_one_chunk(sess, conf, title, raw, args._sem, model=fallback, tmpl=tmpl)
+        if 0.60 * len(raw) <= len(out) <= 1.50 * len(raw) and not has_repeated_sentences(out):
             return out, True
     return None, False
 
@@ -194,9 +235,10 @@ async def clean_transcript(d: Path, sess, conf, args, stats, stats_lock) -> bool
     if not body:
         return False
     chunks = chunk(body, args.chunk_chars)
+    tmpl = PROMPT_TMPL_EN if detect_lang(body, conf) == "en" else PROMPT_TMPL
     cleaned_parts = []
     for idx, c in enumerate(chunks):
-        out, used_fb = await _clean_with_ladder(sess, conf, d.name, c, args)
+        out, used_fb = await _clean_with_ladder(sess, conf, d.name, c, args, tmpl=tmpl)
         if out is None:
             raise RuntimeError(
                 f"ladder exhausted: chunk {idx + 1}/{len(chunks)} raw={len(c)}"

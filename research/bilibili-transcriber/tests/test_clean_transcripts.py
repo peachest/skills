@@ -69,3 +69,34 @@ def test_is_cleaned_markers(tmp_path):
     tmp4 = tmp_path / "d4"
     tmp4.mkdir()
     assert not ct.is_cleaned(tmp4)
+
+
+def test_detect_lang_zh_en():
+    zh = "这是一段中文转录文本，讨论检索与代理搜索的技术话题。" * 5
+    en = "So great being here today to talk about the unreasonable effectiveness of BM25 for agentic search. " * 5
+    assert ct.detect_lang(zh, {}) == "zh"
+    assert ct.detect_lang(en, {}) == "en"
+    # forced override wins
+    assert ct.detect_lang(zh, {"CLEAN_LANG": "en"}) == "en"
+    assert ct.detect_lang(en, {"CLEAN_LANG": "zh"}) == "zh"
+    # empty/other values fall back to detection
+    assert ct.detect_lang(en, {"CLEAN_LANG": ""}) == "en"
+
+
+def test_detect_lang_mixed_dub_goes_zh():
+    # bilingual dual-audio: majority zh with sprinkled EN terms -> zh prompt
+    mixed = "这是一个中文为主的转录，夹杂 BM25 和 agentic search 等术语。" * 20
+    assert ct.detect_lang(mixed, {}) == "zh"
+
+
+def test_detect_lang_empty_body():
+    # empty body never reaches detect_lang in the real flow (clean_transcript
+    # returns early); degenerate latin check yields en — pin the behavior
+    assert ct.detect_lang("", {}) == "en"
+
+
+def test_has_repeated_sentences():
+    assert not ct.has_repeated_sentences("One short. " + "A long enough sentence to pass the threshold. " * 1)
+    looped = "The frontier LLM companies are optimizing their models for coding and tool use. " * 3
+    assert ct.has_repeated_sentences(looped)
+    assert not ct.has_repeated_sentences("")
