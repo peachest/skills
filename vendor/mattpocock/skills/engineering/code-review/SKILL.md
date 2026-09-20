@@ -59,7 +59,7 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 
 Before the first dispatch, load the `pi-subagents` skill once (read its SKILL.md and `references/execution-controls.md`) — it holds the verified `runs.run(key, { agent, task })` / `runs.all` signatures and the workflowScript pitfalls (task text never inside nested template literals). Do not write dispatch code from memory.
 
-**Standards sub-agent prompt** — include:
+**Standards sub-agent prompt** — spawn `agent: "standards-reviewer"` (the user-level agent; the builtin generic `reviewer` lacks bash and cannot run the committed-range diff). Include:
 
 - The full diff command and commit list.
 - The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full — the sub-agent has no other access to it.
