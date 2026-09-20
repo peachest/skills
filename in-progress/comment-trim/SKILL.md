@@ -37,6 +37,15 @@ is a cleaned-up diff, not a findings list.
    went stale, **rewrite** it to the current truth; rewriting ranks
    equal to deletion.
 
+**History lives in git, not comments.** Authorship, dates, change
+history, and "which MR/commit produced this" are one blame away —
+editors surface per-line blame and agents can trace the log — so
+comments shed those duties entirely. A comment whose only job is
+documenting the change that produced the code gets deleted; the blame
+*is* that record. Comments carry only what is not derivable from the
+surrounding context, the docs, or the git history: the decision that
+cannot be reverse-engineered.
+
 ## Load-bearing patterns (keep regardless of length)
 
 - issue / decision references ("(#114)", "mirrors NVIDIA's gate in
