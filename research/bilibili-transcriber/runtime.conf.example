@@ -33,3 +33,5 @@ WHISPER_LANG=zh
 CLEAN_LLM_BASEURL=http://<llm-host>:<port>/v1
 CLEAN_LLM_MODEL=<fast-chat-model-id>
 CLEAN_LLM_KEY=<api-key>
+# Proofreading language: auto-detect (CJK ratio) by default; force with zh|en
+#CLEAN_LANG=en
