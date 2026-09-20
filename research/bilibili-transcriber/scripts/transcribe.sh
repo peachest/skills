@@ -55,6 +55,9 @@ TOLERANCE="${TOLERANCE:-60}"
 STRATEGY="${STRATEGY:-dp}"
 MIN_SILENCE_SCORE="${MIN_SILENCE_SCORE:-1.5}"
 MAX_FILESIZE_MB="${MAX_FILESIZE_MB:-25}"
+# chunk_transcribe.py imports numpy — on bare environments point this at a
+# python that has it (e.g. the workspace .venv or `uv run python`).
+PYTHON="${PYTHON:-python3}"
 PARALLEL="${PARALLEL:-4}"
 
 if [ $# -lt 1 ]; then
@@ -144,7 +147,7 @@ if [ "$NEEDS_CHUNK" -eq 1 ]; then
   echo "  chunk=${CHUNK_SEC}s, silence_db=${SILENCE_DB}, tolerance=${TOLERANCE}s, parallel=${PARALLEL}"
 
   CHUNK_DIR="${OUT_DIR}/chunks"
-  python3 "${SCRIPT_DIR}/chunk_transcribe.py" \
+  "${PYTHON}" "${SCRIPT_DIR}/chunk_transcribe.py" \
     --wav "$WAV_PATH" \
     --endpoint "$WHISPER_ENDPOINT" \
     --model "$WHISPER_MODEL" \

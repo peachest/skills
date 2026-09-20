@@ -29,6 +29,9 @@ with `audio.mp4` and `metadata.json`.
 bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>/
 ```
 
+`chunk_transcribe.py` needs `numpy` — if the system `python3` lacks it, set
+`PYTHON=<venv-or-uv-run-python>` when invoking (see `runtime.conf.example`).
+
 `<workspace-dir>` is the `raw_path` from Step 1. The script loads
 `<SKILL_DIR>/runtime.conf` for endpoint/model automatically; if absent,
 set `WHISPER_ENDPOINT` and `WHISPER_MODEL` env vars
