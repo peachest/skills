@@ -1,0 +1,5 @@
+# okb Runtime Configuration
+# Copy to runtime.conf and adjust per node. The scripts are stdlib-only;
+# the only external dependency is network reachability to arxiv.org
+# (okb-snapshot). Most nodes reach it directly — leave ARXIV_PROXY empty.
+ARXIV_PROXY=
