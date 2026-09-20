@@ -1,7 +1,7 @@
 # academy patterns
 
 ## P-001 academy 收口后越界做课程层技术裁决
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: N/N 回执收口、声称 step back 之后，academy session 继续对课程主题做源码级深挖复核，并以"批准行动"口吻向课程 session 下发教程修法与 lesson 设计指导——编排层做了课程层的技术裁决
 - 根因: contract gap——SKILL.md 写了 "It never teaches"，但没有定义课程内容勘误/技术分歧的处理路径，agent 即兴发明了"academy 复核→分工回写"流转
 - 方案: skill-doc——在 Roles 或 Incubate 收口步补一条硬边界：收口后 academy 只做编排（CURRICULUM/路由/进度），课程内容问题一律转交对应 course session 或只读 subagent 复核，academy 转述结论而非亲自产出技术内容；为勘误定义一条 documented 路径
@@ -10,7 +10,7 @@
 - 出现: 2026-09-20 diagnose#1
 
 ## P-002 herdr agent prompt --wait 空等（回执实际走注入通道）
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: bootstrap/通报用 `herdr agent prompt --wait` 等回执，stdout 只回 `status: done/None`，真实回执经 herdr 以 user 消息异步注入；一次 wait 等满 180s 超时（status None）后回执 8 分钟才经注入到达——等待零收益
 - 根因: contract gap——SKILL.md 把 "bootstrap prompt (sent with --wait)" 写成流程步骤 + 环境问题——herdr CLI 的 --wait stdout 不携带回执内容
 - 方案: skill-doc——改写 Course session protocol 与 Incubate 步 6/7：prompt 发送不带 --wait（或仅作发送确认），回执一律按注入消息计数；明确"发完即返回，收口以注入回执 N/N 为准"
