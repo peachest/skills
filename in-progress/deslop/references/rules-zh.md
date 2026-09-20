@@ -1,6 +1,6 @@
 # zh 规则包（machine-auditable 子集 + 人工裁定项）
 
-来源：lieflat-less-ai-tone 的语料实测规则（300 篇 AI 语料 × 5 模型对照人类写作）。正则与其 `check-translationese.py` 同源；阈值与校准记录见各条目。**改写契约**：未命中规则的句子逐字保留；命中只是发出 flag，每处 flag 需裁定——承重保留（记录保留理由）或装饰修掉（最小改动，只动解决该问题必需的字）。
+来源：触发标记与正则取自 lieflat-less-ai-tone 的语料实测规则（300 篇 AI 语料 × 5 模型对照人类写作，其 check-translationese.py 的 BASELINE 定义已内嵌进本 skill 的 audit.py，删除该 skill 不影响本表）；阈值与校准记录见各条目。**改写契约**：未命中规则的句子逐字保留；命中只是发出 flag，每处 flag 需裁定——承重保留（记录保留理由）或装饰修掉（最小改动，只动解决该问题必需的字）。
 
 ## 机器可检（audit.py ZH-*）
 
