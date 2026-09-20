@@ -1,0 +1,9 @@
+[project]
+name = "okb"
+version = "0.1.0"
+description = "OKB scripts — bronze snapshot / note skeleton / index regen for the open-knowledge-base skill"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
