@@ -19,7 +19,7 @@
 - 出现: 2026-09-20 diagnose#1
 
 ## P-003 课程派生三步循环逐次手写 JSON 解析
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: tab create → agent start → agent prompt 的同形管道在一次孵化中重复 8 次，每次都内联 `python3 -c "import json,sys;…"` 手排 pane_id/status
 - 根因: contract gap——SKILL.md 的 Course session protocol 只有 prose，无脚本；skill 目录无 scripts/
 - 方案: skill-script——`scripts/spawn-course.sh <academy-root> <course>`：tab create → agent start → bootstrap 模板（自动填 cwd/共享层路径）→ 发送，输出 tab/pane/status 一行摘要；附 --prompt 变体覆盖非 bootstrap 通报；写死前先固化 herdr list/start/prompt 的 JSON 样例作夹具
@@ -28,7 +28,7 @@
 - 出现: 2026-09-20 diagnose#1
 
 ## P-004 迁移后链接修复与验证全手工
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: 课程迁移后连续 4 次 sed -i 改 okb/资源相对路径 + grep 逐条验证 + 手建 symlink，Migrate 步 7 "verify every link resolves" 无工具支撑
 - 根因: contract gap——Migrate 步骤 3/4/7 均为 prose
 - 方案: skill-script——`scripts/verify-course-links.sh <course-dir>`：RESOURCES 指针规范化检查、assets symlink 解析、lesson href 全量校验输出通过/失败清单；可与既有 nav-chain-check 合并
@@ -37,7 +37,7 @@
 - 出现: 2026-09-20 diagnose#1
 
 ## P-005 课程脚手架 write×N 手工搭建
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: Create-a-course 的 6 目录 + assets symlink + MISSION/RESOURCES + CURRICULUM 注册全手工；本 trace 仅 2 课未到痛感阈值，6 课孵化场景即 write×12
 - 根因: contract gap——Create a course 章节纯 prose
 - 方案: skill-script——`scripts/scaffold-course.sh <academy> <name> --namespace <ns> --mission-file <f>`：建目录树、assets symlink、RESOURCES 指向共享 okb、追加 CURRICULUM 行；3+ 课孵化才回本，可与 P-003 脚本合并交付
