@@ -31,6 +31,15 @@ python3 <SKILL_DIR>/scripts/fetch.py \
   --text
 ```
 
+## Operational Notes
+
+- **Script path**: `<SKILL_DIR>` is the single global install
+  (`~/.pi/agent/skills/fetch-article/`). There is no project-local
+  `.agent/skills/` copy — always invoke via the absolute `<SKILL_DIR>` path.
+- **Timeouts**: `fetch.py` has no built-in timeout and bilibili downloads can
+  exceed 2 min. Run long fetches (videos >30 min) through a background task
+  with an explicit timeout (≥600s), not a foreground bash call.
+
 ## Output Format
 
 ```json
