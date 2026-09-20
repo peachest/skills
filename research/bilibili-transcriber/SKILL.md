@@ -61,7 +61,11 @@ Chunks the body (~3000 chars), cleans via an OpenAI-compatible endpoint,
 per-chunk ±25% length validation (rejects silent summarizing), escalation
 ladder for stubborn chunks (halve → sampling escape temp 0.7/fp 0.6 — flash
 models deterministically repetition-loop on some dense chunks at temp 0),
+repeated-sentence guard (rejects in-ratio outputs that loop a paragraph),
 resumable (`transcript.raw.md` marker), failures → `clean-failures.json`.
+Language auto-detected per transcript (CJK ratio; `CLEAN_LANG=zh|en` to
+force): zh → homophone-proofreading prompt, en → English proofreading
+prompt (no translation).
 
 **Bilingual dual-audio** (English original + condensed Chinese voice-over
 mixed in one track — common for translated channels; a zh-hinted single pass
