@@ -44,7 +44,7 @@ edit by itself), **conservation** (information survives the rewrite), and
 
 | mode | applies to | rule surface |
 |------|------------|--------------|
-| **strict** | procedures, error messages, agent output, runbooks | full rule set + hard caps; en additionally runs the ste100 checker |
+| **strict** | procedures, error messages, agent output, runbooks | full rule set + hard caps; en additionally runs the ste100 checker when that skill is installed |
 | **flavor** (default) | reports, docs, blog prose | machine-auditable subset; expressiveness stays |
 | **off-limits** | marketing copy, personal voice | audit only, no rewrite |
 
