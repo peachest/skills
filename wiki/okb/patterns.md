@@ -6,10 +6,10 @@
 - 状态: open
 - 现象: bronze 快照（arXiv curl+sha256）同型脚本单 trace 写 4 遍；三层 frontmatter 对照旧课模板手写；index.md 分布表手数文件；链接可达性 python 手写——深度 bug（`../../`）跨 namespace 复发
 - 根因: skill 只定义了契约（frontmatter 字段、完成准则），零脚本——每一步机械操作都留给 agent 即兴
-- 方案: 沉淀脚本组 `scripts/okb-snapshot`（source→bronze 正文+frontmatter）、`okb-new --layer --topic`（骨架笔记）、`okb-index-regen`（扫三层生成 index.md + --check-links）
+- 方案: 已落地脚本组（98562e0/e7382ed）。残留缺口（post-fix verdict partial）：lesson HTML→OKB 链接深度检查（原 [359][361] 场景）不在 --check-links 扫描范围——或扩展脚本扫消费侧 href，或判 noop（一次性页面修复）
 - passCheck: 跑一轮 curation 后 grep 工具调用，无同型 heredoc 快照/frontmatter 装配脚本出现（脚本被调用替代）
 - 证据: 01a062a0#219 #221 #223 #225 #231 #234 #237 #253 #255 #359 #361
-- 出现: 2026-09-20 diagnose#1（01a062a0）
+- 出现: 2026-09-20 diagnose#1（01a062a0）→ post-fix 同日验证 partial（脚本覆盖 #219-237；#359 #361 消费侧链接深度检查残留）
 
 ## P-002 distill/factcheck 合并成一趟，draft→stable 提升链被跳过
 - 状态: open
