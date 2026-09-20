@@ -42,17 +42,17 @@ Completion criterion: the user knows which pane holds the course session, and th
 
 Find: `herdr agent list` → agent named `teach-<course>`. If present and not blocked, reuse it — the course files are the state; session memory is a bonus.
 
-Create: one **tab** per course in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace. `herdr tab create --cwd <course-dir>` (root pane hosts the agent, full screen for teaching, one-key switch between courses), then `herdr agent start teach-<course> --kind pi --pane <root-pane-id>`. The academy session stays in its own tab.
+Create: one **tab** per course in the herdr workspace that already hosts this academy's course sessions — a new academy starts in the current workspace — via `scripts/spawn-course.sh <academy-root> <course>` (tab create → `agent start teach-<course>` → bootstrap prompt, no `--wait`; `--list` inventories sessions; `--prompt-file` sends a custom prompt through the same tab+session plumbing). Manual equivalent: `herdr tab create --cwd <course-dir>` (root pane hosts the agent, full screen for teaching, one-key switch between courses), then `herdr agent start teach-<course> --kind pi --pane <root-pane-id>`. The academy session stays in its own tab.
 
 Bootstrap prompt (send and return — do **not** use `--wait`: its stdout carries only a `status` field, while the real receipt arrives asynchronously as an injected user message; waiting on stdout is idle wall-clock). Must include:
-- `/skill:herdr` at the start — so the session knows its reply path back to this academy session
+- `/skill:multi-agent-collab` at the start — so the session knows its reply path back to this academy session (the collab protocol owns reply-path rules; the herdr skill is CLI mechanics only)
 - the course directory (cwd is already set; have it confirm)
 - `/skill:teach` to load, plus today's goal as the user stated it
 - the shared layer paths: knowledge via its `RESOURCES.md` → `../../okb/`; components via `../assets/` (symlink to the academy assets)
 
 ## Create a course
 
-Ask for the course mission first — a course without a mission gets teach's treatment: question the user before scaffolding anything. Then scaffold under `courses/<name>/` (ASCII, dash-case): `MISSION.md`, `RESOURCES.md` (pointers into `../../okb/<namespace>/`), `lessons/`, `session-log/`, `reference/`, `learning-records/`, and `assets` as a symlink → `../../assets`. Register the course in `CURRICULUM.md`. The course's first session runs Probe (teach's flow, unchanged).
+Ask for the course mission first — a course without a mission gets teach's treatment: question the user before scaffolding anything. Then scaffold via `scripts/scaffold-course.sh <academy-root> <name> --namespace <ns> [--mission-file F]` (dir tree, `assets` symlink → `../../assets`, `RESOURCES.md` pointing into `../../okb/<ns>/`, CURRICULUM registration; MISSION stays hand-written — the mission-first rule is a judgment, not a template). The course's first session runs Probe (teach's flow, unchanged).
 
 ## Incubate a topic
 
@@ -73,13 +73,13 @@ Completion criterion: N/N receipts in hand, CURRICULUM registered, user knows wh
 
 The notify-first protocol — a directory is never moved out from under a live session:
 
-1. Locate any session currently managing the course (`herdr agent list`, match by title, cwd, or course name). Send advance notice via `herdr agent prompt`: start with `/skill:herdr`, state the new course path, and ask it to confirm it is idle. Wait for the ack before moving anything.
+1. Locate any session currently managing the course (`herdr agent list` or `spawn-course.sh --list`, match by title, cwd, or course name). Send advance notice via `herdr agent prompt`: start with `/skill:multi-agent-collab`, state the new course path, and ask it to confirm it is idle. Wait for the ack before moving anything.
 2. Move: `mv <course> <academy-root>/courses/<name>` (ASCII dash-case name; state the rename in the notice when there is one).
 3. Lift a course-local `okb/` into the academy OKB (merge, keep its namespace) and rewrite that course's `RESOURCES.md` pointers to `../../okb/…`.
 4. Dedupe assets: verify the academy `assets/` union covers the course's, then replace the course's `assets/` dir with a symlink → `../../assets`. Lessons keep their `../assets/…` links — they resolve through the symlink.
 5. Register the course in `CURRICULUM.md`.
 6. Notify the managing session of the new path and ask it to `cd` there.
-7. Verify: every `RESOURCES.md` link resolves, and a spot-check of lesson HTML `../assets/` links resolves.
+7. Verify with `scripts/verify-course-links.sh <course-dir>` — every `RESOURCES.md` pointer resolves, no stale course-local `okb/` pointers remain, and every lesson HTML `../assets/` link resolves through the symlink. It also catches pre-migration `./okb/` pointers that still need rewriting (step 3).
 
 Completion criterion: all seven steps done, and the managing session (if any) acks from the new path.
 
