@@ -90,20 +90,21 @@ sources:
 
 Build knowledge for a topic by running these in order. Each step is done on its completion criterion. An empty okb starts as the three directories plus empty `index.md` and `log.md`; a topic is named at first ingest — kebab-case, confirmed with the user when the boundary is ambiguous.
 
-1. **Ingest** a source — fetch it (e.g. via the fetch-article skill) and save a bronze snapshot.
+1. **Ingest** a source — fetch it and save a bronze snapshot. `scripts/okb_snapshot.py` does the mechanical part (arXiv id/URL → bronze file with frontmatter + sha256 dedup; content fetched elsewhere goes via `--from-file`).
    `<source-slug>` derives from the source title, kebab-case; `author` falls back to the account/publisher, else `unknown`; `sha256` hashes the saved snapshot body — the bytes under the frontmatter.
-   Mirror check first: an existing bronze with the same `author` + `title` is the same work syndicated on another channel — add the URL to its `mirrors:` and skip the fetch.
+   **Fidelity floor:** the snapshot must cover the passages the distilled claims will cite. When the core claims live in the body (algorithms, theorems, tables) an abstract alone is not enough — fetch the full text and snapshot that; factcheck evidence must reach the origin, and an abstract-only bronze caps the chain short.
+   Mirror check first: an existing bronze with the same `author` + `title` is the same work syndicated on another channel — add the URL to its `mirrors:` and skip the fetch (the script also skips on sha256 match).
    Done when `bronze/<topic>/<source-slug>.md` exists with `source`, `author`, `title`, `fetched_at`, `sha256` set, the verbatim content saved, and the topic's `ingests_since_status` counter in `index.md` incremented.
 
 2. **Distill** — build silver from the bronze snapshot in two passes. **Silver is the only rewrite layer.**
    **Pass A — route, no writing.** Scan the topic's existing silver notes and produce a routing decision for every concept in the source: merge into an existing note (name the slug) or open a new one. The invariant is **one concept, one slug**. Append the route to log.md (one `route` line per concept) before any write — the route line survives a crash and claims the slugs against concurrent sessions. Done when every concept has a route: merge (slug named) or open.
-   **Pass B — write.** Re-validate the route against current silver (concurrent sessions share this tree), then apply it. Merge appends to `sources[]`, folds the new facts into the body, refreshes `updated`, and rewrites inbound links to a retired slug; new opens a note. In every note written, link directly related silver notes using Markdown hyperlinks in the body — same topic `[concept](./<concept>.md)`, cross-topic `[concept](../<topic>/<concept>.md)` — **never `[[wikilink]]`**. A link is a navigation edge, not decoration.
+   **Pass B — write.** Re-validate the route against current silver (concurrent sessions share this tree), then apply it. `scripts/okb_new.py` opens skeleton notes (silver always `status: draft`, `verified` empty). Merge appends to `sources[]`, folds the new facts into the body, refreshes `updated`, and rewrites inbound links to a retired slug; new opens a note. In every note written, link directly related silver notes using Markdown hyperlinks in the body — same topic `[concept](./<concept>.md)`, cross-topic `[concept](../<topic>/<concept>.md)` — **never `[[wikilink]]`**. A link is a navigation edge, not decoration.
    When the new source contradicts an existing note, keep both versions in the body and set `conflicts_with` on each side — resolution belongs to the user.
-   Distill always writes `status: draft`.
+   Distill always writes `status: draft`. Only the factcheck step (or a one-line user confirmation, recorded as a `human:` verified event in gold) writes `status: stable` or a non-empty `verified` on silver — distill never touches either field.
    Done when every concept from the bronze snapshot is merged or newly opened, `silver/<topic>/<concept>.md` carries a non-empty `type` and `description`, `sources` lists the bronze snapshot, every fact is preserved (`reference` notes may compress — that is their job), and any note with a genuinely related sibling links to it. Attribute body claims with `[^id]` footnotes keyed to `sources[].id`.
 
 3. **Fact-check** — verify the silver note and write a gold **verification overlay** (not content).
-   Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory.
+   Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory. Every `verified` event's evidence cites bronze content (or the origin itself) — evidence pointing at a derived document (lesson, addendum, another note) does not close the chain.
    Done when `gold/<topic>/<concept>.md` exists, its `sources[].resource` points at the silver note, and every claim in the silver note is covered by a `verified` event or a `verdicts` entry.
    Verification promotes the silver note `draft → stable`; a one-line user confirmation promotes it too — record it as a `human:` verified event in gold.
 
@@ -115,7 +116,7 @@ Build knowledge for a topic by running these in order. Each step is done on its 
    - *thinly linked notes*: exactly one distinct linked peer, in ∪ out;
    - *unlinked source-overlap pairs*: two silver notes sharing ≥2 `sources[]` ids but not linking each other — missed links or merge candidates.
    A *link* is a Markdown hyperlink between silver notes (`./<concept>.md` or `../<topic>/<concept>.md`); `[^id]` footnotes and external URLs don't count. Audit per topic, plus cross-topic links.
-   Done when every report lists every note violating its check. Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
+   Done when every report lists every note violating its check. `scripts/okb_index_regen.py` regenerates index.md from the tree (counters carried forward) and `--check-links` mechanically verifies the link list. Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
 
 ## Evidence chain (invariant)
 
