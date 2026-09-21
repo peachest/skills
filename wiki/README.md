@@ -30,23 +30,30 @@ wiki/
 - 现象: 可观察的行为（脱敏后）
 - 根因: contract gap | agent 即兴（无契约缺口，含 repeated pattern）| 环境问题 | 知识提取
 - 方案: 对应的沉淀方向（脚本/文档/上游）
+- 触发条件: 可 grep 的触发模式（trace 中出现即视为本轮"考到"本条）或显式写"人工判定"；open 条目必填，历史条目在下次 diagnose 合并时补齐
 - passCheck: 一条可执行的通过判据（命令或可直接观察的条件）——修复落地后本条不再犯的机器可核证据；open 条目必填，历史条目在下次 diagnose 合并时补齐
 - 证据: <session-id>#<entry>[,<entry>...]   ← 多 session 用逗号分隔；跨条目引用用 `<skill> P-###` 或 `<skill> diagnose#n`；知识提取来源可用裸 session-id 列表（无 entry，附本地去向说明）
-- 出现: <日期> diagnose#<n> [→ absent-this-run <日期> #<n> ...]   ← diagnose#n = 该 skill logs.md 第 n 行（含表头）
+- 出现: <日期> diagnose#<n> [→ absent-this-run <日期> #<n> ...] [→ refuted <日期> #<n>（原因）]   ← diagnose#n = 该 skill logs.md 第 n 行（含表头）
 ```
 
 ### 状态机
 
 - `open` → `absorbed-into-skill`：对应修复已进入 skill 本体（SKILL.md / scripts）
 - `open`/`absorbed-into-skill` → `closed`：修复落地且连续 2 轮 `absent-this-run`，
-  **用户确认后**才能关闭（合并是记账，关闭是判断）
+  且两轮 trace 均覆盖该条目的触发条件（按触发条件字段判定——"没考到"不等于
+  "修好了"），**用户确认后**才能关闭（合并是记账，关闭是判断）
+- `refuted` 回退：修复落地后真实执行复现问题 → 出现行记 `refuted <日期> #<n>（原因）`，
+  状态回退 `open`，`absent-this-run` 计数自 refuted 起清零重算
+- 豁免：根因为"知识提取"的条目无执行语义，不走上述判据，可直接 `absorbed-into-skill`
 - 条目永不删除——closed/absorbed 条目是 skill-impact.md 台账的锚点
 
 ### 合并语义（增量合并，不是追加）
 
 - 新 finding 与已有条目**同根因** → 更新该条目（追加证据、出现记录，必要时融合更优方案）
 - 全新根因 → 新条目，ID 递增
-- 本轮 trace 未复现的 open 条目 → 出现行追加 `absent-this-run` 标记
+- 本轮 trace 未复现的 open 条目 → 出现行追加 `absent-this-run` 标记（仅当本轮 trace
+  覆盖该条目的触发条件；未覆盖不计 absent）
+- 带 `refuted` 标记的条目 → 状态回退 `open`，absent 计数自 refuted 起重算
 
 ## sanitize 规则（公共仓库，写入前强制）
 

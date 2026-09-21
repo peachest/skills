@@ -1,6 +1,6 @@
 # patterns — okb skill 已知问题
 
-每次 diagnose 增量合并。条目格式见 `../README.md`。状态机: open → (fix landed + 2 连续 absent) → closed。
+每次 diagnose 增量合并。条目格式与状态机见 `../README.md`。
 
 ## P-001 curation 工件全靠手工装配，无脚本支撑
 - 状态: open
