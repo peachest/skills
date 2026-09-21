@@ -44,16 +44,27 @@ orca worktree create --name <task-slug> --agent pi --prompt "<five-part prompt>"
 
 ## Sending and steering
 
+`terminal send` has NO `--worktree` flag (verified 2026-09-21: validFlags = enter/environment/interrupt/json/pairing-code/retry-request/terminal/text/wait-submit) — bridge worktree → handle via `terminal list` first:
+
 ```bash
-orca terminal send --worktree active --text "<message>" --enter --json
+# worktree → terminal handle bridge
+orca terminal list --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+res=d.get('result') or {}
+for t in (res.get('terminals') or res.get('list') or []):
+    if 'expense' in json.dumps(t): print(t['handle'])"   # adapt filter to your field names
+
+orca terminal send --terminal <handle> --text "<message>" --enter --json
 orca terminal wait --for tui-idle --terminal <handle> --timeout-ms 30000 --json
 orca terminal read --terminal <handle> --json   # ground truth when detection is unsure
 ```
 
-POC-verified against pi (2026-09-20): `wait --for tui-idle` works — but takes `--terminal`, not `--handle`; and pi's provider may report `observation=unsupported` on `send` — fall back to `terminal read` to confirm delivery instead of trusting the send result.
+POC-verified against pi (2026-09-20): send may report `observation: unsupported` — fall back to `terminal read` for delivery confirmation instead of trusting the send result. Delivery evidence for a notification: peer flips to `working` right after send (it consumed the message); `wait --for tui-idle` timing out while peer is working is EXPECTED — do not resend.
 
-Steer semantics are identical to herdr (types into the TUI; pi queues it into the steering
-queue). Same mitigation: "do this after you finish" → wait for idle first, then send.
+### Peer migrated herdr → orca
+
+When a peer moves from herdr to orca mid-effort, `herdr-resolve.py` returns count=0 across ALL runtimes — that miss IS the migration signal. Fallback flow (verified 2026-09-21, kueue session): `orca worktree list --json` → find the peer's repo path → `terminal list` → handle → send with `[caller identity]` naming the herdr source address (`herdr:<session>:<pane>`). The reply comes back over the peer's own transport.
 
 ## Tracked multi-agent work: use Orchestration, not terminal send
 
