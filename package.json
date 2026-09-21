@@ -1,0 +1,10 @@
+{
+  "name": "peachest-skills",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal pi extensions + npx-managed skills repo. pi manifest declares extensions ONLY — skills are installed via `npx skills add` (see docs/agents/install-skills.md). Do not add `skills` to the pi manifest: it would double-load skills already installed via npx.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["extensions/*.ts"]
+  }
+}
