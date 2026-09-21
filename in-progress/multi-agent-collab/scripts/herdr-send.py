@@ -2,6 +2,7 @@
 """herdr-send — deliver a prompt to a peer pane with quoting + envelope + receipt handled.
 
   herdr-send.py <pane-id> <message-file | -> [--steer] [--wait MS] [--runtime NAME]
+                 [--from "name (pane)"]
 
 FollowUp is the DEFAULT: poll the peer until idle/done (bounded, default 30min,
 HERDR_FOLLOWUP_MS to override), then deliver as a clean new task. Designed to run
@@ -21,7 +22,7 @@ Exit codes: 0 delivered · 1 usage · 2 herdr error / bad envelope · 3 rejected
 Note: a --wait timeout is reported as timeout, NOT failure — the message is already
 queued in the peer's steering queue (pitfall #11); recovery is agent get + read.
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 HERDR = os.environ.get("HERDR_BIN", "herdr")
 
@@ -50,11 +51,24 @@ def main():
             fail(1, "--wait requires a millisecond value (pitfall #12: it is a valued flag)")
         wait_ms = args[i + 1]
         del args[i:i + 2]
+    from_id = None
+    if "--from" in args:
+        i = args.index("--from")
+        if i + 1 >= len(args):
+            fail(1, '--from requires "name (pane)" — the pane lets the peer reply')
+        from_id = args[i + 1]
+        del args[i:i + 2]
     if len(args) != 2:
         print("usage: herdr-send.py <pane-id> <message-file | -> [--steer] [--wait MS] "
-              "[--runtime NAME]", file=sys.stderr)
+              "[--runtime NAME] [--from \"name (pane)\"]", file=sys.stderr)
         sys.exit(1)
     target, source = args
+
+    if from_id:
+        # protocol shape guard (pitfall #28): prepend the caller-identity section
+        # so improvised dispatches can't drop it; reply path comes from the pane.
+        mm = re.search(r'\(([^)]+)\)', from_id)
+        pane = mm.group(1) if mm else "?"
 
     if source == "-":
         text = sys.stdin.read()
@@ -66,6 +80,17 @@ def main():
             fail(1, f"cannot read message file: {ex}")
     if not text.strip():
         fail(1, "empty message")
+    if from_id:
+        # protocol shape guard (pitfall #28): identity + reply path must both land.
+        # Fail fast on a pane-less --from: the reply command would be unwritable.
+        mm = re.search(r'\(([^)]+)\)', from_id)
+        if not mm:
+            fail(1, f'--from must be "name (pane)" — got {from_id!r} without a pane; '
+                    'the peer could not reply')
+        pane = mm.group(1)
+        text = (f"[caller identity] I am {from_id}; reach me at pane {pane}\n\n"
+                + text
+                + f"\n\n[output + reply] reply via: herdr agent prompt {pane} \"<summary + artifact path>\"")
 
     session_args = ["--session", runtime] if runtime else []
 

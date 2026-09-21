@@ -1,6 +1,7 @@
 ---
 name: multi-agent-collab
 description: "Collaboration protocol for peer pi sessions over herdr or orca — environment probe, leader appointment, dispatch contracts, background-first waiting, delivery verification, closure receipts. Use when the user mentions 多个 session 协作/编排, 开 tab 共同完成, peer sessions, herdr/orca session 间通信, or a task spanning multiple projects or branches that would benefit from parallel sessions. CLI mechanics live in the herdr skill (herdr env) or the orca-cli/orchestration skills (orca env)."
+allowed-tools: [Bash, Read, Env]
 ---
 
 # Multi-Agent Collaboration
@@ -78,6 +79,7 @@ Every inter-session prompt has this shape — the receiver depends on it to lear
 
 - The `/skill:multi-agent-collab` prefix is a **bootstrap signal, sent once per peer context**: the injection teaches the receiver this whole protocol — reply shape, closure signals, waiting behavior — and it reaches the herdr skill for CLI mechanics when it needs to send. (Before this skill existed the prefix was `/skill:herdr`, which only taught the CLI.) Every later message in the thread — reply, receipt, clarification, closure — goes **bare, no prefix**: both sides already hold the protocol, and a repeated injection burns the receiver's context for nothing. Re-prefix only when the peer's protocol context may be gone (rebooted agent, fresh re-bootstrap).
 - The explicit reply request at the end is mandatory — a prompt without it goes unanswered (persistent lesson).
+- **Bare means prefix-omitted only, not shape-omitted**: later messages in a thread skip the `/skill:` prefix but keep the five-section shape. An improvised `From:/To:` variant silently drops the pane-addressed reply path and forces the receiver to re-derive your identity via `agent list` (real case, pitfall #28). Easiest compliance: `scripts/herdr-send.py --from "name (pane)"` prepends `[caller identity]` and appends the reply command for you.
 - Embed a copy-paste reply command in dispatches. Receivers follow it verbatim, so write it complete — identity signature in, protocol prefix out (the receiver was just injected by your dispatch; a prefixed reply would re-inject you, who already holds the skill):
   `herdr agent prompt <my-pane> "<receiver-name> (pane wX:pY) → <result summary + artifact path>"`
 - Address peers by name; sign requests with (name, pane) both.

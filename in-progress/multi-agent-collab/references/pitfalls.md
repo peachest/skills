@@ -1,4 +1,4 @@
-# Pitfalls — 27 failure modes (25 observed in real sessions, #24/#26/#27 partly doc/mining-derived)
+# Pitfalls — 28 failure modes (26 observed in real sessions, #24/#26/#27/#28 partly doc/*mining-derived)
 
 Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by category; CLI-mechanics rows cross-reference the `herdr` skill. Consult when a send fails, a parse crashes, or a peer seems stuck.
 
@@ -19,6 +19,7 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 25 | "Command aborted" counted as a tool error | user aborted the bash call mid-run; herdr never answered | Not a herdr failure — never cite it as evidence of send/wait breakage; re-run only if the task still needs it (mining: 7/138 `agent get` "errors" were these) |
 | 26 | Envelope-parse crashes recur despite #5/#7/#8 | `KeyError: 'result'/'agents'`, `JSONDecodeError` mined across 5 op classes and 4 months (40+ crashes) — the docs were read ~never (1 read-load in 29 sessions) | Stop hand-rolling: `scripts/herdr-resolve.py` / `herdr-send.py` branch error-first internally. Raw-CLI parsing only for shapes the scripts don't cover. Re-audit anytime: `references/mining/mine-herdr-ops.py` (baseline: `mining-evidence-2026-09-20.md`) |
 | 27 | Pane ids assumed global across runtimes; bare `herdr` aliases to the current runtime | with herdr default/dev/agent + orca live at once, `agent prompt w1:p2` may hit the wrong runtime's peer or `pane_not_found` — same address exists in several runtimes (real case: peer in agent runtime pane-read `w6:p1` while the target lived at `w1B:p1` in default). Worse: a bare `herdr agent list` follows `HERDR_SOCKET_PATH` and silently queries the CURRENT runtime — a wrapper that omits `--session` for the "default" runtime never queries it (this exact bug made herdr-resolve.py miss targets for a day) | Know your runtime (`$HERDR_SESSION` / `orca worktree current`); qualify cross-runtime targets (`herdr:<session>:<pane>`, `orca:<worktree-id>`); when scripting, pass `--session <name>` EXPLICITLY for every runtime including `default`; resolve globally (default): `herdr-resolve.py` scans all runtimes and tags matches |
+| 28 | Improvised dispatch format drops the reply path | sender used `From:/To:/## Task/## Background` instead of the five-section shape — no pane address, no reply instruction; receiver burned 3 `agent list` calls (one crashing) to re-derive the caller before it could send the receipt (session 01a07ce2, 2026-09-21) | Bare = prefix-omitted ONLY; the five-section shape survives in every later message. Or let the tool enforce it: `herdr-send.py --from "name (pane)"` prepends `[caller identity]` and appends the reply command |
 
 ## Lifecycle and waiting
 
