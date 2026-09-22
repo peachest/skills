@@ -47,27 +47,31 @@ orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --a
 
 ## Bootstrap prompt — the fixed part
 
-pi expands only the **first** `/skill:<name>` per user prompt; a second one stays literal text. The bootstrap therefore routes by channel:
+pi expands `/skill:<name>` only for prompts **typed into the TUI** — and orca's orchestration dispatch bypasses that path entirely: the spec arrives embedded in the worker preamble as a plain user message, so a `/skill:` line there stays literal text (verified live 2026-09-22: worker never loaded the skill, went straight to code). The bootstrap therefore routes by channel:
 
-**Orchestration path (spec message):** the orca worker preamble already carries the reply path and receipt discipline (worker contract, `--dispatch-capability` token) — the multi-agent-collab bootstrap is redundant there. The spec is ONE message starting with exactly one skill expansion:
+**Orchestration path (spec message):** the orca worker preamble already carries the reply path and receipt discipline (worker contract, `--dispatch-capability` token) — the multi-agent-collab bootstrap is redundant there. Skill loading must be an explicit file-read instruction, not a slash prefix. The spec is ONE message:
 
 ```
-/skill:implement
-[context] <repo-path> + worktree path; ticket tracker at <tracker-location>; spec doc at
-  <spec-link>; conventions that constrain the code (verified facts only).
+[context] FIRST ACTION before any code work: read the implement skill file
+  (~/.pi/agent/skills/implement/SKILL.md) and follow it as the work discipline.
+  Repo: <repo-path> (worktree <branch>); ticket tracker at <tracker-location>; spec
+  doc at <spec-link>; conventions that constrain the code (verified facts only).
 [tasks] You own ticket <ID> ("<title>") and nothing else. Read the spec at <spec-link> and
-  implement it. Touch only files inside the ticket's stated blast radius.
+  implement it under the implement skill's discipline. Touch only files inside the
+  ticket's stated blast radius.
 [output + reply] worker_done fields — ticket, outcome (succeeded/failed), branch tip,
   commits, files touched, blockers, notes. Raise blockers mid-task via orchestration
   ask with the preamble's dispatch-capability token; never go silent.
 ```
 
-**Terminal-send fallback (two sends, skills before task):** no worker contract exists, so both skills are needed — as two sequential sends. Order is fixed: skill loads first, tasking second; reversed, the worker starts working and the second skill arrives as mid-turn steering.
+If the visible skill-expansion UI is wanted anyway, send `/skill:implement` typed via `terminal send` after `worker-start` — it goes through the TUI path and expands — but the file-read instruction stays the deterministic guarantee; the typed send is cosmetic and may arrive mid-turn.
+
+**Terminal-send fallback (two sends, skills before task):** no worker contract exists, so both skills are needed — as two sequential **typed** sends (typed = TUI path = expansion works). Order is fixed: skill loads first, tasking second; reversed, the worker starts working and the second skill arrives as mid-turn steering.
 
 1. after `terminal wait --terminal <handle> --for tui-idle` returns, send: `/skill:implement` (expansion-only message)
 2. after `terminal wait --terminal <handle> --for tui-idle` returns again, send the tasking message via a **temp file** — first line `/skill:multi-agent-collab`, then `[caller identity] / [context] / [tasks] / [output + reply]`, with `[tasks]` carrying the ticket assignment from the template above.
 
-The skill-load lines are what removes the "user has to tell the main session every time" failure.
+The first-action read instruction is what removes the "user has to tell the main session every time" failure — and the coordinator should verify it fired: the worker's transcript must show a read of the implement SKILL.md before any code edit.
 
 ## Protocol — the four message shapes
 
