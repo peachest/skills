@@ -142,7 +142,7 @@ Ask the user to confirm the routing, grouped by type:
    - Spec route → `/skill:to-tickets`
    - Ticket route → `/skill:implement`
 
-   Count rounds explicitly in the report ("Inspect round 1/2", "Inspect round 2/2 — final, traversing").
+   Count rounds explicitly in the report ("Inspect round 1/2", "Inspect round 2/2 — final, traversing"). The re-inspect dispatch's task text must list the findings already adjudicated in round 1 (with their rulings) so children do not re-flag settled questions.
 
 **Execution rules** (the parent session follows these after the user confirms):
 
