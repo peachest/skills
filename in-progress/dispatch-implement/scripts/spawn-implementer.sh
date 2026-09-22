@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # spawn-implementer — one call: wt worktree → orca worktree id → orchestration worker-start.
-#   spawn-implementer.sh <repo-cwd> <branch> --spec-file F [--base <branch>] [--list]
+#   spawn-implementer.sh <repo-cwd> <branch> --spec-file F [--base <branch>] [--run <run_id>] [--list]
+# --run reuses an existing Run (parallel dispatch: one run-create, N spawns pass the same id).
 # Fallback when orchestration is unavailable: terminal-create path, see SKILL.md §Process.
 set -euo pipefail
 
-usage() { echo "usage: spawn-implementer.sh <repo-cwd> <branch> --spec-file F [--base <branch>] [--list]" >&2; exit 1; }
+usage() { echo "usage: spawn-implementer.sh <repo-cwd> <branch> --spec-file F [--base <branch>] [--run <run_id>] [--list]" >&2; exit 1; }
 ORCA="${ORCA_BIN:-orca-ide}"
 if [ "${1:-}" = "--list" ]; then exec "$ORCA" worktree list --json; fi
 [ $# -ge 2 ] || usage
 REPO="${1%/}"; BRANCH="$2"; shift 2
 BASE=""
 SPEC_FILE=""
+RUN_ID_OPT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --spec-file) SPEC_FILE="$2"; shift 2 ;;
     --base) BASE="$2"; shift 2 ;;
+    --run) RUN_ID_OPT="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -51,16 +54,26 @@ for w in wts:
 
 # 3. orchestration: run + task + worker (verbs verified on orca app 1.4.205 — re-verify after upgrade)
 #    worker-start binds the task explicitly (--task) — no auto-claim race.
-RUN_ID=$(python3 - "$BRANCH" <<'PY'
+BRANCH_SLUG=$(printf '%s' "$BRANCH" | tr '/A-Z' '-a-z')
+if [ -n "$RUN_ID_OPT" ]; then
+  RUN_ID="$RUN_ID_OPT"
+else
+RUN_ID=$(ORCA="$ORCA" python3 - "$BRANCH" <<'PY'
 import json,subprocess,sys,os
 branch=sys.argv[1]
-out=subprocess.run([os.environ.get("ORCA_BIN","orca-ide"),"orchestration","run-create",
+out=subprocess.run([os.environ["ORCA"],"orchestration","run-create",
   "--objective",f"implement {branch}","--json"],capture_output=True,text=True)
 if out.returncode!=0: sys.stderr.write(out.stderr); sys.exit(5)
 d=json.loads(out.stdout)
-print(d.get("id") or d.get("run",{}).get("id",""))
+if d.get("error"): sys.stderr.write(str(d["error"])); sys.exit(5)
+r=d.get("result") or d
+rid=(r.get("id") or (r.get("run") or {}).get("id") or "")
+if not rid: sys.stderr.write("run-create returned no id: "+out.stdout[:400]); sys.exit(5)
+print(rid)
 PY
 )
+fi
+[ -n "$RUN_ID" ] || { echo "run id unresolved" >&2; exit 5; }
 TASK_ID=$(ORCA="$ORCA" RUN_ID="$RUN_ID" SPEC_FILE="$SPEC_FILE" BRANCH="$BRANCH" python3 - <<'PY'
 import json,subprocess,os
 spec=open(os.environ["SPEC_FILE"]).read()
@@ -68,10 +81,14 @@ out=subprocess.run([os.environ["ORCA"],"orchestration","task-create",
   "--run",os.environ["RUN_ID"],"--spec",spec,"--json"],capture_output=True,text=True)
 if out.returncode!=0: sys.stderr.write(out.stderr); sys.exit(6)
 d=json.loads(out.stdout)
-print(d.get("id") or d.get("task",{}).get("id",""))
+if d.get("error"): sys.stderr.write(str(d["error"])); sys.exit(6)
+r=d.get("result") or d
+tid=(r.get("id") or (r.get("task") or {}).get("id") or "")
+if not tid: sys.stderr.write("task-create returned no id: "+out.stdout[:400]); sys.exit(6)
+print(tid)
 PY
 )
-START_JSON=$(BRANCH_SLUG="${BRANCH//\//-}" "$ORCA" orchestration worker-start \
+START_JSON=$("$ORCA" orchestration worker-start \
   --task "$TASK_ID" --worktree "id:$WT_ID" --agent pi \
   --name "impl-$BRANCH_SLUG" --json)
 HANDLE=$(printf '%s' "$START_JSON" | python3 -c '
