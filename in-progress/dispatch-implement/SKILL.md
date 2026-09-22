@@ -1,11 +1,11 @@
 ---
 name: dispatch-implement
-description: Fix the spawn process and message protocol for design↔implement session pairs on orca — main session creates a worktree via wt, starts an implement pi session there, dispatches tickets, and runs the review/CI-failure feedback loop over orca orchestration. Supports parallel dispatch (N implement sessions, one ticket each). Use when the user says 派发实现 / 起 implement session / 创建实现 session / 并行派发实现 / dispatch-implement, or when a design session is ready to hand tickets to implementation sessions. Does NOT own the implement skill content, review skills, or MR creation — only the spawn chain and protocol shapes.
+description: Dispatch implementation sessions for design↔implement pairs on orca — owns only the spawn chain and message protocol. Trigger when the user says 派发实现 / 起 implement session / 并行派发实现 / dispatch-implement, or when a design session is ready to hand tickets to implementation sessions. Does NOT own the implement skill content, review skills, or MR creation.
 ---
 
 # Dispatch Implement
 
-Fixes two things and nothing else: **the spawn chain** (worktree → implement pi session) and **the protocol** (message shapes for dispatch, receipt, fix rounds, closure). Workflow order (when to review, when to create MR, when to clean up) lives in the user's process, not here. Protocol primitives (five-part prompt, receipts, waiting) come from `multi-agent-collab` — read it first; this skill only adds the orca worktree specifics.
+Fixes two things and nothing else: **the spawn chain** (worktree → implement pi session) and **the protocol** (message shapes for dispatch, receipt, fix rounds, closure). Workflow order (when to review, when to create MR, when to clean up) lives in the user's process, not here. Protocol primitives (five-part prompt, receipts, waiting) come from `multi-agent-collab`; only the orca worktree specifics live here — reach it under the conditions in §Pitfalls.
 
 ## Scope boundary
 
@@ -25,7 +25,8 @@ Run from the main (design) session's shell. Verified chain (2026-09-21, orca app
 #    and hooks (deps install). -b <base> for non-default base.
 wt switch -c fix/ctx-421-device-type          # cwd follows into the new worktree
 
-# 2. resolve the worktree's orca id (orca indexes ~/projects/* worktrees automatically)
+# 2. resolve the worktree's orca id (orca indexes ~/projects/* worktrees automatically;
+#    empty output = not yet indexed — the script's exact-path matcher handles this)
 orca-ide worktree list --json | jq '.worktrees[] | select(.path | contains("<branch-slug>")) | .id'
 
 # 3. orchestration run + task (once per effort; skip if the Run exists)
@@ -36,7 +37,7 @@ orca-ide orchestration task-create --run <run_id> --spec "<bootstrap prompt, see
 orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --agent pi --name impl-<branch-slug> --json
 ```
 
-`scripts/spawn-implementer.sh <repo-cwd> <branch> --spec-file <file> [--base <branch>]` wraps steps 1–4 in one call (idempotent-ish: skips `wt switch -c` if the branch's worktree already exists). Prefer it — it also prints the handle/receipt line the coordinator needs.
+`scripts/spawn-implementer.sh <repo-cwd> <branch> --spec-file <file> [--base <branch>] [--run <run_id>] [--list]` wraps steps 1–4 in one call (idempotent-ish: skips `wt switch -c` if the branch's worktree already exists; `--run` reuses an existing Run instead of creating one). Prefer it — it also prints the handle/receipt line the coordinator needs.
 
 **Fallback (orchestration unavailable):** `orca-ide terminal create --worktree "id:<wt-id>" --command 'pi' --json` → `terminal wait --terminal <handle> --for tui-idle` → bootstrap per the two-send sequence in §Bootstrap prompt (second send via a **temp file**: `terminal send --terminal <handle> --text "$(cat prompt.md)" --enter`). Never inline the prompt: quoting dies. Send may report `observation: unsupported` — confirm delivery via `terminal read` or the peer flipping to `working`, not the send exit code.
 
@@ -48,11 +49,10 @@ pi expands only the **first** `/skill:<name>` per user prompt; a second one stay
 
 ```
 /skill:implement
-[context] repo + worktree path; ticket tracker location; spec doc link (issue tracker);
-  conventions that constrain the code (verified facts only).
-[tasks] You own ticket <ID> ("<title>") and nothing else. Read the spec at <link> and
-  implement it. Do NOT claim other tickets; do NOT touch files outside the ticket's
-  stated blast radius.
+[context] <repo-path> + worktree path; ticket tracker at <tracker-location>; spec doc at
+  <spec-link>; conventions that constrain the code (verified facts only).
+[tasks] You own ticket <ID> ("<title>") and nothing else. Read the spec at <spec-link> and
+  implement it. Touch only files inside the ticket's stated blast radius.
 [output + reply] worker_done fields — ticket, outcome (succeeded/failed), branch tip,
   commits, files touched, blockers, notes. Raise blockers mid-task via orchestration
   ask with the preamble's dispatch-capability token; never go silent.
@@ -60,51 +60,51 @@ pi expands only the **first** `/skill:<name>` per user prompt; a second one stay
 
 **Terminal-send fallback (two sends, skills before task):** no worker contract exists, so both skills are needed — as two sequential sends. Order is fixed: skill loads first, tasking second; reversed, the worker starts working and the second skill arrives as mid-turn steering.
 
-1. after `terminal wait --for tui-idle`, send: `/skill:implement` (expansion-only message)
-2. after the load settles, send the tasking message via a **temp file** — first line `/skill:multi-agent-collab`, then `[caller identity] / [context] / [tasks] / [output + reply]`, with `[tasks]` carrying the ticket assignment from the template above.
+1. after `terminal wait --terminal <handle> --for tui-idle` returns, send: `/skill:implement` (expansion-only message)
+2. after `terminal wait --terminal <handle> --for tui-idle` returns again, send the tasking message via a **temp file** — first line `/skill:multi-agent-collab`, then `[caller identity] / [context] / [tasks] / [output + reply]`, with `[tasks]` carrying the ticket assignment from the template above.
 
-The skill-load lines are non-negotiable: they are what removes the "user has to tell the main session every time" failure.
+The skill-load lines are what removes the "user has to tell the main session every time" failure.
 
 ## Protocol — the four message shapes
 
 ### 1. Receipt (implement → main)
-`worker_done --outcome succeeded|failed --task <task_id>` — text body carries the fixed fields: `ticket / outcome / branch tip / commits / files touched / blockers / notes`. Coordinator consumes via `check --wait --types worker_done` then `check --ack <delivery_id>` (batch-aware: with N workers, one check call returns the pending batch).
+The worker's `worker_done` (outcome `succeeded|failed`; flags follow the preamble's worker contract) — body carries the fields defined in the bootstrap `[output + reply]`. Coordinator consumes via `check --wait --types worker_done` then `check --ack <delivery_id>` (batch-aware: with N workers, one check call returns the pending batch).
 
 ### 2. Review feedback (main → implement)
-Re-dispatch on the same worktree with `worker-start --retry-of <dispatch_id> --worktree id:<wt-id>` (note: `--retry-of` takes the **dispatch id**, not the task id), spec:
+Re-dispatch the same dispatch on the same worktree: `worker-start --retry-of <dispatch_id> --worktree id:<wt-id> --spec "<findings>"` (note: `--retry-of` takes the **dispatch id**, not the task id; `--spec` replaces the tasking with the findings message):
 
 ```
-[caller identity] as bootstrap (unchanged reply path)
+[caller identity] unchanged — the reply path is the worker preamble's, not a re-typed address
 [context] review round <N> on branch <branch> — source: <ocr | code-review> report <path-or-link>
 [tasks] fix exactly these findings; change nothing else:
 1. [severity] file:line — issue — expected behavior
 ...
-[output + reply] same worker_done fields as bootstrap.
+[output + reply] same worker_done fields as the bootstrap template.
 ```
 
 ### 3. CI failure (main → implement)
-New task on the same Run; re-dispatch same as review feedback (`worker-start --retry-of <dispatch_id>`). `[context]` carries `MR !N / branch / failed job <name> (<stage>) / log <link or tail excerpt>`. Findings list = one entry per failing check, error-first (first failure first).
+Same mechanism as review feedback — re-dispatch the failing dispatch (`worker-start --retry-of <dispatch_id> --worktree id:<wt-id> --spec "<ci-findings>"`), no new task. `[context]` carries `MR !N / branch / failed job <name> (<stage>) / log <link or tail excerpt>`. Findings list = one entry per failing check, error-first (first failure first).
 
 ### 4. Closure (main → implement)
-Terminal-send only (no new task): `stand-down: no further work; report uncommitted state in one line; worktree cleanup is the coordinator's job.` Implementation session stays alive until `wt remove` — orca closes its terminal automatically when the worktree goes.
+Resolve the handle via `terminal list --json` (match the worktree — `terminal send` has no `--worktree` flag), then send: `stand-down: no further work; report uncommitted state in one line; worktree cleanup is the coordinator's job.` The session stays alive until `wt remove`; orca is expected to close the terminal with the worktree (UNVERIFIED — confirm on first closure and update this line).
 
 ## Parallel dispatch
 
 - **One worktree per implement session, one ticket per session.** Ticket IDs are assigned by the coordinator in `[tasks]` — never self-claimed from a shared tracker (double-claim race).
 - All workers join one Run; tickets must be disjoint by construction (to-tickets guarantees this — if two tickets touch the same file, they are not parallelizable; sequence them instead).
-- Spawn with `scripts/spawn-implementer.sh` N times (distinct branches), then one `run-create` + N `task-create`, then N `worker-start`. Collect receipts with batch `check --wait --types worker_done`.
+- Spawn with `scripts/spawn-implementer.sh` N times on distinct branches: first spawn without `--run` (creates the Run), every later spawn passes the same `--run <run_id>`. Collect receipts with batch `check --wait --types worker_done`.
 - `worker_done` names the branch tip — merge order is the coordinator's call (workflow, not protocol).
 
 ## First-use verify + version drift
 
-Orchestration verbs verified 2026-09-21 on orca app **1.4.205**. After an orca upgrade, re-verify before the first dispatch:
+Orchestration verbs verified 2026-09-21 on orca app **1.4.205**; the full spawn chain has not yet run end-to-end. Re-verify before the first dispatch:
 
 ```bash
 orca-ide orchestration --help 2>&1 | head -30
 orca-ide orchestration worker-start --help 2>&1 | head -15
 ```
 
-If a verb/flag moved, fix `scripts/spawn-implementer.sh` + this file in the same commit, and log the drift in `wiki/dispatch-implement/skill-impact.md`.
+If a verb/flag moved, fix `scripts/spawn-implementer.sh` + this file in the same commit, and log the drift in `wiki/dispatch-implement/skill-impact.md`. Verify pass = `bash scripts/check-env.sh` ends PASS and the verb surface still shows every flag the script uses.
 
 ## Pitfalls
 
