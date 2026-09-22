@@ -40,8 +40,11 @@ if [ -z "$WT_PATH" ]; then
 fi
 [ -n "$WT_PATH" ] || { echo "worktree for $BRANCH not found after wt switch" >&2; exit 3; }
 
-# 2. resolve orca worktree id by path
-WT_ID=$("$ORCA" worktree list --json | WT_PATH="$WT_PATH" python3 -c '
+# 2. resolve orca worktree id by path — orca indexes via fs-watch, so a freshly
+#    created worktree may not appear yet: retry with backoff (10x1s).
+WT_ID=""
+for _ in $(seq 1 10); do
+  WT_ID=$("$ORCA" worktree list --json | WT_PATH="$WT_PATH" python3 -c '
 import json,sys,os
 d=json.load(sys.stdin)
 wts=d.get("worktrees") or d.get("result",{}).get("worktrees",[])
@@ -50,6 +53,9 @@ for w in wts:
     if (w.get("path") or w.get("dir") or "").rstrip("/") == want.rstrip("/"):
         print(w.get("id") or w.get("worktree_id")); break
 ')
+  [ -n "$WT_ID" ] && break
+  sleep 1
+done
 [ -n "$WT_ID" ] || { echo "orca worktree id not resolved for $WT_PATH (worktree list follows)" >&2; "$ORCA" worktree list --json >&2; exit 4; }
 
 # 3. orchestration: run + task + worker (verbs verified on orca app 1.4.205 — re-verify after upgrade)
@@ -67,8 +73,10 @@ if out.returncode!=0: sys.stderr.write(out.stderr); sys.exit(5)
 d=json.loads(out.stdout)
 if d.get("error"): sys.stderr.write(str(d["error"])); sys.exit(5)
 r=d.get("result") or d
-rid=(r.get("id") or (r.get("run") or {}).get("id") or "")
-if not rid: sys.stderr.write("run-create returned no id: "+out.stdout[:400]); sys.exit(5)
+# top-level result.id is the mutation-request uuid, NOT the run id — only accept run_* shapes
+rid=(r.get("run") or {}).get("id") or ""
+if not rid and isinstance(r.get("id"), str) and r["id"].startswith("run_"): rid=r["id"]
+if not rid: sys.stderr.write("run-create returned no run_* id: "+out.stdout[:400]); sys.exit(5)
 print(rid)
 PY
 )
@@ -89,8 +97,8 @@ print(tid)
 PY
 )
 START_JSON=$("$ORCA" orchestration worker-start \
-  --task "$TASK_ID" --worktree "id:$WT_ID" --agent pi \
-  --name "impl-$BRANCH_SLUG" --json)
+  --task "$TASK_ID" --worktree "id:$WT_ID" --agent pi --json)
+# creation flags (--name/--setup/...) are rejected for existing worktrees — never pass them here.
 HANDLE=$(printf '%s' "$START_JSON" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
@@ -98,4 +106,4 @@ r=d.get("result",d)
 w=r.get("worker") or r
 print(w.get("id") or w.get("handle") or w.get("terminal",""))')
 
-echo "branch=$BRANCH worktree=$WT_PATH wt_id=$WT_ID run=$RUN_ID task=$TASK_ID worker=$HANDLE status=dispatched (receipt arrives via worker_done — do not wait)"
+echo "branch=$BRANCH worktree=$WT_PATH wt_id=$WT_ID run=$RUN_ID task=$TASK_ID worker=$HANDLE status=dispatched — confirm via 'dispatch-show --task $TASK_ID' before any retry (first worker-start may already have succeeded)"
