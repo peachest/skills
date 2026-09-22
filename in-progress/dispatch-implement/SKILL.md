@@ -39,6 +39,8 @@ orca-ide orchestration task-create --run <run_id> --spec "<bootstrap prompt, see
 orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --agent pi --json
 ```
 
+**Run binding is per-coordinator-terminal and `run-create` rebinds it.** The probe run-create during drift repair silently rebound the coordinator terminal to the probe Run, fencing it from the real Run — the worker_done sat in the orphaned Run's inbox while every `check` failed `consumer_fenced`. Rules: never run `run-create` from the coordinator terminal mid-effort (use the worker side or a throwaway terminal for probes); after any fencing error, recover with `orchestration run-use --id <run_id> --from <coordinator-handle>` then `check --terminal <handle> --run <run_id> --types worker_done` and `--ack <delivery_id>`.
+
 **Ambiguity rule (worker-start):** its success output is easy to misread — on any error from `worker-start`, run `orchestration dispatch-show --task <task_id> --json` BEFORE retrying. A first call that actually succeeded makes the retry the only failure, and the duplicate-dispatch error proves nothing about the first. `dispatch-show` (status + terminalHandle) is the delivery-evidence step, not an optional extra.
 
 `scripts/spawn-implementer.sh <repo-cwd> <branch> --spec-file <file> [--base <branch>] [--run <run_id>] [--list]` wraps steps 1–4 in one call (idempotent-ish: skips `wt switch -c` if the branch's worktree already exists; `--run` reuses an existing Run instead of creating one). Prefer it — it also prints the handle/receipt line the coordinator needs.
