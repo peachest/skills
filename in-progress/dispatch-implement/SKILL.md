@@ -49,7 +49,7 @@ orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --a
 
 ## Bootstrap prompt — the fixed part
 
-pi expands `/skill:<name>` only for prompts **typed into the TUI** — and orca's orchestration dispatch bypasses that path entirely: the spec arrives embedded in the worker preamble as a plain user message, so a `/skill:` line there stays literal text (verified live 2026-09-22: worker never loaded the skill, went straight to code). The bootstrap therefore routes by channel:
+pi expands `/skill:<name>` only at the **start of a user prompt** (prefix position). Orca's orchestration dispatch structurally breaks this: the spec arrives embedded after the worker preamble inside one user message, so `/skill:` there can never reach prefix position and never expands (verified live 2026-09-22: worker never loaded the skill, went straight to code). Typing is irrelevant — `herdr agent prompt`/`terminal send` messages expand fine when `/skill:` is their first line; the dispatch path cannot offer that position. The bootstrap therefore routes by channel:
 
 **Orchestration path (spec message):** the orca worker preamble already carries the reply path and receipt discipline (worker contract, `--dispatch-capability` token) — the multi-agent-collab bootstrap is redundant there. Skill loading must be an explicit file-read instruction, not a slash prefix. The spec is ONE message:
 
@@ -66,7 +66,7 @@ pi expands `/skill:<name>` only for prompts **typed into the TUI** — and orca'
   ask with the preamble's dispatch-capability token; never go silent.
 ```
 
-If the visible skill-expansion UI is wanted anyway, send `/skill:implement` typed via `terminal send` after `worker-start` — it goes through the TUI path and expands — but the file-read instruction stays the deterministic guarantee; the typed send is cosmetic and may arrive mid-turn.
+If the visible skill-expansion UI is wanted anyway, the message must start with `/skill:implement` at position 0 — via `terminal send` after `worker-start` — but the file-read instruction stays the deterministic guarantee; the typed send is cosmetic and may arrive mid-turn.
 
 **Terminal-send fallback (two sends, skills before task):** no worker contract exists, so both skills are needed — as two sequential **typed** sends (typed = TUI path = expansion works). Order is fixed: skill loads first, tasking second; reversed, the worker starts working and the second skill arrives as mid-turn steering.
 
