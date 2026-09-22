@@ -38,26 +38,32 @@ orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --a
 
 `scripts/spawn-implementer.sh <repo-cwd> <branch> --spec-file <file> [--base <branch>]` wraps steps 1–4 in one call (idempotent-ish: skips `wt switch -c` if the branch's worktree already exists). Prefer it — it also prints the handle/receipt line the coordinator needs.
 
-**Fallback (orchestration unavailable):** `orca-ide terminal create --worktree "id:<wt-id>" --command 'pi' --json` → `terminal wait --terminal <handle> --for tui-idle` → send the bootstrap prompt via a **temp file** (`terminal send --terminal <handle> --text "$(cat prompt.md)" --enter`). Never inline the prompt: quoting dies. Send may report `observation: unsupported` — confirm delivery via `terminal read` or the peer flipping to `working`, not the send exit code.
+**Fallback (orchestration unavailable):** `orca-ide terminal create --worktree "id:<wt-id>" --command 'pi' --json` → `terminal wait --terminal <handle> --for tui-idle` → bootstrap per the two-send sequence in §Bootstrap prompt (second send via a **temp file**: `terminal send --terminal <handle> --text "$(cat prompt.md)" --enter`). Never inline the prompt: quoting dies. Send may report `observation: unsupported` — confirm delivery via `terminal read` or the peer flipping to `working`, not the send exit code.
 
 ## Bootstrap prompt — the fixed part
 
-Every implement session's first message MUST start with the skill-load directives, then the five-part shape. The skill-load lines are non-negotiable: they are what removes the "user has to tell the main session every time" failure.
+pi expands only the **first** `/skill:<name>` per user prompt; a second one stays literal text. The bootstrap therefore routes by channel:
+
+**Orchestration path (spec message):** the orca worker preamble already carries the reply path and receipt discipline (worker contract, `--dispatch-capability` token) — the multi-agent-collab bootstrap is redundant there. The spec is ONE message starting with exactly one skill expansion:
 
 ```
-/skill:multi-agent-collab
 /skill:implement
-[caller identity] I am <coordinator name> (orca:<coordinator-wt-id>, branch <branch>).
-  Reply through the orchestration worker contract: exactly one worker_done per dispatch;
-  raise blockers mid-task via orchestration ask, never by going silent.
 [context] repo + worktree path; ticket tracker location; spec doc link (issue tracker);
   conventions that constrain the code (verified facts only).
-[tasks] You own ticket <ID> ("<title>") and nothing else. Read the spec at <link>,
-  load /skill:implement, implement it. Do NOT claim other tickets; do NOT touch
-  files outside the ticket's stated blast radius.
+[tasks] You own ticket <ID> ("<title>") and nothing else. Read the spec at <link> and
+  implement it. Do NOT claim other tickets; do NOT touch files outside the ticket's
+  stated blast radius.
 [output + reply] worker_done fields — ticket, outcome (succeeded/failed), branch tip,
-  commits, files touched, blockers, notes.
+  commits, files touched, blockers, notes. Raise blockers mid-task via orchestration
+  ask with the preamble's dispatch-capability token; never go silent.
 ```
+
+**Terminal-send fallback (two sends, skills before task):** no worker contract exists, so both skills are needed — as two sequential sends. Order is fixed: skill loads first, tasking second; reversed, the worker starts working and the second skill arrives as mid-turn steering.
+
+1. after `terminal wait --for tui-idle`, send: `/skill:implement` (expansion-only message)
+2. after the load settles, send the tasking message via a **temp file** — first line `/skill:multi-agent-collab`, then `[caller identity] / [context] / [tasks] / [output + reply]`, with `[tasks]` carrying the ticket assignment from the template above.
+
+The skill-load lines are non-negotiable: they are what removes the "user has to tell the main session every time" failure.
 
 ## Protocol — the four message shapes
 
