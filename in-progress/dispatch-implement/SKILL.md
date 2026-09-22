@@ -18,24 +18,28 @@ Fixes two things and nothing else: **the spawn chain** (worktree → implement p
 
 ## Process — spawn one implement session
 
-Run from the main (design) session's shell. Verified chain (2026-09-21, orca app 1.4.205):
+Run from the main (design) session's shell. Chain verified end-to-end 2026-09-22 (orca app 1.4.2xx, first live spawn):
 
 ```bash
 # 1. worktree — wt owns branch naming (<type>/<ticket-slug>, e.g. fix/ctx-421-device-type)
 #    and hooks (deps install). -b <base> for non-default base.
 wt switch -c fix/ctx-421-device-type          # cwd follows into the new worktree
 
-# 2. resolve the worktree's orca id (orca indexes ~/projects/* worktrees automatically;
-#    empty output = not yet indexed — the script's exact-path matcher handles this)
-orca-ide worktree list --json | jq '.worktrees[] | select(.path | contains("<branch-slug>")) | .id'
+# 2. resolve the worktree's orca id (orca indexes ~/projects/* worktrees via fs-watch;
+#    a freshly created worktree may lag a few seconds — retry before giving up)
+orca-ide worktree list --json | jq '.result.worktrees[]? // .worktrees[]? | select(.path | contains("<branch-slug>")) | .id'
 
 # 3. orchestration run + task (once per effort; skip if the Run exists)
+#    run id = .result.run.id (run_* prefix) — top-level .id is the mutation-request uuid
 orca-ide orchestration run-create --objective "<effort title>" --json
 orca-ide orchestration task-create --run <run_id> --spec "<bootstrap prompt, see below>" --json
 
 # 4. start the worker pi session in the worktree, bound to the task
-orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --agent pi --name impl-<branch-slug> --json
+#    NO creation flags (--name/--setup/--repo/...) — rejected for existing worktrees
+orca-ide orchestration worker-start --task <task_id> --worktree "id:<wt-id>" --agent pi --json
 ```
+
+**Ambiguity rule (worker-start):** its success output is easy to misread — on any error from `worker-start`, run `orchestration dispatch-show --task <task_id> --json` BEFORE retrying. A first call that actually succeeded makes the retry the only failure, and the duplicate-dispatch error proves nothing about the first. `dispatch-show` (status + terminalHandle) is the delivery-evidence step, not an optional extra.
 
 `scripts/spawn-implementer.sh <repo-cwd> <branch> --spec-file <file> [--base <branch>] [--run <run_id>] [--list]` wraps steps 1–4 in one call (idempotent-ish: skips `wt switch -c` if the branch's worktree already exists; `--run` reuses an existing Run instead of creating one). Prefer it — it also prints the handle/receipt line the coordinator needs.
 
@@ -97,7 +101,7 @@ Resolve the handle via `terminal list --json` (match the worktree — `terminal 
 
 ## First-use verify + version drift
 
-Orchestration verbs verified 2026-09-21 on orca app **1.4.205**; the full spawn chain has not yet run end-to-end. Re-verify before the first dispatch:
+Orchestration chain verified end-to-end 2026-09-22 on orca app 1.4.2xx (first live spawn: run → task → dispatch → worker terminal). After an orca upgrade, re-verify before the first dispatch:
 
 ```bash
 orca-ide orchestration --help 2>&1 | head -30
@@ -105,6 +109,8 @@ orca-ide orchestration worker-start --help 2>&1 | head -15
 ```
 
 If a verb/flag moved, fix `scripts/spawn-implementer.sh` + this file in the same commit, and log the drift in `wiki/dispatch-implement/skill-impact.md`. Verify pass = `bash scripts/check-env.sh` ends PASS and the verb surface still shows every flag the script uses.
+
+**Drift fixes land in the source repo** (`<SKILL_SRC>/`, i.e. `~/skills/in-progress/dispatch-implement/`) followed by `npx skills add -g ./in-progress/dispatch-implement -a pi -y` — never edit the installed copy under `<SKILL_DIR>/`, which the next reinstall silently overwrites.
 
 ## Pitfalls
 
