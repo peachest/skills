@@ -96,7 +96,7 @@ Re-dispatch the same dispatch on the same worktree: `worker-start --retry-of <di
 Same mechanism as review feedback — re-dispatch the failing dispatch (`worker-start --retry-of <dispatch_id> --worktree id:<wt-id> --spec "<ci-findings>"`), no new task. `[context]` carries `MR !N / branch / failed job <name> (<stage>) / log <link or tail excerpt>`. Findings list = one entry per failing check, error-first (first failure first).
 
 ### 4. Closure (main → implement)
-Resolve the handle via `terminal list --json` (match the worktree — `terminal send` has no `--worktree` flag), then send: `stand-down: no further work; report uncommitted state in one line; worktree cleanup is the coordinator's job.` The session stays alive until `wt remove`; orca is expected to close the terminal with the worktree (UNVERIFIED — confirm on first closure and update this line).
+Resolve the handle via `terminal list --json` (match the worktree — `terminal send` has no `--worktree` flag), then send: `stand-down: no further work; report uncommitted state in one line; worktree cleanup is the coordinator's job.` The session stays alive until `wt remove`; orca closes the terminal with the worktree (verified 2026-09-22: `terminal list` shows 0 matches after `wt remove` — no manual terminal close needed).
 
 ## Parallel dispatch
 
