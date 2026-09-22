@@ -114,7 +114,7 @@ orca-ide orchestration --help 2>&1 | head -30
 orca-ide orchestration worker-start --help 2>&1 | head -15
 ```
 
-If a verb/flag moved, fix `scripts/spawn-implementer.sh` + this file in the same commit, and log the drift in `wiki/dispatch-implement/skill-impact.md`. Verify pass = `bash scripts/check-env.sh` ends PASS and the verb surface still shows every flag the script uses.
+If a verb/flag moved, fix `scripts/spawn-implementer.sh` + this file in the same commit, and log the drift in the **source repo's root wiki**: `~/skills/wiki/dispatch-implement/skill-impact.md` — a repo-root path, not relative to this skill's directory (a relative `wiki/` here ships the wiki inside every installed copy; that already happened once). Verify pass = `bash scripts/check-env.sh` ends PASS and the verb surface still shows every flag the script uses.
 
 **Drift fixes land in the source repo** (`<SKILL_SRC>/`, i.e. `~/skills/in-progress/dispatch-implement/`) followed by `npx skills add -g ./in-progress/dispatch-implement -a pi -y` — never edit the installed copy under `<SKILL_DIR>/`, which the next reinstall silently overwrites.
 
