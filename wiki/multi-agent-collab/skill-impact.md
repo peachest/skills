@@ -9,3 +9,4 @@
 - 提案: /skill:multi-agent-collab 前缀从「每条消息」改为「bootstrap 信号，每个 peer context 只发一次」；回执/闭环/澄清一律裸消息；内嵌 reply 模板去前缀、保留身份签名
 - 落点: SKILL.md 五段模板注释 + 前缀规则 bullet 重写 + reply 模板 bullet 重写 + dispatch contract 第 1 条
 - 验证: 用户实测——A 通知 B、B 回执、A 闭环三步各注入一次 skill，重复注入浪费 token；示例文本（examples.md）本就标注旧前缀，无需改
+- 2026-09-24 | A2A 对照研究收尾（用户裁决）：v3 不立项——净产出仅 ~10 行 diff（身份段 2 字段/REJECTED 词/round N 标注），降级为 patch 候选清单；feat/a2a-alignment 分支与 feat/fetch-article-optimize 已合并/清理 | evidence: challenger 8 findings + Brown Dwarkesh transcript 一手核校 + 56 协议 session 回执形态扫描（自然语言+hash 锚点已稳定涌现，零状态词汇可行） | 研究快照 ~/research/a2a-vs-multi-agent-collab/ 保留全部否决记录 | status: accepted
