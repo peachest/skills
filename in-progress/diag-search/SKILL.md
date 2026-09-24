@@ -9,7 +9,7 @@ Find what the vault already knows about a bug before diagnosing from zero. Pure 
 
 ## Step 1 — Form the query
 
-From the bug at hand, extract: component(s) (hami, nodexpu, dcu, k3s, …), failure type (调度失败, OOM, …), vendor (hygon, nvidia, …), and 2–3 distinctive symptom keywords.
+From the bug at hand, extract: component(s) (scheduler, device-plugin, runtime, k8s distro, …), failure type (scheduling failure, OOM, …), vendor (gpu vendor a, gpu vendor b, …), and 2–3 distinctive symptom keywords.
 
 ## Step 2 — Search by labels, then keywords
 
