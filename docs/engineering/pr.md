@@ -26,13 +26,37 @@ The door call is the leading idea. It turns "is this safe to merge?" from a gut 
 
 ## Common questions
 
+**Can I trust the agent's own door call?**
+
+Not blindly, and that is the point of stating it. The agent that wrote the change is the one grading it, and a self-report is most comfortable exactly when it says "two-way, small blast radius". Reversibility is also often invisible in the diff: as one user put it, "rolling back a commit won't unsend a batch of emails", and a flagged rollout stays two-way only until the first write lands in the new format. The skill gives the agent a definition (destructive actions and hard-to-reverse decisions are one-way), not a checklist, so read the Merge Danger line hardest of all. Two things help: make sure the agent has the [ticket](https://www.aihero.dev/ai-coding-dictionary/ticket) or [spec](https://www.aihero.dev/ai-coding-dictionary/spec) in front of it, not just the diff, and write down the changes your repo always treats as one-way (schema migrations, anything that ships outward or deletes) where the agent will read them before it makes the call.
+
 **Does it open the PR for me?**
 
-No. The main flow ends with [implement](https://aihero.dev/skills-implement) committing to the current branch, and nothing in the set pushes that branch or opens the PR; the requests for a skill that does (a `/to-pr`, or an `implement` option to open a PR instead of committing) are still open proposals. `pr` covers only the body: when you, or an agent you've asked, opens the PR, this is the shape its description takes.
+No. `pr` covers only the body. [implement](https://aihero.dev/skills-implement) ends by committing to the current branch, and requests for a skill or option that opens the PR (a `/to-pr`, or `implement` opening a PR instead of committing) are still open proposals; one user's workaround is a one-sentence local override of `implement` telling it to open a PR. [implement-spec](https://aihero.dev/skills-implement-spec) is the exception: it opens a draft PR when your issue tracker closes work through PRs or when you ask for one. Because `pr` is model-invoked, any time you ask the agent to open a PR, this is the shape its description takes.
+
+**Won't it just produce another wall of text and diagrams?**
+
+That is the failure it is built against, and it can still happen. Users' complaint about agent PR bodies is consistent: "a long summary but all I need to know is what changed, how it was verified, what could break, and whether it's safe to merge." The skill tells the agent to skip preambles, keep prose brief, and pick the smallest view, usually one visual and rarely all of them. If you still get a stack of diagrams, the agent has ignored that; if the body is huge because the diff is huge, the problem is the size of the PR, and `pr` will not split it for you.
+
+**My repo already has a PR template. Which one wins?**
+
+Neither, by default: `pr` carries its own template and does not look for `.github/pull_request_template.md` or anything like it. Several users asked for the skill to honour the repo's template, and left alone, the agent is holding two competing instructions for the same document. Settle it in your repo's agent docs, for example by filling the repo template and putting Summary, Evidence and Merge Danger under it.
+
+**Is the output HTML? Why doesn't the Mermaid diagram render?**
+
+The output is a markdown PR body, not an HTML page. GitHub and GitLab render Mermaid blocks in a PR description, but a terminal does not, so the diagram looks like raw text while the agent is still showing it to you locally. Users on CLI harnesses have worked around that with an ASCII Mermaid renderer or by having the agent attach an HTML version to the PR. Mermaid is one of six views; a call tree, file tree or shaped diff reads the same everywhere.
 
 **Can it sort through the review comments that come back?**
 
-No. It writes the body and stops. Triaging comments from other developers or review bots (which are worth acting on, which are non-issues) has been asked for, and is not what this skill does.
+No. It writes the body and stops. Triaging comments from other developers or review bots (which are worth acting on, which are non-issues) has been asked for more than once, and is not what this skill does.
+
+**Does it keep the body up to date as the PR changes?**
+
+No. It writes the body at one point in time, and a PR that changes under review leaves that body stale. Ask the agent to rewrite the body after a substantial change; it is writing a PR body again, so the same shape applies.
+
+**My change has no UI. What goes in Evidence?**
+
+Everything except the screenshot. The screenshot is the strongest evidence only when the change is visual; for a migration, a background job or a refactor, the evidence is the exact test that failed before and passes now, or the console output that changed. "Tests are green" on its own is a claim, not a before and after.
 
 **Can it mark the body as written by an LLM?**
 

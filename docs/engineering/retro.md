@@ -30,13 +30,33 @@ Before any rule gets written, the violation is classified. A **mechanical** one 
 
 ## Common questions
 
+**Does it write the lint rule itself, or wait for a yes? Can I wire it to run after every session?**
+
+It waits. `retro` only proposes; nothing changes until you pick a candidate, so there's no hand-editing and no auto-applied hook either. That is deliberate: one user asked for exactly this after being "burned by auto-hooks that blocked good changes." Deciding what deserves a permanent check takes judgement, so the skill stays [human-in-the-loop](https://www.aihero.dev/ai-coding-dictionary/human-in-the-loop) and user-invoked. Some users do chain it after every implementation run, but a smooth session has little to teach, and running it on every one mostly produces rules nobody needed. There is no dry-run mode: a proposed check is built like any other code, so try it against the repo before you let it block merges.
+
+**Won't this pile up lint rules forever? Does it ever suggest removing one?**
+
+Partly, and this is its weakest spot. The removal side it has covers prose: no-ops in steering files, and steering in `AGENTS.md` or `CLAUDE.md` that belongs in standards or a check. Those it will flag for deletion when the files are large, judged against the session it is reading, so treat each one as a candidate for the deletion test rather than a verdict. It does not audit the lint rules, hooks, or CI jobs it proposed last month. It sees one session, so it can't tell you a rule has gone noisy or outlived the bug that justified it. Pruning checks is still your job; a rule that fires constantly on good code is the cue.
+
+**Won't it just invent generic advice to fill its categories?**
+
+That's the sharpest critique it gets. One user found that "once the job is finished, the AI tends to forget the struggles from the middle of the session and invents generic advice to satisfy the retro categories." The defence is that every candidate has to come from the session's own record, so the advice is specific to that session. That cuts both ways: it rarely hallucinates something irrelevant, but it can over-index on whatever this one session happened to be about. Discard any candidate you can't trace to a specific moment. Treat the severity order as a first draft too: a quiet, expensive mistake can rank below a loud, cheap one.
+
+**My session is long. Run it now, or start fresh?**
+
+By default it reviews the current session, which is the best case: the struggles are still in the context window. If the session has drifted out of the [smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone) already, [clear](https://www.aihero.dev/ai-coding-dictionary/clearing) and point a fresh `/retro` at the previous session in the session logs instead.
+
 **The agent keeps making the same mistake. Should I add a line to `CLAUDE.md`?**
 
-Usually not, and that's the most common place `retro` pushes back. A line in `CLAUDE.md` is loaded into every session, dilutes everything else in the file, and drifts as the code changes. If the mistake is mechanical, the fix is a check that fails. If it's a judgement call, it goes in the coding standards the reviewer reads. `AGENTS.md` and `CLAUDE.md` are for navigation pointers, and little else.
+Usually not, and that's the most common place `retro` pushes back. A line in `CLAUDE.md` is loaded into every session, dilutes everything else in the file, and drifts as the code changes. If the mistake is mechanical, the fix is a check that fails. If it's a judgement call, it goes in the coding standards the reviewer reads. `AGENTS.md` and `CLAUDE.md` are for navigation pointers, and little else. For the same reason `retro` is not a [memory system](https://www.aihero.dev/ai-coding-dictionary/memory-system): it doesn't store what happened, it changes the environment so it can't happen again.
 
-**Can it clear the no-ops out of my steering files?**
+**My setup mentions `CODING_STANDARDS.md` and I don't have one. Where does it come from?**
 
-Yes, within limits. No-ops (instructions that don't change what the agent does) are one of its categories, and it flags them when the steering files are large and unwieldy. It judges them against the session it is reading, though, so a line that looks dead in one session may matter in a task it didn't cover. Treat a no-op finding as a candidate for the deletion test, not a verdict.
+Nothing ships the file. The first time a session turns up a judgement-call rule for the reviewer, `retro` proposes starting it, and once you accept, [code-review](https://aihero.dev/skills-code-review) reads it from then on. Any other standards doc you already keep, such as `CONTRIBUTING.md`, works the same way.
+
+**How is it different from `improve-codebase-architecture`?**
+
+The input. [improve-codebase-architecture](https://aihero.dev/skills-improve-codebase-architecture) needs nothing but the code and looks for structural improvements to it. `retro` needs a session history, and improves the environment the agent works in rather than the code. They sit side by side; neither replaces the other.
 
 ## It's working if
 
