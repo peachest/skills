@@ -67,7 +67,13 @@ The input. [improve-codebase-architecture](https://aihero.dev/skills-improve-cod
 
 ## Where it fits
 
-`retro` is **periodic maintenance**: run it after a session worth learning from, not on a schedule.
+`retro` is the last step of the main chain, where the flow looks back at itself:
+
+```txt
+grill-with-docs → to-spec → to-tickets → implement → code-review → retro
+```
+
+Run it after a build worth learning from, in the same session or pointed at that session's log. A smooth build can skip it.
 
 - [code-review](https://aihero.dev/skills-code-review) is the reviewer agent `retro` most often tunes: new coding standards land where its Standards axis reads them.
 - [writing-for-agents](https://aihero.dev/skills-writing-for-agents) sets the writing style for every steering file and skill `retro` proposes, and `retro` loads it before it starts.

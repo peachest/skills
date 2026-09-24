@@ -71,7 +71,7 @@ Not by itself. One user's approach is a standing instruction in the repo's agent
 
 ## Where it fits
 
-`pr` closes out the build chain: `to-spec → to-tickets → implement → code-review → pr`. It is model-invoked, so it also fires on its own any time the agent writes a PR body outside that chain.
+`pr` sits between review and retro when the build goes up as a pull request: `to-spec → to-tickets → implement → code-review → pr → retro`. It is model-invoked, so it also fires on its own any time the agent writes a PR body outside that chain.
 
 - [code-review](https://aihero.dev/skills-code-review) runs before it, because a PR body should describe a diff that has already been reviewed.
 - [implement](https://aihero.dev/skills-implement) produces the commits the body describes.
