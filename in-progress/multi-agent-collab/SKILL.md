@@ -8,8 +8,6 @@ allowed-tools: [Bash, Read, Env]
 
 The protocol layer for multi-session collaboration: who talks to whom, in what shape, and how to wait without deadlocking. It runs over herdr or orca — probe the environment first, route the transport by result. Everything below was distilled from 32 real sessions; failure modes carry evidence in [pitfalls.md](references/pitfalls.md).
 
-Task-state vocabulary, round correlation, and dispatch idempotency follow the A2A v1.0 protocol's semantics — see [a2a-alignment.md](references/a2a-alignment.md) before inventing a receipt field or retry rule.
-
 ## Environment & routing
 
 Probe once at session start, before any send:
@@ -108,9 +106,9 @@ Done when: the message is sent and quoting survived (no `unknown option` in the 
 
 ### Steer semantics: what a send to a busy peer means
 
-`agent prompt` types text + Enter into the peer's TUI. In pi, Enter during a running turn queues the message into the peer's **steering queue** — injected after the current tool batch, before the next LLM call. herdr has no followUp mode (queue-until-idle), so a dispatch to a busy peer always lands inside its active task context and the peer may weave both tasks together. **The steering queue is lossy under two verified conditions (pitfall #30)**: the peer's turn aborts mid-queue (partial silent loss), or the peer's pane/agent dies (`agent is no longer running in the target pane` — the whole queue goes with it). Gate-level messages therefore never ride raw steer. → orca: same TUI semantics via `terminal send`; tracked work should use orchestration messages instead — [orca-routing.md §Tracked multi-agent work](references/orca-routing.md#tracked-multi-agent-work-use-orchestration-not-terminal-send). Two mitigations:
+`agent prompt` types text + Enter into the peer's TUI. In pi, Enter during a running turn queues the message into the peer's **steering queue** — injected after the current tool batch, before the next LLM call. herdr has no followUp mode (queue-until-idle), so a dispatch to a busy peer always lands inside its active task context and the peer may weave both tasks together. → orca: same TUI semantics via `terminal send`; tracked work should use orchestration messages instead — [orca-routing.md §Tracked multi-agent work](references/orca-routing.md#tracked-multi-agent-work-use-orchestration-not-terminal-send). Two mitigations:
 
-Default is followUp (`scripts/herdr-send.py <pane> <file>`): polls until idle/done (bounded, default 30min via `HERDR_FOLLOWUP_MS`), then delivers as a clean new task; designed to run under `bg_run` so the turn stays free. Timeout → exit 4, nothing sent. The idle window can be narrow (a turn boundary is enough) — followup catches it. Pass `--steer` ONLY for corrections/blockers/answers you WANT seen mid-task — never for messages a peer will BLOCK on (ACK/GATE decisions/rulings): steer into a long turn can be silently lost (pitfall #30). → orca: orchestration messages queue natively (replay-until-ack), no gate needed.
+Default is followUp (`scripts/herdr-send.py <pane> <file>`): polls until idle/done (bounded, default 30min via `HERDR_FOLLOWUP_MS`), then delivers as a clean new task; designed to run under `bg_run` so the turn stays free. Timeout → exit 4, nothing sent. The idle window can be narrow (a turn boundary is enough) — followup catches it. Pass `--steer` for corrections/blockers/answers you WANT seen mid-task. → orca: orchestration messages queue natively (replay-until-ack), no gate needed.
 - **Corrections, blockers, answers to its questions** → send directly. Steer is exactly right there — you *want* it seen mid-task.
 
 ## Waiting: background-first
@@ -147,7 +145,7 @@ A stuck peer escalates in three steps: nudge once with a short prompt; if silent
 2. `herdr agent read <t> --source recent-unwrapped | grep -a Steering` — the steering marker proves the message reached the peer's screen.
 3. Peer screen content showing it acting on your instructions — the strongest proof; status fields alone are not.
 
-**A `timeout` error is not a delivery failure** — the message is already in the peer's steering queue. Recovery is always `agent get` + `agent read`, never a blind resend. Before resending anything, grep the peer's scrollback to check whether the earlier message arrived, and label the resend ("the previous one may not have arrived — resending"). Exception: if the peer's turn aborted or its pane died meanwhile, the queued message IS gone (pitfall #30) — resend unconditionally after recovery, then verify by grep.
+**A `timeout` error is not a delivery failure** — the message is already in the peer's steering queue. Recovery is always `agent get` + `agent read`, never a blind resend. Before resending anything, grep the peer's scrollback to check whether the earlier message arrived, and label the resend ("the previous one may not have arrived — resending").
 
 Parse every response envelope before trusting it. Success: `{"result":{"agent":{...},"type":"agent_prompted"}}` with status at `result.agent.agent_status` (two levels of nesting). Error envelopes have no `result` key — branch on `error` first, or a parse crash reads as failure and triggers a duplicate send (a real incident).
 
@@ -195,8 +193,8 @@ For coordination that outlives individual messages, prefer files over message-pa
 | `herdr-send.py <pane> <file> [--wait ms]` | `agent prompt` + temp-file quoting + receipt parse | quoting tail-as-flags; envelope conflation; delivery-evidence boilerplate |
 | `herdr-peer.sh <name> <cwd>` | `pane split` + `agent start` two-step | pane_id parse boilerplate |
 
-`scripts/check-env.sh` verifies the herdr-side assumptions only (python3, herdr binary, current-runtime envelope, scripts executable) — the orca branch has no scripts to check. Raw CLI remains valid for anything the scripts don't cover. The mining that sized these tools is re-runnable: `references/mining/mine-herdr-ops.py` (baseline in `mining-evidence-2026-09-20.md`). → orca: no script equivalents — orchestration receipts replace them (see orca-routing §Tracked multi-agent work).
+`scripts/check-env.sh` verifies all three assumptions (herdr executable, server envelope parses, scripts executable). Raw CLI remains valid for anything the scripts don't cover. The mining that sized these tools is re-runnable: `references/mining/mine-herdr-ops.py` (baseline in `mining-evidence-2026-09-20.md`).
 
 ## When something breaks
 
-Open [pitfalls.md](references/pitfalls.md) the moment one of these fires — not after the third retry: a send returns non-zero or prints `unknown option`; a python/JSON parse over herdr output crashes (KeyError/JSONDecodeError); a peer seems stuck or its pane vanished; `pane_not_found`/`timeout` in any envelope. 30 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. For calibration of tone and density when composing or closing — real transcripts of dispatch, reply, integration receipt, termination, peer-to-peer exchange, and the background-first send pattern: [examples.md](references/examples.md).
+Open [pitfalls.md](references/pitfalls.md) the moment one of these fires — not after the third retry: a send returns non-zero or prints `unknown option`; a python/JSON parse over herdr output crashes (KeyError/JSONDecodeError); a peer seems stuck or its pane vanished; `pane_not_found`/`timeout` in any envelope. 26 failure modes with real error output and fixes, grouped: quoting/envelopes, lifecycle, addressing, environment. For calibration of tone and density when composing or closing — real transcripts of dispatch, reply, integration receipt, termination, peer-to-peer exchange, and the background-first send pattern: [examples.md](references/examples.md).
