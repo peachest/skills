@@ -17,7 +17,7 @@ A **bootstrap** produces one thing: the wiki's **initial state plus its pointer*
 | Teaching knowledge for courses | teaching OKB | `academy` | [teaching-okb.md](references/teaching-okb.md) |
 | Single-repo code terrain (module maps, file tables) | **no wiki** — use CodeGraph (`codegraph_*` tools, always current) plus a `CONTEXT.md` for hand-curated glossary | — | — |
 
-The last row is a decision, not a gap: a terrain wiki was tried (ppu-device-plugin, 2026-07) and an audit found agents read it only when a gate forced them — CodeGraph serves the same need live. Do not bootstrap one; route the glossary content into the repo's `CONTEXT.md`.
+The last row is a decision, not a gap: a terrain wiki was tried (one device-plugin repo, 2026-07) and an audit found agents read it only when a gate forced them — CodeGraph serves the same need live. Do not bootstrap one; route the glossary content into the repo's `CONTEXT.md`.
 
 ## 2. Three invariants (every type, before scaffolding)
 

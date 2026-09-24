@@ -2,7 +2,7 @@
 
 For a multi-repo, multi-session engineering effort whose decisions live scattered across per-repo ADRs, ticket trackers, and research docs. The trigger symptom: **parallel sessions re-deriving each other's context** — the effort wiki exists so they read and write one place instead.
 
-Provenance: this design was validated on a real effort (llmops-wiki, 2026-09: 7 repos, 14 bronze / 11 silver in one sitting, peer-audited). This file is the generalization of that run's blueprint.
+Provenance: this design was validated on a real effort (an internal engineering wiki, 2026-09: 7 repos, 14 bronze / 11 silver in one sitting, peer-audited). This file is the generalization of that run's blueprint.
 
 ## 1. Mission doc → `~/handoff/<name>.md`
 
