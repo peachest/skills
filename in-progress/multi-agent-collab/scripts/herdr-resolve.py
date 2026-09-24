@@ -50,6 +50,8 @@ def query_runtime(runtime, query):
         raw = subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout
     except subprocess.TimeoutExpired:
         return None, f"agent list timed out on runtime '{runtime}'"
+    except FileNotFoundError:
+        return None, f"herdr binary not found: {HERDR}"
     try:
         d = json.loads(raw)
     except json.JSONDecodeError:
@@ -101,9 +103,9 @@ def main():
         runtime = argv[i + 1]
         del argv[i:i + 2]
     argv = [a for a in argv if a not in ("--all-runtimes", "--full")]  # --all-runtimes is now the default; accepted for compat
-    if len(argv) != 1:
+    if len(argv) != 1 or not argv[0].strip():
         print("usage: herdr-resolve.py <uuid|pane|cwd|title-fragment> "
-              "[--runtime NAME] [--full]", file=sys.stderr)
+              "[--runtime NAME]", file=sys.stderr)
         sys.exit(3)
     query = argv[0]
 
