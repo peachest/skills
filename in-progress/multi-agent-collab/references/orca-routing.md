@@ -62,31 +62,90 @@ orca terminal read --terminal <handle> --json   # ground truth when detection is
 
 POC-verified against pi (2026-09-20): send may report `observation: unsupported` — fall back to `terminal read` for delivery confirmation instead of trusting the send result. Delivery evidence for a notification: peer flips to `working` right after send (it consumed the message); `wait --for tui-idle` timing out while peer is working is EXPECTED — do not resend.
 
+Stale handle (verified 2026-09-21): prompting a dead/replaced terminal returns `{"code":"terminal_handle_stale", ...}` whose data carries `--retry-request <id> --wait-submit <seconds>` — orca's own replay-until-submit protocol. Recovery = re-issue the EXACT same command with those two flags added (never a fresh request without the ID; that would duplicate the message if the first one landed). Extension users get this handled as a structured error from `orca_send`.
+
 ### Peer migrated herdr → orca
 
 When a peer moves from herdr to orca mid-effort, `herdr-resolve.py` returns count=0 across ALL runtimes — that miss IS the migration signal. Fallback flow (verified 2026-09-21, kueue session): `orca worktree list --json` → find the peer's repo path → `terminal list` → handle → send with `[caller identity]` naming the herdr source address (`herdr:<session>:<pane>`). The reply comes back over the peer's own transport.
 
+### Reply path for migrated peers (both directions)
+
+Identity in `[caller identity]` must name the sender's CURRENT transport address, not a historical one — a stale herdr pane plus a vague "走 orca 可达" fallback cost a real reply (verified 2026-09-21, ppu-device-plugin session: `agent_not_found`, blind resend, groping `herdr --help` for an orca bridge, then a handoff file instead of a reply). Rules:
+
+- orca peer writing to herdr peers: identity carries `orca:<worktree-id>` (displayName) and a reply instruction — reply via `orca terminal list` (worktree → handle) then `orca terminal send --terminal <handle> --enter`.
+- herdr peer replying to a migrated orca peer: use the same fallback flow as above (resolve miss → `orca worktree list` → `terminal list` → send). `herdr --help` has no orca bridge — do not grope there.
+- Before ANY resend, verify the target: `herdr-resolve.py` (herdr) or `orca terminal list` (orca). Blind resends into a migrated peer's old address are always lost.
+
+## Locating an orca worktree (repo/task → id)
+
+Worktree identity is the canonical selector: `id:<repo-id>::<path>` — every other selector (identity:, name:, branch:, issue:, path:) derives from it. Find one by repo/task fragment (verified 2026-09-21, expense session):
+
+```bash
+orca-ide worktree list --json | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+wts = d.get('worktrees') or d.get('result', {}).get('worktrees', [])
+for w in wts:
+    path = w.get('path') or w.get('dir') or ''
+    if 'base-charts' in path:   # ← your repo/task fragment
+        print(json.dumps(w, ensure_ascii=False))"
+```
+
+A worktree created OUTSIDE orca (e.g. via `wt switch -c` in a herdr session) still shows up here — orca watches the filesystem. `--json` shape: `{id: "<repo-id>::<path>", path, displayName, branch, hostId}`; `identity.key` is OPTIONAL (present on managed/child rows, absent on main-repo rows). On Linux the binary is `orca-ide` — that is the SOLE probe (`orca-ide status --json`); bare `orca` is the GNOME screen reader on hosts without the dispatcher shim, so never chain-probe `orca status`.
+
+## Starting a pi session in an orca worktree
+
+Two paths, chosen by whether the worktree already exists:
+
+**A. Existing worktree** (created by herdr-side `wt switch -c`, or reused): create a pi terminal in it, wait for the TUI, then dispatch the bootstrap prompt (verified 2026-09-21, expense session — full chain):
+
+```bash
+orca-ide terminal create --worktree "id:<repo-id>::<path>" --command 'pi' --json
+#   → parse the handle from the result (field name is undocumented; check
+#     result.id AND result.handle). NOTE: --command 'pi' starts a bare pi; pass your
+#     bootstrap prompt via terminal send AFTER tui-idle, not via create.
+#     Omit --title unless you WANT a pinned tab title — a custom title blocks
+#     native pi-title/spinner mirroring (verified 2026-09-16).
+orca-ide terminal wait --terminal <handle> --for tui-idle --timeout-ms 90000 --json   # TUI ready
+orca-ide terminal send --terminal <handle> --text "$(cat /tmp/bootstrap.md)" --enter --json
+sleep 45; orca-ide terminal read --terminal <handle>   # confirm the peer picked it up
+```
+
+**B. New worktree + agent in one step** (fresh task from a charted map):
+
+```bash
+orca-ide worktree create --name <ticket-slug> --repo id:<repo-id> \
+  --agent pi --prompt "<five-part bootstrap>" --setup inherit --json
+```
+
+- `--prompt` carries the five-part bootstrap (map link, which ticket to claim, reply path). `--setup inherit` honors repo setup hooks — this is where `hookSettings.scripts.setup` (e.g. the go.mod-replace symlink fix) runs.
+- Selector sanity: use the SAME transport as the peer — a herdr wayfinder session can call `orca-ide` directly from its shell (same machine); no cross-transport gymnastics needed for creation, only for ongoing conversation.
+
+Wayfinder integration (dev/default-branch session charts the map → implementation sessions claim tickets): after the map/tickets exist, path B is the one-step spawn; path A is for reusing a worktree that already holds prepared state (uncommitted fix, claimed branch).
+
+**The bootstrap prompt (`--prompt` / the send-after-create message) MUST carry `[caller identity]` + a reply instruction** — a peer spawned without it cannot deliver results at all (verified 2026-09-21: an orca-spawned research peer guessed a stale herdr pane, got `agent_not_found`, and only a manual bridge delivered its report). Identity form: `orca:<worktree-id>` when the peer will reply over orca; include the dispatcher's terminal handle or the `terminal list` bridge recipe.
+
 ## Tracked multi-agent work: use Orchestration, not terminal send
 
-Plain `terminal send` is the fire-and-forget tier. For dispatched work with receipts, use
-the orchestration layer — this is the herdr dispatch contract, productized:
+Plain `terminal send` is the fire-and-forget tier. For dispatched work with receipts, use the orchestration layer — this is the herdr dispatch contract, productized. **Verbs verified live on app 1.4.205 (2026-09-21); earlier drafts of this section listed imagined commands — re-verify with `orca-ide orchestration <verb> --help` after any orca upgrade:**
 
 ```bash
 # coordinator side
-orca orchestration run-start --json                      # Run = persistent namespace + inbox
-orca orchestration task-add --run <id> --spec ... --json # Task = spec + deps + six states
-orca orchestration dispatch --task <id> --worktree <sel> --json
+orca orchestration run-create --objective "<goal>" --json          # Run = persistent namespace + inbox
+orca orchestration task-create --spec "<spec>" --run <run_id> --json   # Task = spec + states
+orca-ide worker-start --worktree <selector|new-child> --json        # placement lives on worker-start, not dispatch
 
 # consumption: FIFO replay-until-ack — a timeout never means "lost"
-orca orchestration check --wait --types worker_done --ack --json
-orca orchestration check --peek --json                   # look without consuming
+orca orchestration check --wait --types worker_done --json           # returns the batch incl. delivery ids
+orca orchestration check --ack <delivery_id> --json                  # ack needs the delivery id
+orca orchestration check --peek --json                               # look without consuming
 
 # blocking Q&A (contact_supervisor equivalent)
 # worker side: ask is only valid inside an ACTIVE dispatch — pass the
-# --dispatch-capability token from your worker preamble
-orca orchestration ask --dispatch-capability <token-from-preamble> --options "a,b,c" --timeout-ms 600000
+# --dispatch-capability token from your worker preamble; --question is REQUIRED
+orca orchestration ask --dispatch-capability <token-from-preamble> --question "<text>" --options "a,b,c" --timeout-ms 600000
 # coordinator side: resolve the gate the ask created
-orca orchestration gate-resolve --gate <id> --choice <c>
+orca orchestration gate-resolve --id <gate_id> --resolution "<text>"
 ```
 
 Worker contract replaces our manual receipt discipline: exactly one `worker_done
