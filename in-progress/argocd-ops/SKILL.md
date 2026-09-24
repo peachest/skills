@@ -46,7 +46,7 @@ $ARGOCD_BIN login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password "$ARGOCD
   $( [ "$ARGOCD_GRPC_WEB" = true ] && echo --grpc-web )
 ```
 
-The context persists in `~/.argocd/config` — later sessions skip login. If login fails with `Invalid username or password`, the real password was rotated: ask the cluster operator; do not trust `argocd-initial-admin-secret` blindly (it can be stale).
+The context persists in `~/.argocd/config` — later sessions skip login. Check CLI availability with `command -v argocd`; when the CLI is absent, everything in this playbook still works through `kubectl` on the Application CR, including triggering a sync via the `operation` patch (escalation ladder rung 4). If login fails with `Invalid username or password`, the real password was rotated: ask the cluster operator; the `argocd-initial-admin-secret` holds the install-time password and is not updated on rotation.
 
 Completion criterion: `argocd app list` returns the application table.
 
@@ -61,7 +61,7 @@ $KUBECTL -n $ARGOCD_NS patch application <app> --type merge \
   -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
 ```
 
-Then re-read status (step 1). With auto-sync enabled the app converges by itself; sync typically completes within a minute or two, during which brief OutOfSync/Degraded states are normal — wait one auto-sync cycle before diagnosing further.
+Then re-read status (step 1). With auto-sync enabled the app converges by itself; sync typically completes within a minute or two, during which brief OutOfSync/Degraded states are normal — wait one auto-sync cycle before diagnosing further. If the status still shows the old content after a full cycle, walk the stale-manifest-cache escalation ladder (first Troubleshooting entry).
 
 Completion criterion: app reaches its post-refresh steady state (Synced again, or a stable list of genuinely conflicting resources).
 
@@ -90,11 +90,60 @@ $KUBECTL -n $ARGOCD_NS exec deploy/argocd-server -- \
 
 Completion criterion: the actual resource-level differences are shown (or convergence confirmed by empty output).
 
-## Pitfalls
+## Troubleshooting
+
+Each entry is symptom → forensics → fix. Start from the symptom you observe.
 
 ### Same-version republish
 
 Chart re-published under an existing version tag → ArgoCD cache stale → app `Synced` but cluster lacks the new content. Symptom: published chart has resource X, `kubectl get` says X not found, app shows Synced. Fix: hard refresh (playbook step 3).
+
+### Stale manifest cache: escalation ladder
+
+**Symptom:** the chart was republished (same version tag), a hard refresh already ran, yet the app keeps serving the old manifests — `kubectl get` lacks the new resource while status stays `Synced`, or syncs keep succeeding without deploying anything. The manifest cache (repo-server memory + Redis) still holds the stale render.
+
+Walk the ladder one rung at a time, re-reading status (step 1) after each:
+
+1. **Hard refresh** (playbook step 3), wait one auto-sync cycle.
+2. **Restart the repo-server** — clears its in-memory cache:
+
+   ```bash
+   $KUBECTL -n $ARGOCD_NS rollout restart deploy/argocd-repo-server
+   $KUBECTL -n $ARGOCD_NS rollout status deploy/argocd-repo-server
+   ```
+
+3. **Purge the Redis manifest cache** — auth with the pod's own env (the secret value may differ from a locally guessed one):
+
+   ```bash
+   $KUBECTL -n $ARGOCD_NS exec deploy/argocd-redis -- sh -c \
+     'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "mfst|*"'   # inspect first
+   $KUBECTL -n $ARGOCD_NS exec deploy/argocd-redis -- sh -c \
+     'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "mfst|*" | xargs redis-cli -a "$REDIS_PASSWORD" del'
+   ```
+
+   Manifest entries live under `mfst|*` (and app metadata under `app|*`). Then trigger another hard refresh so the cache repopulates from git.
+4. **Force a sync via the Application CR** — bypasses both the CLI and cached state; converges in seconds:
+
+   ```bash
+   $KUBECTL -n $ARGOCD_NS patch application <app> --type merge \
+     -p '{"operation":{"sync":{}}}'
+   ```
+
+Completion criterion: step 1 shows the new content live on the cluster. Rungs 2–4 exist so a stuck cache costs minutes, not a rediscovery session.
+
+### Editing helm parameters on the Application CR
+
+**Symptom:** one app needs a chart value changed (a helm parameter) without a chart edit.
+
+`spec.source.helm.parameters` is a JSON array, and JSON Patch matches array elements only by index — read the current array, transform it, and write the whole array back:
+
+```bash
+$KUBECTL -n $ARGOCD_NS get application <app> -ojson | python3 -c "..."   # read → modify → write
+```
+
+Guardrail: with automated sync enabled, CR-level parameter edits are reverted at the next git-triggered sync (the controller re-applies the git-declared spec). For a test window either patch, test, and re-apply after each sync, or make the change where the controller reads it — the chart values in git. Long-lived overrides belong in git, not on the CR.
+
+Completion criterion: the app's rendered manifests reflect the new parameter, and you know whether the next sync will keep it.
 
 ### Chart chain
 
@@ -112,7 +161,7 @@ $KUBECTL patch <resource> --type=json -p '[{"op":"remove","path":"<field-path>"}
 
 `RepeatedResourceWarning` in app conditions: the same resource is defined twice among the app's sources (typical: the same CRD in both the umbrella chart and a subchart). The conflicting definitions can hold the resource OutOfSync indefinitely. This is a chart packaging bug, not an ArgoCD setting — fix the chart, deduplicate the resource.
 
-### Auto-sync vs out-of-band kubectl on shared objects (the testing trap)
+### Auto-sync vs out-of-band kubectl on shared objects
 
 When a cluster hosts both an ArgoCD-managed app and kubectl-direct test deployments that share **fixed-name cluster-scoped objects** (webhook configurations, ClusterRoles, CRDs — names not derived from the release name), every git-triggered sync:
 
@@ -130,13 +179,13 @@ $KUBECTL -n $ARGOCD_NS patch application <app> --type=json \
 
 Re-enable by restoring the original `syncPolicy` (read it before patching!). Long-term fix: charts should derive the shared object names from the release (webhookNameOverride etc.) so test and prod deployments never collide.
 
-### Helm hook jobs re-run on every sync
+### Helm hook jobs run on every sync
 
-`helm.sh/hook: post-install,post-upgrade` jobs (certgen and friends) re-run whenever ArgoCD syncs the chart. Their side effects (writing caBundle, creating secrets) overwrite whatever another owner wrote since the last sync. Symptom signature: a certificate's notBefore date suddenly steps backwards. When diagnosing webhook TLS issues after a sync, check whether a hook job ran.
+`helm.sh/hook: post-install,post-upgrade` jobs (certgen and friends) run whenever ArgoCD syncs the chart. Their side effects (writing caBundle, creating secrets) overwrite whatever another owner wrote since the last sync. Symptom signature: a certificate's notBefore date suddenly steps backwards. When diagnosing webhook TLS issues after a sync, check whether a hook job ran.
 
-### cert-manager cainjector rewrites caBundle behind your back
+### cert-manager cainjector owns caBundle
 
-A webhook configuration annotated `cert-manager.io/inject-ca-from` gets its `clientConfig.caBundle` continuously rewritten by the cainjector — ANY value you or a certgen job write there is reverted within seconds. Symptom: you patch caBundle with the right CA, read it back, and it is the old CA again. Forensics: `managedFields` shows `cert-manager-cainjector Update` owning `clientConfig`. Fix: remove the annotation (`kubectl annotate <webhookconfig> cert-manager.io/inject-ca-from-`) — only then can another owner hold the field. Note the annotation can come from the chart's default `injectCert: CertManager` value and survives kubectl apply of a manifest rendered with a different value (annotations not in last-applied are preserved).
+A webhook configuration annotated `cert-manager.io/inject-ca-from` gets its `clientConfig.caBundle` continuously rewritten by the cainjector — the cainjector owns that field, so any other value written there reverts within seconds. Symptom: you patch caBundle with the right CA, read it back, and it is the old CA again. Forensics: `managedFields` shows `cert-manager-cainjector Update` owning `clientConfig`. Fix: remove the annotation (`kubectl annotate <webhookconfig> cert-manager.io/inject-ca-from-`) — only then can another owner hold the field. Note the annotation can come from the chart's default `injectCert: CertManager` value and survives kubectl apply of a manifest rendered with a different value (annotations not in last-applied are preserved).
 
 ### Stale admin secret
 
