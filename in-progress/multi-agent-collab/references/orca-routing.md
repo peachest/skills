@@ -70,7 +70,7 @@ When a peer moves from herdr to orca mid-effort, `herdr-resolve.py` returns coun
 
 ### Reply path for migrated peers (both directions)
 
-Identity in `[caller identity]` must name the sender's CURRENT transport address, not a historical one — a stale herdr pane plus a vague "走 orca 可达" fallback cost a real reply (verified 2026-09-21, ppu-device-plugin session: `agent_not_found`, blind resend, groping `herdr --help` for an orca bridge, then a handoff file instead of a reply). Rules:
+Identity in `[caller identity]` must name the sender's CURRENT transport address, not a historical one — a stale herdr pane plus a vague "走 orca 可达" fallback cost a real reply (verified 2026-09-21, <peer-repo> session: `agent_not_found`, blind resend, groping `herdr --help` for an orca bridge, then a handoff file instead of a reply). Rules:
 
 - orca peer writing to herdr peers: identity carries `orca:<worktree-id>` (displayName) and a reply instruction — reply via `orca terminal list` (worktree → handle) then `orca terminal send --terminal <handle> --enter`.
 - herdr peer replying to a migrated orca peer: use the same fallback flow as above (resolve miss → `orca worktree list` → `terminal list` → send). `herdr --help` has no orca bridge — do not grope there.
@@ -87,7 +87,7 @@ d = json.load(sys.stdin)
 wts = d.get('worktrees') or d.get('result', {}).get('worktrees', [])
 for w in wts:
     path = w.get('path') or w.get('dir') or ''
-    if 'base-charts' in path:   # ← your repo/task fragment
+    if '<repo-slug>' in path:   # ← your repo/task fragment
         print(json.dumps(w, ensure_ascii=False))"
 ```
 
