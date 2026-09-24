@@ -39,6 +39,11 @@ python3 <SKILL_DIR>/scripts/fetch.py \
 - **Timeouts**: `fetch.py` has no built-in timeout and bilibili downloads can
   exceed 2 min. Run long fetches (videos >30 min) through a background task
   with an explicit timeout (≥600s), not a foreground bash call.
+- **Output root**: temp artifacts are written under `FETCH_ARTICLE_TMP_ROOT`
+  (default `~/tmp`), never `/tmp`. Override the env var to relocate.
+- **stdout purity**: with `--json`, stdout contains only the JSON payload;
+  progress/diagnostic lines go to stderr, so `fetch.py <url> --json | jq`
+  works directly.
 
 ## Output Format
 
@@ -50,11 +55,14 @@ python3 <SKILL_DIR>/scripts/fetch.py \
   "publish_time": "2026-06-03",
   "body_text": "# Title\n\nFull article in Markdown...",
   "images": ["https://..."],
-  "md_path": "/tmp/fetch-article-xxx/article.md",
+  "md_path": "~/tmp/fetch-article-xxx/article.md",
   "duration_sec": 0,
-  "raw_path": "/tmp/fetch-article-xxx/"
+  "raw_path": "~/tmp/fetch-article-xxx/"
 }
 ```
+
+Temp artifacts always go under `FETCH_ARTICLE_TMP_ROOT` (default `~/tmp`),
+never `/tmp` — see Operational Notes.
 
 ## Domain Routing
 
@@ -63,7 +71,7 @@ python3 <SKILL_DIR>/scripts/fetch.py \
 | `mp.weixin.qq.com` | `adapters/weixin.py` | curl + Referer header → to_md.py (markitdown) |
 | `bilibili.com/video` | `adapters/bilibili.py` | WBI-signed API → download audio only |
 | `youtube.com` / `youtu.be` | `adapters/youtube.py` | yt-dlp subtitles if available, else best-audio download |
-| anything else | `adapters/generic.py` | Scrapling CLI first, curl + html2text fallback |
+| anything else | `adapters/generic.py` | Scrapling CLI first, curl + html2text fallback, r.jina.ai reader proxy as last resort (Cloudflare bypass) |
 
 ## Adapters
 
@@ -90,10 +98,18 @@ subtitles → downloads `bestaudio` as `audio.mp4` for ASR (set
 `WHISPER_LANG=en` — the transcriber's default is zh). Proxy: export
 `https_proxy` when YouTube is not directly reachable.
 
-### Generic (Scrapling + curl)
+### Generic (Scrapling + curl + r.jina.ai)
 
-Try `scrapling extract get <URL> content.md` first. If Scrapling is not
-installed or fails, fall back to `curl` + HTML tag stripping.
+Three-layer fallback chain:
+
+1. `scrapling extract get <URL> content.md`
+2. `curl` + HTML tag stripping — if the response is an anti-bot challenge
+   page (Cloudflare "Enable JavaScript and cookies", "Just a moment", …),
+   this layer reports failure and falls through
+3. `r.jina.ai` reader proxy — `curl https://r.jina.ai/<URL>` returns the
+   page as Markdown (`Title:` / `URL Source:` / `Markdown Content:`),
+   bypassing Cloudflare-protected sites (verified against openai.com).
+   No install needed; may rate-limit without a `JINA_API_KEY`.
 
 Scrapling handles:
 
@@ -123,6 +139,8 @@ can adopt it as needed.
 - requests (for WBI-signed Bilibili API)
 - yt-dlp (for YouTube)
 - scrapling (optional, for generic fallback with anti-bot)
+- r.jina.ai (optional, no install — network fallback for Cloudflare-protected
+  sites; set `JINA_API_KEY` to avoid anonymous rate limits)
 - curl (system)
 
 Install scrapling:

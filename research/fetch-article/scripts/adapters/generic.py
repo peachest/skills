@@ -2,11 +2,15 @@
 """
 Generic webpage adapter.
 
-Strategy: Try Scrapling CLI first, fall back to curl + HTML tag stripping.
+Strategy: Try Scrapling CLI first, then curl + HTML tag stripping,
+then r.jina.ai reader proxy (bypasses Cloudflare-protected sites
+where direct curl only gets a JS-challenge shell page).
 
 Requires:
   pip install "scrapling[all]"
   scrapling install
+  (r.jina.ai needs no install — it is a network fallback, but may
+  rate-limit without a JINA_API_KEY.)
 
 Usage (called by fetch.py, not directly):
     python3 -c "from adapters.generic import fetch; print(fetch('https://example.com'))"
@@ -17,20 +21,35 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import html as html_mod
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).parent.resolve()
+sys.path.insert(0, str(SCRIPT_DIR))
+
+import paths  # noqa: E402
+
+# Markers of an anti-bot challenge page (Cloudflare & friends) that curl
+# cannot solve. When one appears in the fetched HTML, treat the fetch as
+# failed so the next fallback layer (r.jina.ai) gets a chance.
+_CF_MARKERS = (
+    "Enable JavaScript and cookies to continue",
+    "Just a moment...",
+    "Attention Required",
+    "challenge-platform",
+    "cf-browser-verification",
+)
 
 
 def fetch(url: str, output_dir: str = None) -> dict:
     """
     Fetch a generic webpage.
 
-    Tries Scrapling CLI first. If Scrapling is not installed or fails,
-    falls back to curl + HTML tag stripping.
+    Tries Scrapling first, then curl, then r.jina.ai reader proxy.
+    Returns the first non-None result.
     """
     if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix="fetch-generic-")
+        output_dir = paths.default_output_dir("fetch-generic-")
     else:
         os.makedirs(output_dir, exist_ok=True)
 
@@ -39,15 +58,22 @@ def fetch(url: str, output_dir: str = None) -> dict:
     if result is not None:
         return result
 
-    # Fallback: curl
+    # Fallback 1: curl direct
     print(f"[generic] Scrapling unavailable, falling back to curl…",
           file=sys.stderr)
     result = _try_curl(url, output_dir)
     if result is not None:
         return result
 
+    # Fallback 2: r.jina.ai reader proxy (Cloudflare bypass)
+    print(f"[generic] curl direct failed/challenge page, trying r.jina.ai…",
+          file=sys.stderr)
+    result = _try_jina(url, output_dir)
+    if result is not None:
+        return result
+
     return {
-        "error": "All fetch methods failed",
+        "error": "All fetch methods failed (scrapling, curl, r.jina.ai)",
         "title": "",
         "author": "",
         "publish_time": "",
@@ -113,6 +139,14 @@ def _try_curl(url: str, output_dir: str) -> dict | None:
         with open(html_path, "r", encoding="utf-8", errors="replace") as f:
             raw = f.read()
 
+        # Anti-bot challenge shell? Then the stripped text would be garbage —
+        # fail this layer so r.jina.ai gets a chance.
+        for marker in _CF_MARKERS:
+            if marker in raw:
+                print(f"[generic] curl got challenge page ({marker!r})",
+                      file=sys.stderr)
+                return None
+
         # Extract title
         title = ""
         title_m = re.search(r'<title[^>]*>([^<]+)</title>', raw, re.IGNORECASE)
@@ -159,3 +193,63 @@ def _extract_title_from_md(md_text: str) -> str:
         if line.startswith("## "):
             return line[3:].strip()
     return ""
+
+
+def _try_jina(url: str, output_dir: str) -> dict | None:
+    """Last-resort fallback: r.jina.ai reader proxy.
+
+    Effective against Cloudflare-protected sites where direct curl only
+    returns a JS-challenge shell. Output format:
+      Title: …\nURL Source: …\nMarkdown Content:\n<body markdown>
+    """
+    md_path = os.path.join(output_dir, "jina.md")
+
+    try:
+        result = subprocess.run(
+            ["curl", "-sL", "--max-time", "90",
+             "-o", md_path,
+             f"https://r.jina.ai/{url}"],
+            capture_output=True, text=True, timeout=100,
+        )
+        if result.returncode != 0 or not os.path.exists(md_path):
+            print(f"[generic] r.jina.ai curl failed: {result.stderr[:200]}",
+                  file=sys.stderr)
+            return None
+
+        with open(md_path, "r", encoding="utf-8", errors="replace") as f:
+            raw = f.read()
+
+        title, body = _parse_jina(raw)
+        if len(body) < 30:
+            print(f"[generic] r.jina.ai returned empty/too-short body "
+                  f"({len(body)} chars)", file=sys.stderr)
+            return None
+
+        print(f"[generic] r.jina.ai succeeded ({len(body)} chars)",
+              file=sys.stderr)
+        return {
+            "title": title,
+            "author": "",
+            "publish_time": "",
+            "body_text": body,
+            "images": [],
+        }
+
+    except Exception as e:
+        print(f"[generic] r.jina.ai error: {e}", file=sys.stderr)
+
+    return None
+
+
+def _parse_jina(raw: str) -> tuple[str, str]:
+    """Parse r.jina.ai reader output into (title, markdown body)."""
+    title = ""
+    title_m = re.search(r"^Title:\s*(.*)$", raw, re.MULTILINE)
+    if title_m:
+        title = html_mod.unescape(title_m.group(1).strip())
+
+    if "Markdown Content:" in raw:
+        body = raw.split("Markdown Content:", 1)[1].strip()
+    else:
+        body = raw.strip()
+    return title, body

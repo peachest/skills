@@ -7,13 +7,18 @@ Usage:
 
 Routes to the right adapter by URL pattern, outputs structured JSON to
 stdout or plain text with --text.
+
+Output discipline: stdout carries ONLY the payload (JSON/text); all
+progress and diagnostic logs go to stderr, so `--json | jq` works directly.
+
+Temp artifacts are written under FETCH_ARTICLE_TMP_ROOT (default ~/tmp),
+never /tmp.
 """
 
 import argparse
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -22,6 +27,8 @@ ADAPTERS_DIR = SCRIPT_DIR / "adapters"
 
 sys.path.insert(0, str(ADAPTERS_DIR))
 sys.path.insert(0, str(SCRIPT_DIR))
+
+import paths  # noqa: E402  (needs SCRIPT_DIR on sys.path first)
 
 
 def classify_url(url: str) -> str:
@@ -53,7 +60,7 @@ def main():
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
     else:
-        output_dir = tempfile.mkdtemp(prefix="fetch-article-")
+        output_dir = paths.default_output_dir("fetch-article-")
 
     # Import adapter by name
     try:
