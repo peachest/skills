@@ -13,10 +13,13 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+
+import paths  # noqa: E402
+
 TO_MD_PY = SCRIPT_DIR.parent / "to_md.py"
 
 
@@ -27,7 +30,7 @@ def fetch(url: str, output_dir: str = None) -> dict:
     Returns dict with title, author, publish_time, body_text (markdown), images.
     """
     if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix="fetch-weixin-")
+        output_dir = paths.default_output_dir("fetch-weixin-")
     else:
         os.makedirs(output_dir, exist_ok=True)
 
