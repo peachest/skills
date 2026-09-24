@@ -110,6 +110,8 @@ Every gap found by the five checks gets classified into one of four wayfinder ti
 
 ## Report
 
+Review vocabulary — ground truth, bearing, waymark, route — describes this skill's process. It stays here. The report the user reads follows the project's output rules: plain language, complete causal sentences, no compressed jargon; state each gap as a plain-language problem ("the spec claims X, the code does Y") rather than a process label ("bearing mismatch").
+
 Present the five check reports under five headings (`## 1 — Ground truth`, etc.), verbatim or lightly cleaned from the sub-agent outputs.
 
 Then a **classification table** — one row per gap:
