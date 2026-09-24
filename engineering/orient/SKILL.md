@@ -52,3 +52,7 @@ The bearing lives in the session context and carries into the next skill. If way
 
 - [ ] Bearing produced: terms, constraints, conventions, seams, landmarks, waymarks, gaps each covered, every item carrying its source.
 - [ ] Calibration produced: over-specified and under-specified points named.
+
+## User-facing output
+
+Bearing, waymark, seams, calibration: these words name this skill's process steps. They stay in the process. Reports, summaries, and deliverables the user reads follow the project's output rules — plain language, complete causal sentences, one name per thing. Where a navigation term would appear in user-visible text, write its plain meaning instead (calibration = "the decisions I need from you"; seams = "the places where two components meet").
