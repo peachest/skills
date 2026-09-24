@@ -22,7 +22,7 @@ Exit codes: 0 delivered · 1 usage · 2 herdr error / bad envelope · 3 rejected
 Note: a --wait timeout is reported as timeout, NOT failure — the message is already
 queued in the peer's steering queue (pitfall #11); recovery is agent get + read.
 """
-import json, os, re, subprocess, sys
+import json, os, re, subprocess, sys, time
 
 HERDR = os.environ.get("HERDR_BIN", "herdr")
 
@@ -65,10 +65,12 @@ def main():
     target, source = args
 
     if from_id:
-        # protocol shape guard (pitfall #28): prepend the caller-identity section
-        # so improvised dispatches can't drop it; reply path comes from the pane.
+        # protocol shape guard (pitfall #28): identity + reply path must both land.
+        # Fail fast on a pane-less --from: the reply command would be unwritable.
         mm = re.search(r'\(([^)]+)\)', from_id)
-        pane = mm.group(1) if mm else "?"
+        if not mm:
+            fail(1, f'--from must be "name (pane)" — got {from_id!r} without a pane; '
+                    'the peer could not reply')
 
     if source == "-":
         text = sys.stdin.read()
@@ -76,8 +78,8 @@ def main():
         try:
             with open(source, encoding="utf-8") as fh:
                 text = fh.read()
-        except OSError as ex:
-            fail(1, f"cannot read message file: {ex}")
+        except (OSError, UnicodeDecodeError) as ex:
+            fail(1, f"cannot read message file: {ex} — note: the 2nd arg is a message FILE path; inline text goes via stdin: printf '%s' \"text\" | herdr-send.py <pane> -")
     if not text.strip():
         fail(1, "empty message")
     if from_id:
@@ -88,31 +90,62 @@ def main():
             fail(1, f'--from must be "name (pane)" — got {from_id!r} without a pane; '
                     'the peer could not reply')
         pane = mm.group(1)
-        text = (f"[caller identity] I am {from_id}; reach me at pane {pane}\n\n"
+        # reply must reach the SENDER's runtime: bare `herdr` follows the
+        # replier's own HERDR_SOCKET_PATH (pitfall #27), so always qualify.
+        my_rt = os.environ.get("HERDR_SESSION") or "default"
+        reply_cmd = f"herdr --session {my_rt} agent prompt {pane}"
+        text = (f"[caller identity] I am {from_id}; reach me at herdr:{my_rt}:{pane}\n\n"
                 + text
-                + f"\n\n[output + reply] reply via: herdr agent prompt {pane} \"<summary + artifact path>\"")
+                + f"\n\n[output + reply] reply via: {reply_cmd} \"<summary + artifact path>\"")
 
+    # target runtime: --runtime overrides, else default to the SENDER's runtime
+    # ($HERDR_SESSION) — same-runtime dispatch is the common case; a bare herdr
+    # would instead follow HERDR_SOCKET_PATH, which is not always the sender's
+    # logical runtime (pitfall #27).
+    runtime = runtime or os.environ.get("HERDR_SESSION")
     session_args = ["--session", runtime] if runtime else []
 
     if followup:  # followUp: idle/done gate BEFORE send (pitfall #24 mitigation)
+        # get-poll instead of `agent wait`: wait's target resolution lags for
+        # freshly started agents (verified 2026-09-23 — `agent get` finds the
+        # pane while `agent wait` errors agent_not_found), and get uses the
+        # same envelope path as the receipt below.
         fu_ms = int(os.environ.get("HERDR_FOLLOWUP_MS", "1800000"))
-        wcmd = [HERDR] + session_args + ["agent", "wait", target,
-               "--until", "idle", "--until", "done", "--timeout", str(fu_ms)]
-        try:
-            w = subprocess.run(wcmd, capture_output=True, text=True,
-                               timeout=fu_ms / 1000 + 60)
-        except subprocess.TimeoutExpired:
-            fail(4, f"bash-level timeout during followup wait ({fu_ms}ms)")
-        try:
-            wd = json.loads(w.stdout.strip() or w.stderr.strip())
-        except json.JSONDecodeError:
-            fail(2, f"non-JSON from agent wait: {(w.stdout or w.stderr)[:300]}")
-        if "error" in wd:  # error-first (pitfall #5); note: `wait` exits 0 even on error
-            wcode = (wd["error"] or {}).get("code", "")
-            if wcode == "timeout":
-                fail(4, f"peer still busy after {fu_ms}ms — NOT sent; pass --steer to "
-                        "deliver mid-task deliberately")
-            fail(2, f"agent wait error: {wd['error'].get('message', wd['error'])}")
+        deadline = time.time() + fu_ms / 1000
+        started = time.time()
+        seen = False  # agent seen at least once → later errors mean it died (pitfall #30)
+        ready = False
+        while time.time() < deadline:
+            g = subprocess.run([HERDR] + session_args + ["agent", "get", target],
+                               capture_output=True, text=True, timeout=30)
+            try:
+                gd = json.loads(g.stdout.strip() or g.stderr.strip())
+            except json.JSONDecodeError:
+                gd = {}
+            if "error" in gd:
+                ecode = (gd["error"] or {}).get("code", "")
+                if ecode == "agent_not_found" and seen:
+                    fail(2, "peer disappeared during followUp wait (pitfall #30: pane/agent "
+                            "death loses queued messages) — NOT sent")
+                if ecode == "agent_not_found":
+                    # deterministic check: does the PANE exist? missing pane = invalid
+                    # target (exit now); existing pane = fresh-agent routing lag (wait)
+                    pl = subprocess.run([HERDR] + session_args + ["pane", "list"],
+                                        capture_output=True, text=True, timeout=30)
+                    if target not in (pl.stdout or ""):
+                        fail(2, f"agent target {target} not found — the pane does not exist "
+                                f"in this runtime ({(gd['error'] or {}).get('message', '')[:120]})")
+                time.sleep(2)
+                continue
+            seen = True
+            status = ((gd.get("result") or {}).get("agent") or {}).get("agent_status", "")
+            if status in ("idle", "done"):
+                ready = True
+                break
+            time.sleep(2)
+        if not ready:
+            fail(4, f"peer still busy/unreachable after {fu_ms}ms — NOT sent; pass --steer to "
+                    "deliver mid-task deliberately")
 
     cmd = [HERDR]
     if runtime:

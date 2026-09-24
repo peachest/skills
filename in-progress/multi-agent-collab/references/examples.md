@@ -1,6 +1,6 @@
 # Examples — real transcripts, lightly trimmed
 
-Six transcripts from real collaborations (2026-08 ~ 2026-09), each annotated with the protocol element it demonstrates. Use as calibration for tone and density, not as templates to copy verbatim. Note: these transcripts predate the multi-agent-collab skill and show the old `/skill:herdr` prefix — current first-message prefix is `/skill:multi-agent-collab` (the receiver then pulls the herdr skill for CLI mechanics).
+Six transcripts from real collaborations (2026-08 ~ 2026-09), each annotated with the protocol element it demonstrates. Use as calibration for tone and density, not as templates to copy verbatim. Note: these transcripts predate the multi-agent-collab skill and show the old `/skill:herdr` prefix — current first-message prefix is `/skill:multi-agent-collab`. They ALSO predate the bare-later-messages rule: replies and receipts here still carry a `/skill:` prefix, which current protocol forbids (later messages go bare; the prefix would re-inject the sender). Calibrate tone and density only — never copy the prefixes or reply-command syntax from these transcripts.
 
 ## 1. Dispatch with the full contract (icc leader → cost-fix peer)
 

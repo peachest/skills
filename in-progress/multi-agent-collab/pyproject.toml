@@ -1,0 +1,15 @@
+[project]
+name = "multi-agent-collab"
+version = "1.0.0"
+description = "Peer collaboration protocol skill (herdr + orca dual-transport) with E2E tests"
+requires-python = ">=3.10"
+dependencies = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# E2E tests need a live herdr server; they bootstrap their own isolated
+# runtime session (collab-e2e) and tear it down. Slow LLM-round tests are
+# gated behind RUN_SLOW_E2E=1.
+markers = [
+    "slow: tests that trigger real LLM rounds in peer sessions (set RUN_SLOW_E2E=1)",
+]

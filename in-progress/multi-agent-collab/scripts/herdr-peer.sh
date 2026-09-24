@@ -34,4 +34,4 @@ if [ -n "${WAIT:-}" ]; then
   "$HERDR" agent wait "$PANE_ID" --until idle --timeout "$WAIT" >/dev/null 2>&1 || true
 fi
 
-printf '{"pane_id":"%s","name":"%s","cwd":"%s"}\n' "$PANE_ID" "$NAME" "$CWD"
+python3 -c 'import json,sys; print(json.dumps({"pane_id":sys.argv[1],"name":sys.argv[2],"cwd":sys.argv[3]}))' "$PANE_ID" "$NAME" "$CWD"
