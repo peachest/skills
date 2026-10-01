@@ -10,3 +10,9 @@
 - 落点: SKILL.md 五段模板注释 + 前缀规则 bullet 重写 + reply 模板 bullet 重写 + dispatch contract 第 1 条
 - 验证: 用户实测——A 通知 B、B 回执、A 闭环三步各注入一次 skill，重复注入浪费 token；示例文本（examples.md）本就标注旧前缀，无需改
 - 2026-09-24 | A2A 对照研究收尾（用户裁决）：v3 不立项——净产出仅 ~10 行 diff（身份段 2 字段/REJECTED 词/round N 标注），降级为 patch 候选清单；feat/a2a-alignment 分支与 feat/fetch-article-optimize 已合并/清理 | evidence: challenger 8 findings + Brown Dwarkesh transcript 一手核校 + 56 协议 session 回执形态扫描（自然语言+hash 锚点已稳定涌现，零状态词汇可行） | 研究快照 ~/research/a2a-vs-multi-agent-collab/ 保留全部否决记录 | status: accepted
+
+## 2026-09-24 peer 拓扑切换新 tab（用户拍板）
+- 提案: peer 创建默认从 pane split 改为开新 tab，指向新 to-peer skill（herdr-tab-peer.sh）；SKILL.md bootstrap 小节加一行，pane split 降级为用户显式要求时的 legacy fallback
+- 落点: SKILL.md "Bootstrap a named peer" 首行重写
+- 验证: to-peer tests/test.sh 9/9 + live smoke；两个 skill 均重装全局
+- 状态: accepted
