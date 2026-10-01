@@ -52,7 +52,7 @@ Three roles:
 - **Peer** — specialist worker (researcher, fixer, writer). Verifies incoming claims against sources before acting, pushes back with file:line evidence, and never answers a user-facing question aimed at another session's user — route it back instead. When a peer's work is being systematically undone by another session (directional conflict, not an accidental touch), it stops, asks the other session's goal over herdr, and treats the answer as conflicting directives rather than hostility — resolve jointly or escalate to the user; a peer that keeps pushing harder converts a routing problem into a turf war.
 - **Explorer** — solo session using the multiplexer (whichever environment resolved) for inspection only. No protocol applies.
 
-Bootstrap a named peer (names survive pane churn; pane IDs do not — see pitfalls #16). One step: `scripts/herdr-peer.sh <name> <repo-cwd> [right|down]` (wraps split + start + pane_id parse). Manual form → orca: peers live in worktrees, not panes — [orca-routing.md §Bootstrap a peer](references/orca-routing.md#bootstrap-a-peer):
+Bootstrap a named peer (names survive pane churn; pane IDs do not — see pitfalls #16). **Topology: peers open in a NEW tab by user decision — use `/skill:to-peer` (`scripts/herdr-tab-peer.sh <name> <cwd>`); pane split below is the legacy fallback only when the user explicitly asks for split panes.** One step: `scripts/herdr-peer.sh <name> <repo-cwd> [right|down]` (wraps split + start + pane_id parse). Manual form → orca: peers live in worktrees, not panes — [orca-routing.md §Bootstrap a peer](references/orca-routing.md#bootstrap-a-peer):
 
 ```bash
 # right for a wide caller pane, down for a tall one (see the herdr skill's geometry rule)
