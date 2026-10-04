@@ -1,5 +1,11 @@
 # mattpocock-skills
 
+## 1.3.1
+
+### Patch Changes
+
+- [#1121](https://github.com/mattpocock/skills/pull/1121) [`c5b9869`](https://github.com/mattpocock/skills/commit/c5b98691982c4f0d3a5e40ab09566b3b84721e00) Thanks [@mattpocock](https://github.com/mattpocock)! - `ask-matt` no longer says `diagnosing-bugs` hands off to `improve-codebase-architecture` from a post-mortem; that step was removed. It now points you at `/retro` once the fix is in, to ask what would have prevented the bug, and at `/improve-codebase-architecture` where the finding is a missing seam. The `diagnosing-bugs` docs page drops the same stale hand-off. Thanks @Ygilany for spotting it ([#1117](https://github.com/mattpocock/skills/issues/1117)).
+
 ## 1.3.0
 
 ### Minor Changes
