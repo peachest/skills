@@ -170,6 +170,37 @@ class TestKatexDependencies:
         assert "KaTeX 依赖缺失" in r.stdout
 
 
+class TestFrozenScopedBlocks:
+    """<style data-frozen> blocks are exempt — a frozen prototype artifact's
+    literals were adjudicated once at prototype acceptance (spec-decoding
+    lesson-0003: tai-embed ×24, e4-* ×4, all inside frozen scoped blocks)."""
+
+    def test_frozen_block_literals_ignored(self, run_check):
+        html = ('<style data-frozen>.tai .x { font-size: 13px; padding: 16px; }</style>'
+                '<style>.ok { font-size: var(--fs-small); }</style>')
+        r = run_check(html)
+        assert r.returncode == 0
+        assert "OK" in r.stdout
+
+    def test_unmarked_block_still_flagged(self, run_check):
+        html = ('<style>.x { font-size: 13px; }</style>'
+                '<style data-frozen>.tai .y { font-size: 20px; }</style>')
+        r = run_check(html)
+        assert r.returncode == 1
+        assert "font-size: 13px" in r.stdout
+        assert "20px" not in r.stdout
+
+    def test_frozen_block_math_still_needs_bundle(self, run_check):
+        # frozen exemption covers styling, but real math in the lesson body
+        # still requires the bundle
+        html = ('<html><head></head><body>'
+                '<style data-frozen>.tai .m { font-size: 13px; }</style>'
+                '<p>设 $k$ 为层数。</p></body></html>')
+        r = run_check(html)
+        assert r.returncode == 1
+        assert "KaTeX 依赖缺失" in r.stdout
+
+
 class TestUsageError:
     def test_no_arg_exits_2(self, run_check, tmp_path):
         import subprocess
