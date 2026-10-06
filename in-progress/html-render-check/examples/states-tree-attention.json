@@ -1,0 +1,5 @@
+[
+  {"name": "mask-selected", "click": ".node-g[aria-label=\"mat\"]", "wait": 200},
+  {"name": "verify-default", "click": "#tab-verify", "wait": 300},
+  {"name": "verify-cascade", "click": ".pred-badge[aria-label*=\"sat\"]", "wait": 200}
+]

@@ -39,10 +39,33 @@ const shotDir = (() => {
   const i = args.indexOf('--shot-dir');
   return i >= 0 ? args[i + 1] : null;
 })();
-const files = args.filter((a, i) => a !== '--shot-dir' && args[i - 1] !== '--shot-dir');
+const statesFile = (() => {
+  const i = args.indexOf('--states');
+  return i >= 0 ? args[i + 1] : null;
+})();
+const files = args.filter((a, i) =>
+  a !== '--shot-dir' && a !== '--states' &&
+  args[i - 1] !== '--shot-dir' && args[i - 1] !== '--states');
 if (files.length === 0) {
-  console.error('usage: render-check.mjs [--shot-dir DIR] <file.html>...');
+  console.error('usage: render-check.mjs [--shot-dir DIR] [--states FILE] <file.html>...');
   process.exit(2);
+}
+
+// Interactive states (optional): cumulative transitions applied after the
+// initial-load battery. Declarative JSON on purpose — no driver-code execution;
+// a state needing more (keyboard, drag, per-state assertions) is the upgrade
+// path to a JS driver module.
+let STATES = null;
+if (statesFile) {
+  try {
+    STATES = JSON.parse(fs.readFileSync(statesFile, 'utf8'));
+    if (!Array.isArray(STATES) || STATES.some((s) => !s || typeof s.name !== 'string')) {
+      throw new Error('expected [{"name": ..., "click"?/"hover"?/"wait"?}, ...]');
+    }
+  } catch (e) {
+    console.error(`FAIL --states ${statesFile}: ${String(e).slice(0, 200)}`);
+    process.exit(2);
+  }
 }
 
 const batterySrc = fs.readFileSync(path.join(SCRIPTS_DIR, 'battery.js'), 'utf8');
@@ -111,8 +134,33 @@ for (const f of files) {
   // Merge runner-side evidence into the battery verdict.
   verdict.jsErrors = jsErrors;
   verdict.network = netIssues;
+
+  // Interactive-state pass: walk the declared transitions, re-run the same
+  // generic battery per state (state-dependent defects — click interception,
+  // post-toggle overlaps — only surface off the initial load), screenshot each.
+  const stateResults = [];
+  for (const st of STATES || []) {
+    try {
+      if (st.click) await page.click(st.click, { timeout: 3000 });
+      if (st.hover) await page.hover(st.hover, { timeout: 3000 });
+      await page.waitForTimeout(st.wait ?? 300);
+      const sv = JSON.parse(await page.evaluate(batterySrc));
+      stateResults.push({ state: st.name, ok: sv.ok, issues: sv.issues });
+      const safe = st.name.replace(/[^\w-]/g, '_');
+      await page.screenshot({
+        path: shotPath.replace(/\.png$/, `.${safe}.png`), fullPage: true,
+      });
+    } catch (e) {
+      // unreachable state is a hard finding: the interaction chain is broken
+      stateResults.push({ state: st.name, ok: false,
+        issues: [{ kind: 'state-action-failed', error: String(e).slice(0, 160) }] });
+    }
+  }
+  if (stateResults.length) verdict.states = stateResults;
+
   const hardNet = netIssues.some((n) => !n.advisory);
-  const ok = verdict.ok && jsErrors.length === 0 && !hardNet;
+  const ok = verdict.ok && jsErrors.length === 0 && !hardNet &&
+    stateResults.every((s) => s.ok);
 
   try {
     await page.screenshot({ path: shotPath, fullPage: true });
