@@ -3,8 +3,8 @@
 Dispatch contracts for the teach steps that run as background subagents. Read
 when launching a fact-check reviewer, a source-extraction scout, a prototype
 worker, or a code-archaeology scout. Launch mechanics (async, fresh context,
-keyed runs) follow the pi-subagents skill; this file holds the teach-specific
-prompt content.
+keyed runs, role agents) are the agent harness's subagent runtime — consult
+its skill for the how; this file holds the teach-specific prompt content.
 
 ## What stays with the parent
 
@@ -22,8 +22,11 @@ not auto-fixes.
 - **Authority**: read-only. Writes only the factcheck file.
 - **Success criteria**: every flagged claim carries (a) the lesson quote,
   (b) the anchor checked, (c) verdict — false / unsupported / imprecise /
-  verified, (d) the correction where one is known. Runs the mechanical
-  checks (anchor-check, css-self-check) and folds their output in.
+  verified, (d) the correction where one is known. The subagent also runs
+  the mechanical claim-level checks (anchor-check against the anchors.json
+  ledger, css-self-check) and folds their output into the same receipt —
+  the single-command structural self-checks (navigation, prose, beat) stay
+  with the parent.
 - **Stop rules**: a suspected fabrication is reported immediately in the
   receipt's first section, not buried; do not keep digging past the ledger —
   missing anchors are parent adjudication material, not blockage.
@@ -86,8 +89,8 @@ disagreements, and writes the fact base.
 ## Scheduling rules
 
 - Lesson fact-check: one in flight per lesson; the next lesson's dispatch
-  may overlap the previous receipt's adjudication, but the next lesson's
-  *delivery* waits for the receipt.
+  may overlap the previous receipt's adjudication, but lesson N+1 is
+  delivered only after receipt N's findings are fully adjudicated.
 - Scouts: parallel across layers is the point; do not run two scouts on the
   same layer.
 - Every dispatch gets a stable key so receipts are addressable
