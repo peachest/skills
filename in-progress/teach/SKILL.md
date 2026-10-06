@@ -87,7 +87,7 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 
 ## Source Extraction
 
-Knowledge enters the course through three source layers — **paper**, **code**, **interpretation** (articles explaining the paper or topic). OKB holds their snapshots and the arbitration order between them (see the okb skill's *Source types and anchors*); this section covers turning sources into lesson material.
+Knowledge enters the course through three source layers — **paper**, **code**, **interpretation**. Their definitions, anchor shapes, and the arbitration order between them are owned by the okb skill (*Source types and anchors*); this section covers turning sources into lesson material.
 
 Run the extraction checklist before the first lesson of a new topic; its output is the fact base (claim → anchor → ruling ledger, exported as `anchors.json` next to `PLAN.md` for the anchor check):
 
@@ -95,7 +95,7 @@ Run the extraction checklist before the first lesson of a new topic; its output 
 - **code**: when an official implementation exists, extract from it too — configuration tables, core data structures, and where the code disagrees with the paper's description. A point the paper leaves silent is settled from code at extraction time, not during fact-check.
 - **interpretation**: mark explanatory claims as interpretation, not source text; where an article contradicts the paper, get a ruling before writing prose.
 
-Completion criterion: every claim planned into a lesson carries a source anchor (`tex:<line>`, `<commit>:<file>:<line>`, or an article locator), and every layer disagreement has a one-line recorded ruling (arbitration order lives in the okb skill).
+Completion criterion: every claim planned into a lesson carries a source anchor, and every layer disagreement has a one-line recorded ruling (anchor shapes and arbitration order are defined in the okb skill).
 
 The three layers' extraction passes are independent — dispatch them as parallel async fresh-context scouts and let them run while the parent reads the OKB notes; arbitration, provenance labeling, and the recorded rulings stay with the parent. Dispatch contracts in [subagent-dispatch.md](./references/subagent-dispatch.md).
 
@@ -133,7 +133,7 @@ A lesson's practice section is a three-stage ladder, each stage a stronger form 
 
 ### Provenance in presentation
 
-The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains". Source-callout footnotes carry the anchor in any of the three accepted shapes (`tex:<line>`, `<commit>:<file>:<line>`, article locator) — the evidence chain closes in OKB bronze, so the lesson-side anchor only needs to be re-checkable, not a URL.
+The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains". Source-callout footnotes carry the anchor in one of the three anchor shapes (defined in the okb skill) — the evidence chain closes in OKB bronze, so the lesson-side anchor only needs to be re-checkable, not a URL.
 
 ## Assets
 
@@ -172,7 +172,7 @@ Do not guess the ZPD from vibes. If `UNDERSTANDING-MAP.md` is stale or missing, 
 
 Lessons should be designed around a skill the user is going to learn. The knowledge in the lesson should be only what's required to acquire that skill. You teach the knowledge first, then get the user to practice the skills via an interactive feedback loop.
 
-Knowledge comes from **OKB**, the source of truth. Read it through `RESOURCES.md` (pointers into OKB), never by re-reading raw sources. When a topic's knowledge is missing from OKB, run OKB curation first — ingest a source, distill it to a note, fact-check it to gold (see the `okb` skill) — then read from OKB. Lessons cite their OKB notes with claim-level footnotes, so every claim traces back to its origin (the evidence chain).
+Knowledge comes from **OKB**, the source of truth. Read it through `RESOURCES.md` (pointers into OKB), never by re-reading raw sources. When a topic's knowledge is missing from OKB, run OKB curation first (workflow and completion criteria in the okb skill), then read from OKB. Lessons cite their OKB notes with claim-level footnotes, so every claim traces back to its origin (the evidence chain).
 
 For acquiring knowledge, difficulty is the enemy. It eats working memory you need for understanding.
 
