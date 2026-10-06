@@ -7,16 +7,10 @@ arbitration order lives in the okb skill.
 
 ## Anchor formats
 
-Every claim carried from a source layer into a lesson cites its origin in one
-of three anchor shapes:
-
-| Layer | Anchor | Example |
-|---|---|---|
-| paper | `tex:<line>` | `tex:287` |
-| code | `<commit>:<file>:<line>` | `2320d52:eagle/model/choices.py:1` |
-| interpretation | article locator (id + paragraph/figure) | `p/839661630#fig2` |
-
-Rules that apply across all three:
+The three source layers and their anchor shapes are defined in the okb skill
+(*Source types and anchors*) — that table is authoritative. This section
+holds only the teach-side verification rules for writing anchors that
+survive a fact-check re-read:
 
 - **Figure numbers cite the local tex, verbatim.** Different published
   versions of the same paper renumber figures; the lesson's "Fig. 7" must be

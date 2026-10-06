@@ -31,7 +31,7 @@ A bronze ingest has a **source type** (`layer:` in frontmatter) that names what 
 
 The snapshot itself stays lean: verbatim excerpts of the passages distill will cite, plus frontmatter pointing at the external full copy (`origin_local:` path, and for code the pinned commit). Record `layer:` and `origin_local:` (when applicable) at ingest; the anchors above are the only shapes downstream consumers (lessons, fact-checks) cite.
 
-**Layer arbitration** — when sources disagree, rule in this order: paper > code > interpretation. Paper is authoritative for numbers and claims; code arbitrates when the paper is silent (label the claim with its code anchor); an interpretation contradicting the paper is rewritten as attributed commentary. A divergence that survives into a consuming document carries a one-line recorded ruling naming the winning layer.
+**Layer arbitration** — when sources disagree, rule in this order: paper > code > interpretation. Paper is authoritative for numbers and claims; code arbitrates when the paper is silent (label the claim with its code anchor); an interpretation contradicting the paper is rewritten as attributed commentary. A divergence that survives into a consuming document carries a one-line recorded ruling naming the winning layer. Consuming skills cite these anchor shapes; the extraction workflows that produce them live in the consuming skill.
 
 ## Directory layout
 
