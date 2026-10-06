@@ -20,6 +20,8 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 | `auto-render.min.js` | KaTeX 自动扫描渲染 | #6 | 可选(有公式时) |
 | `render.js` | KaTeX 定界符配置($ 和 $$) | #6 | 可选(有公式时) |
 | `fonts/*.woff2` | KaTeX 字体(20 个 woff2) | #6 | 可选(有公式时) |
+| `tex-figs.py` | 论文 LaTeX 源 → 图资产(caption 映射 + PDF→PNG + 复合图警告 + contact sheet) | source-extraction | 可选(引用论文图时) |
+| `anchor-check.py` | lesson 锚点机械勾稽(未锚数字/引用不匹配/图号漂移) | source-extraction | 可选(fact-check 同步跑) |
 | `animations/render.sh` | manim 动画渲染封装脚本 (`-ql` + 环境检测 + 安装提示) | — | 可选(有动画时,复制到工作区 `./animations/`) |
 
 ## CSS 统一策略 (#7)

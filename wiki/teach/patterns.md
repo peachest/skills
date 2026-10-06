@@ -28,3 +28,20 @@
 - passCheck: 检查以单命令入口调用
 - 证据: 01a062a0#343 #349 #357
 - 出现: 2026-09-20 okb-diagnose#1 移交
+## P-T04 edit 工具 CJK 归一化污染字节精确替换
+- 状态: open
+- 现象: spec-decoding 全课程 spec-audit（2026-10-06，session 01a11088 系）：③ worker 实锤 edit 工具对 lesson HTML 做全角→半角自动归一化，破坏字节精确替换锚点；worker 回滚改用 byte-precise replace 重做
+- 根因: harness 层 edit 工具的规范化行为，skill 无法修
+- 方案: 双头——① lesson-edit.py（P-T01）实现时用 Python 字节级 replace（不做 unicode normalize），规避此坑；② 向 pi harness 上报 edit 归一化行为，确认是否可关
+- passCheck: 涉及全角/CJK 标点的 lesson 替换不再经 edit 工具（走 lesson-edit.py 或 python heredoc）
+- 证据: spec-decoding session-log/0007-20260924.md「worker 自查发现 edit 工具全角→半角归一化污染，回滚重做」（commit de15bf4）
+- 出现: 2026-10-06 spec-audit worker 自查
+
+## P-T05 beat-check hook 15% 窗口边缘 case 反复出现
+- 状态: open
+- 现象: 两单独立 case（spec-decoding ④ 问句在 15.8%、43 字差窗口边缘；早期 lesson-0003 同类）被判 out-of-window 后走人工裁定——窗口是启发式，边界差 1-2% 导致的裁定税
+- 根因: HOOK_PAT 扫描窗口 max(200, 15%·total) 是拍板值，无 advisory 过渡带
+- 方案（待评估，攒着）: 15% 硬窗口 + 20% advisory 提示（"问句在 15-20% 带内，裁定时注意"），或放宽到 18%；需先看 15.8% 这类案例真实占比再定
+- passCheck: 15-20% 带内问句不再硬 FAIL，改为带提示的 finding
+- 证据: spec-decoding reviews/0004-spec-review.json（beat hook finding adjudicated kept，问句 15.8% vs 15% window）
+- 出现: 2026-10-06 spec-audit；同 2026-09-24 lesson-0003

@@ -10,6 +10,8 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "pyright>=1.1",
+    "pypdfium2>=4",
+    "pillow>=10",
 ]
 
 [tool.ruff]
@@ -20,7 +22,7 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pyright]
-include = ["assets/css-self-check.py", "tests"]
+include = ["assets/css-self-check.py", "assets/anchor-check.py", "tests"]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
 
