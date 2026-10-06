@@ -1,0 +1,5 @@
+# html-render-check skill-impact
+
+| Date | Proposal | Landing | Commit | Verification |
+|------|----------|---------|--------|--------------|
+| 2026-09-24 (peer session 01a11088) | Interactive-state rendering checks: static battery misses state-dependent defects; propose --states driver ({setup, states:[{name, action}]}) per state + archive tai-hover/tai-measure probes | scripts/render-check.mjs --states FILE (declarative JSON transitions, not JS driver — no code execution; per-state battery re-run + screenshot; unreachable state = hard finding), check.sh OPT_ARGS forwarding fix (--shot-dir/--states were swallowed by stage-0 file loop), SKILL.md section, examples/states-tree-attention.json. tai-hover (JSON-expressible hover) and tai-measure (one-off line-box debug probe) deliberately not archived | 8aa371c | real lesson tree-attention-interactive.html: initial + 3 states all scanned, per-state shots written; broken selector → exit 1; --shot-dir regression clean. Installed via npx skills add -g |
