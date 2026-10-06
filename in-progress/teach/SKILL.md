@@ -81,6 +81,26 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 - Spacing (distributing practice over time)
 - Interleaving (mixing up different but related topics in practice - for skills practice only)
 
+## Source Extraction
+
+Knowledge enters the course through the three OKB source layers — **paper**, **code**, **interpretation** (articles explaining the paper or topic). OKB owns snapshots and layer arbitration (see the okb skill); this section covers turning sources into lesson material.
+
+Run the extraction checklist before the first lesson of a new topic; its output is the fact base under PLAN.md:
+
+- **paper**: extract the five recurring needs from the tex — method formulas and hyperparameters; experiment tables and ablations; observations; appendix material (topologies, training configuration — content the body covers in one line but a lesson must teach); the `\includegraphics`→caption figure map. Cite each extracted item as `tex:<line>`.
+- **code**: when an official implementation exists, extract from it too — configuration tables, core data structures, and where the code disagrees with the paper's description. A point the paper leaves silent is settled from code at extraction time, not during fact-check.
+- **interpretation**: mark explanatory claims as interpretation, not source text; where an article contradicts the paper, get a ruling before writing prose.
+
+Completion criterion: every claim planned into a lesson carries a source anchor (`tex:<line>`, `<commit>:<file>:<line>`, or an article locator), and every layer disagreement has a one-line recorded ruling (arbitration order lives in the okb skill).
+
+Figure sources follow a decision tree: the paper's own figures first (the caption is the ground truth for what the figure shows); figures from interpretation articles when the learner endorses them; a self-drawn diagram only when no source figure fits. Three rules govern figure handling:
+
+1. Identify a figure by its caption and surrounding text.
+2. Render every subfigure of a composite figure.
+3. Before inserting, produce a figure→lesson-position table and give the learner a contact sheet for visual review — model-side verification cannot see the image, so human review closes the loop.
+
+When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns.
+
 ## Lessons
 
 A lesson is the main thing you produce — the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
@@ -107,7 +127,7 @@ A lesson's practice section is a three-stage ladder, each stage a stronger form 
 
 ### Provenance in presentation
 
-The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains".
+The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains". Source-callout footnotes carry the anchor in any of the three accepted shapes (`tex:<line>`, `<commit>:<file>:<line>`, article locator) — the evidence chain closes in OKB bronze, so the lesson-side anchor only needs to be re-checkable, not a URL.
 
 ## Assets
 
@@ -170,7 +190,7 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams runs all five; a plain lesson runs fact-check, CSS self-check, navigation self-check, and de-slop.
+Fact-check is claim-level (did the model state something false?). Alongside it, run the **anchor check** (does every number resolve to its cited origin?): `python3 ./assets/anchor-check.py <anchors.json> lessons/0001-your-lesson.html` re-reads each cited line and reports unanchored numbers, mismatched quotes, and figure numbers the local tex never uses (published versions renumber figures — cite the local tex's literal numbering). Figure rendering for the paper layer comes from `python3 ./assets/tex-figs.py <source-dir> --out lessons/img/` (caption map, PNG rendering, composite-figure warnings, contact sheet). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams and figures runs all of them; a plain lesson runs fact-check with anchor check, CSS self-check, navigation self-check, and de-slop.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
 
