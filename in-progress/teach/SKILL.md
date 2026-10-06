@@ -52,9 +52,13 @@ Teach traverses the plan one node at a time. Each node becomes a lesson (see [Le
 
 **Pace**: one reasoning step per exchange. The most common failure mode is excitement — dumping an entire concept in one message. Go slow: one step, a check for understanding, a quiz, then the next step. The learner can always ask for more; they cannot un-read a wall of text.
 
-After each lesson, record what happened in `session-log/`. After generating a lesson, run the `fact-check` skill on it — lessons are what the learner consumes directly, and AFK batch generation is especially prone to fabricating details (parameter names, API signatures, version behavior). Fix flagged claims before the learner sees the lesson.
+After each lesson, record what happened in `session-log/`.
 
-For lessons containing structural diagrams (`.drawio`), run the `drawio-skill` self-check: `validate.py` (dangling edges, duplicate IDs, overlap) and `autolayout.py` (Graphviz layout). Mechanical checks are more reliable than asking an LLM to "look at" a diagram.
+After generating a lesson, dispatch fact-check as a background subagent instead of running it inline — a lesson-level fact-check is read-heavy (every claim against the bronze anchors and raw sources), and running it on the teaching path is why it historically got skipped when the learner was waiting. Launch an async fresh-context reviewer the moment the lesson is written (dispatch contract: [subagent-dispatch.md](./references/subagent-dispatch.md)), then continue teaching the next beat. The gate: **no next lesson before the fact-check receipt lands** — a wrong number carried across lessons becomes a defended position (a real trace carried one for 12 days). When the receipt arrives, adjudicate each flagged claim: fix genuine defects before that lesson is next revisited; correct already-shown errors in the session itself.
+
+The plan fact-check (point B below) is also dispatched async, but the parent waits for that receipt before teaching starts — a wrong premise poisons every downstream lesson, and there is no learner waiting yet.
+
+For lessons containing structural diagrams (`.drawio`), run the `drawio-skill` self-check: `validate.py` (dangling edges, duplicate IDs, overlap) and `autolayout.py` (Graphviz layout). Mechanical checks are more reliable than asking an LLM to "look at" a diagram. The script-based self-checks (CSS, navigation, prose, beat, anchor) stay inline — each is a single sub-second command, and delegating it costs more than running it.
 
 ## Philosophy
 
@@ -93,13 +97,15 @@ Run the extraction checklist before the first lesson of a new topic; its output 
 
 Completion criterion: every claim planned into a lesson carries a source anchor (`tex:<line>`, `<commit>:<file>:<line>`, or an article locator), and every layer disagreement has a one-line recorded ruling (arbitration order lives in the okb skill).
 
+The three layers' extraction passes are independent — dispatch them as parallel async fresh-context scouts and let them run while the parent reads the OKB notes; arbitration, provenance labeling, and the recorded rulings stay with the parent. Dispatch contracts in [subagent-dispatch.md](./references/subagent-dispatch.md).
+
 Figure sources follow a decision tree: the paper's own figures first (the caption is the ground truth for what the figure shows); figures from interpretation articles when the learner endorses them; a self-drawn diagram only when no source figure fits. Three rules govern figure handling:
 
 1. Identify a figure by its caption and surrounding text.
 2. Render every subfigure of a composite figure.
 3. Before inserting, produce a figure→lesson-position table and give the learner a contact sheet for visual review — model-side verification cannot see the image, so human review closes the loop.
 
-When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns.
+When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts when launching scouts or the fact-check reviewer.
 
 ## Lessons
 
@@ -190,7 +196,7 @@ Lessons and plans are not reliable enough to trust unchecked. Two integration po
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
 - **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
 
-Fact-check is claim-level (did the model state something false?). Alongside it, run the **anchor check** (does every number resolve to its cited origin?): `python3 ./assets/anchor-check.py <anchors.json> lessons/0001-your-lesson.html` re-reads each cited line and reports unanchored numbers, mismatched quotes, and figure numbers the local tex never uses (published versions renumber figures — cite the local tex's literal numbering). Figure rendering for the paper layer comes from `python3 ./assets/tex-figs.py <source-dir> --out lessons/img/` (caption map, PNG rendering, composite-figure warnings, contact sheet). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams and figures runs all of them; a plain lesson runs fact-check with anchor check, CSS self-check, navigation self-check, and de-slop.
+Fact-check is claim-level (did the model state something false?), and runs as a background subagent per the Teach section — inline only when no subagent runtime is available. Alongside it, run the **anchor check** (does every number resolve to its cited origin?): `python3 ./assets/anchor-check.py <anchors.json> lessons/0001-your-lesson.html` re-reads each cited line and reports unanchored numbers, mismatched quotes, and figure numbers the local tex never uses (published versions renumber figures — cite the local tex's literal numbering). Figure rendering for the paper layer comes from `python3 ./assets/tex-figs.py <source-dir> --out lessons/img/` (caption map, PNG rendering, composite-figure warnings, contact sheet). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams and figures runs all of them; a plain lesson runs fact-check with anchor check, CSS self-check, navigation self-check, and de-slop.
 
 Distinct from both is **OKB** fact-checking, which runs upstream in the knowledge base: promoting a note to gold verifies the knowledge itself, once per note. Plan/lesson fact-check asks "did this lesson say something false"; OKB fact-check asks "is this knowledge true". Run the latter in OKB, the former per plan and lesson.
 
