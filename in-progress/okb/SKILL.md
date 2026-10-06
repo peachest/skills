@@ -5,7 +5,7 @@ description: Manage OKB, a bronze → silver → gold knowledge base (source sna
 
 # OKB (open-knowledge-base)
 
-OKB is the **source of truth** for knowledge. What the agent learns worth keeping lands here — layered, sourced, and traceable — instead of being re-read from raw sources each session. A teaching skill consumes OKB through `RESOURCES.md` pointers.
+OKB is the **source of truth** for knowledge. What the agent learns worth keeping lands here — layered, sourced, and traceable — instead of being re-read from raw sources each session. Consuming skills read through `RESOURCES.md` pointers (see *Consuming OKB* below).
 
 ## Three layers
 
@@ -18,6 +18,20 @@ Three **distinct directories**, linked by `sources[].resource` (the derivation e
 | **Gold** | `gold/<topic>/<concept>.md` | a **verification overlay** — verified events pointing back to silver, no rewritten body |
 
 **Only silver touches content.** Distill writes silver from bronze; factcheck writes a gold *verification overlay* (see §gold note).
+
+### Source types and anchors
+
+A bronze ingest has a **source type** (`layer:` in frontmatter) that names what kind of origin the snapshot stands for:
+
+| `layer:` | Origin | Anchor shape for citing it |
+|---|---|---|
+| `paper` | a paper's tex/PDF (full copy held in a papers directory outside OKB) | `tex:<line>` |
+| `code` | a repository at a pinned commit (clone held outside OKB) | `<commit>:<file>:<line>` |
+| `interpretation` | an article explaining the topic (zhang/blog/magazine) | article locator (id + paragraph/figure) |
+
+The snapshot itself stays lean: verbatim excerpts of the passages distill will cite, plus frontmatter pointing at the external full copy (`origin_local:` path, and for code the pinned commit). Record `layer:` and `origin_local:` (when applicable) at ingest; the anchors above are the only shapes downstream consumers (lessons, fact-checks) cite.
+
+**Layer arbitration** — when sources disagree, rule in this order: paper > code > interpretation. Paper is authoritative for numbers and claims; code arbitrates when the paper is silent (label the claim with its code anchor); an interpretation contradicting the paper is rewritten as attributed commentary. A divergence that survives into a consuming document carries a one-line recorded ruling naming the winning layer.
 
 ## Directory layout
 
@@ -90,14 +104,14 @@ sources:
 
 Build knowledge for a topic by running these in order. Each step is done on its completion criterion. An empty okb starts as the three directories plus empty `index.md` and `log.md`; a topic is named at first ingest — kebab-case, confirmed with the user when the boundary is ambiguous.
 
-1. **Ingest** a source — fetch it and save a bronze snapshot. `scripts/okb_snapshot.py` does the mechanical part (arXiv id/URL → bronze file with frontmatter + sha256 dedup; content fetched elsewhere goes via `--from-file`).
+1. **Ingest** a source — fetch it and save a bronze snapshot. First ingest on a node: run `bash scripts/check-env.sh` (probes the arXiv export API; on failure set `ARXIV_PROXY` in `runtime.conf`). `scripts/okb_snapshot.py` does the mechanical part (arXiv id/URL → bronze file with frontmatter + sha256 dedup); for non-arXiv sources, fetch the content first (e.g. the fetch-article skill) and pass the saved file via `--from-file`.
    `<source-slug>` derives from the source title, kebab-case; `author` falls back to the account/publisher, else `unknown`; `sha256` hashes the saved snapshot body — the bytes under the frontmatter.
-   **Fidelity floor:** the snapshot must cover the passages the distilled claims will cite. When the core claims live in the body (algorithms, theorems, tables) an abstract alone is not enough — fetch the full text and snapshot that; factcheck evidence must reach the origin, and an abstract-only bronze caps the chain short.
+   **Fidelity floor:** the snapshot must cover the passages the distilled claims will cite. For paper and code sources the bronze holds verbatim excerpts of exactly those passages, with `origin_local:` pointing at the full copy outside OKB (papers directory / pinned clone) — expand the excerpts whenever distill reaches a passage not yet captured, before writing the claim. For interpretation sources snapshot the full text. Factcheck evidence must reach the origin: cite the bronze excerpt, or re-read the line in the external copy through the anchor (`tex:<line>`, `<commit>:<file>:<line>`). An abstract-only bronze caps the chain short.
    Mirror check first: an existing bronze with the same `author` + `title` is the same work syndicated on another channel — add the URL to its `mirrors:` and skip the fetch (the script also skips on sha256 match).
    Done when `bronze/<topic>/<source-slug>.md` exists with `source`, `author`, `title`, `fetched_at`, `sha256` set, the verbatim content saved, and the topic's `ingests_since_status` counter in `index.md` incremented.
 
 2. **Distill** — build silver from the bronze snapshot in two passes. **Silver is the only rewrite layer.**
-   **Pass A — route, no writing.** Scan the topic's existing silver notes and produce a routing decision for every concept in the source: merge into an existing note (name the slug) or open a new one. The invariant is **one concept, one slug**. Append the route to log.md (one `route` line per concept) before any write — the route line survives a crash and claims the slugs against concurrent sessions. Done when every concept has a route: merge (slug named) or open.
+   **Pass A — route, no writing.** Scan the topic's existing silver notes and produce a routing decision for every concept in the source: merge into an existing note (name the slug) or open a new one. The invariant is **one concept, one slug**. Append the route line to log.md the moment the routing decision is made (that is Pass A's done-criterion — the route line survives a crash and claims the slugs against concurrent sessions), before Pass B writes. Done when every concept has a route: merge (slug named) or open.
    **Pass B — write.** Re-validate the route against current silver (concurrent sessions share this tree), then apply it. `scripts/okb_new.py` opens skeleton notes (silver always `status: draft`, `verified` empty). Merge appends to `sources[]`, folds the new facts into the body, refreshes `updated`, and rewrites inbound links to a retired slug; new opens a note. In every note written, link directly related silver notes using Markdown hyperlinks in the body — same topic `[concept](./<concept>.md)`, cross-topic `[concept](../<topic>/<concept>.md)` — **never `[[wikilink]]`**. A link is a navigation edge, not decoration.
    When the new source contradicts an existing note, keep both versions in the body and set `conflicts_with` on each side — resolution belongs to the user.
    Distill always writes `status: draft`. Only the factcheck step (or a one-line user confirmation, recorded as a `human:` verified event in gold) writes `status: stable` or a non-empty `verified` on silver — distill never touches either field.
@@ -116,18 +130,18 @@ Build knowledge for a topic by running these in order. Each step is done on its 
    - *thinly linked notes*: exactly one distinct linked peer, in ∪ out;
    - *unlinked source-overlap pairs*: two silver notes sharing ≥2 `sources[]` ids but not linking each other — missed links or merge candidates.
    A *link* is a Markdown hyperlink between silver notes (`./<concept>.md` or `../<topic>/<concept>.md`); `[^id]` footnotes and external URLs don't count. Audit per topic, plus cross-topic links.
-   Done when every report lists every note violating its check. `scripts/okb_index_regen.py` regenerates index.md from the tree (counters carried forward) and `--check-links` mechanically verifies the link list. Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then reset the counter.
+   Done when every report lists every note violating its check. `scripts/okb_index_regen.py` regenerates index.md from the tree (counters carried forward) and `--check-links` mechanically verifies the link list. Run it whenever a topic's `ingests_since_status` counter in `index.md` reaches ten, then set that topic's counter back to `0` in index.md (regen carries values forward; the reset is a one-line edit).
 
 ## Evidence chain (invariant)
 
-Every claim in a lesson traces back to its origin in four hops:
+Every claim in a consumed document (a lesson, for a teaching skill) traces back to its origin in four hops:
 
 ```
-lesson ──▶ gold ──▶ silver ──▶ bronze ──▶ origin URL
- (OKB sources)  (sources→silver)  (sources→bronze)  (source=URL)
+lesson ──▶ gold ──▶ silver ──▶ bronze ──▶ origin
+ (OKB sources)  (sources→silver)  (sources→bronze)  (source=URL or origin_local)
 ```
 
-Each hop is a `sources[].resource` derivation edge. The chain is a **forcing function**: a claim carries its source or it is not written.
+Each hop is a `sources[].resource` derivation edge. The final hop resolves by source type: an interpretation origin is the archived URL; a paper or code origin is the external full copy named by `origin_local:` (papers directory / pinned clone), reached through the anchor (`tex:<line>`, `<commit>:<file>:<line>`). The chain is a **forcing function**: a claim carries its source or it is not written.
 
 ## Consuming OKB from another skill
 
