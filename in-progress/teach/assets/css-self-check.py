@@ -58,6 +58,8 @@ def has_math(text: str) -> bool:
 
 def katex_missing(text: str) -> list[str]:
     """Return the KaTeX bundle files not referenced, if the lesson has math."""
+    # frozen scoped blocks are prototype artifacts — same exemption as the CSS scan
+    text = re.sub(r"<style[^>]*\bdata-frozen\b[^>]*>.*?</style>", " ", text, flags=re.S | re.I)
     if not has_math(text):
         return []
     return [name for name, _ in KATEX_ASSETS if name not in text]
@@ -72,7 +74,12 @@ def _is_relative(value: str) -> bool:
 
 def check(text: str) -> list[str]:
     """Return a list of violation strings for the given HTML text."""
-    blocks = re.findall(r"<style[^>]*>(.*?)</style>", text, re.S)
+    # frozen scoped blocks (e.g. an inlined prototype with its own self-contained
+    # styling domain) are exempt: their literals are part of a frozen artifact,
+    # adjudicated once at prototype acceptance, not per lesson edit. Mark with
+    # <style data-frozen> — the attribute is the opt-in.
+    text = re.sub(r"<style[^>]*\bdata-frozen\b[^>]*>.*?</style>", " ", text, flags=re.S | re.I)
+    blocks = re.findall(r"<style[^>]*>(.*?)</style>", text, flags=re.S)
     blocks += re.findall(r'style="([^"]*)"', text)
     violations: list[str] = []
     for block in blocks:
