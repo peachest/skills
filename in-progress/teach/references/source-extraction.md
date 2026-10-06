@@ -95,6 +95,7 @@ statement rests on.
    before drawing any comparison.
 
 **Recorded ruling.** Whichever pattern applies, the resolution is one line
-in the working notes (ruling + anchors + which layer won), produced with the
-okb arbitration order. The lesson then carries the outcome — the ruling
-itself stays in the notes, not in learner-facing text.
+in the fact base (ruling + anchors + which layer won), produced with the
+OKB arbitration order (see the okb skill). The lesson then carries the
+outcome — the ruling itself stays in the fact base, not in learner-facing
+text.

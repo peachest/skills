@@ -44,7 +44,7 @@ Read `UNDERSTANDING-MAP.md` and chart a dependency graph: nodes are concepts to 
 
 The plan is an index, not a store: each node is a one-liner; the detail lives in the lesson that teaches it. Present the plan to the learner (as a Mermaid graph for small topics) so they can see the route and adjust.
 
-After producing the plan, run the `fact-check` skill on it — a plan with a wrong premise (X depends on Y, when actually Y depends on X) makes every downstream lesson wrong. Fix premise errors before teaching.
+After producing the plan, fact-check it (see [Fact-Checking](#fact-checking) — dispatched async, and the parent waits for the receipt before teaching) — a plan with a wrong premise (X depends on Y, when actually Y depends on X) makes every downstream lesson wrong. Fix premise errors before teaching.
 
 ### Phase 3 — Teach
 
@@ -54,11 +54,11 @@ Teach traverses the plan one node at a time. Each node becomes a lesson (see [Le
 
 After each lesson, record what happened in `session-log/`.
 
-After generating a lesson, dispatch fact-check as a background subagent instead of running it inline — a lesson-level fact-check is read-heavy (every claim against the bronze anchors and raw sources), and running it on the teaching path is why it historically got skipped when the learner was waiting. Launch an async fresh-context reviewer the moment the lesson is written (dispatch contract: [subagent-dispatch.md](./references/subagent-dispatch.md)), then continue teaching the next beat. The gate: **no next lesson before the fact-check receipt lands** — a wrong number carried across lessons becomes a defended position (a real trace carried one for 12 days). When the receipt arrives, adjudicate each flagged claim: fix genuine defects before that lesson is next revisited; correct already-shown errors in the session itself.
+After generating a lesson, dispatch fact-check as a background subagent instead of running it inline — a lesson-level fact-check is read-heavy (every claim against the bronze anchors and raw sources), and running it on the teaching path is why it historically got skipped when the learner was waiting. Launch an async fresh-context reviewer the moment the lesson is written (dispatch contract: [subagent-dispatch.md](./references/subagent-dispatch.md)), then continue teaching the next beat. The gate, stated once: generation of lesson N+1 may start once receipt N lands; delivery of lesson N+1 waits until receipt N's findings are fully adjudicated — a wrong number carried across lessons becomes a defended position (a real trace carried one for 12 days). When the receipt arrives, adjudicate each flagged claim: fix genuine defects before that lesson is next revisited; correct already-shown errors in the session itself.
 
 The plan fact-check (point B below) is also dispatched async, but the parent waits for that receipt before teaching starts — a wrong premise poisons every downstream lesson, and there is no learner waiting yet.
 
-For lessons containing structural diagrams (`.drawio`), run the `drawio-skill` self-check: `validate.py` (dangling edges, duplicate IDs, overlap) and `autolayout.py` (Graphviz layout). Mechanical checks are more reliable than asking an LLM to "look at" a diagram. The script-based self-checks (CSS, navigation, prose, beat, anchor) stay inline — each is a single sub-second command, and delegating it costs more than running it.
+For lessons containing structural diagrams (`.drawio`), run the `drawio-skill` self-check: `validate.py` (dangling edges, duplicate IDs, overlap) and `autolayout.py` (Graphviz layout). Mechanical checks are more reliable than asking an LLM to "look at" a diagram. The single-command self-checks (CSS, navigation, prose, beat) stay inline — delegating a sub-second command costs more than running it; the anchor check runs inside the fact-check subagent, which is already reading every claim.
 
 ## Philosophy
 
@@ -87,9 +87,9 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 
 ## Source Extraction
 
-Knowledge enters the course through the three OKB source layers — **paper**, **code**, **interpretation** (articles explaining the paper or topic). OKB owns snapshots and layer arbitration (see the okb skill); this section covers turning sources into lesson material.
+Knowledge enters the course through three source layers — **paper**, **code**, **interpretation** (articles explaining the paper or topic). OKB holds their snapshots and the arbitration order between them (see the okb skill's *Source types and anchors*); this section covers turning sources into lesson material.
 
-Run the extraction checklist before the first lesson of a new topic; its output is the fact base under PLAN.md:
+Run the extraction checklist before the first lesson of a new topic; its output is the fact base (claim → anchor → ruling ledger, exported as `anchors.json` next to `PLAN.md` for the anchor check):
 
 - **paper**: extract the five recurring needs from the tex — method formulas and hyperparameters; experiment tables and ablations; observations; appendix material (topologies, training configuration — content the body covers in one line but a lesson must teach); the `\includegraphics`→caption figure map. Cite each extracted item as `tex:<line>`.
 - **code**: when an official implementation exists, extract from it too — configuration tables, core data structures, and where the code disagrees with the paper's description. A point the paper leaves silent is settled from code at extraction time, not during fact-check.
@@ -105,7 +105,7 @@ Figure sources follow a decision tree: the paper's own figures first (the captio
 2. Render every subfigure of a composite figure.
 3. Before inserting, produce a figure→lesson-position table and give the learner a contact sheet for visual review — model-side verification cannot see the image, so human review closes the loop.
 
-When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts when launching scouts or the fact-check reviewer.
+When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts of the four delegated step kinds — fact-check reviewer, source-extraction scouts, prototype workers, and heavy code-archaeology scouts.
 
 ## Lessons
 
@@ -137,7 +137,7 @@ The knowledge layering of OKB (bronze → silver → gold) must stay visible in 
 
 ## Assets
 
-Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse.
+Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse. Interactive components (simulators, animations, visualizations with controls) are built as standalone prototypes dispatched to async workers (contract in [subagent-dispatch.md](./references/subagent-dispatch.md)); the parent integrates the accepted prototype inline and untracks it.
 
 Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — keep inline code to things no future lesson would duplicate.
 
@@ -194,7 +194,7 @@ For quizzes, each answer should be exactly the same number of words (and charact
 Lessons and plans are not reliable enough to trust unchecked. Two integration points:
 
 - **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
-- **After lesson generation (point A)**: run `fact-check` on `lessons/*.html`. Produces `lesson-XXX.factcheck.md`. Fix flagged claims before the learner sees the lesson. AFK batch generation is especially prone to fabricating details.
+- **After lesson generation (point A)**: dispatch `fact-check` on `lessons/*.html` (async, per the Teach section). Produces `lesson-XXX.factcheck.md`; adjudicate the receipt before the next lesson is delivered, and correct already-shown errors in the session itself. AFK batch generation is especially prone to fabricating details.
 
 Fact-check is claim-level (did the model state something false?), and runs as a background subagent per the Teach section — inline only when no subagent runtime is available. Alongside it, run the **anchor check** (does every number resolve to its cited origin?): `python3 ./assets/anchor-check.py <anchors.json> lessons/0001-your-lesson.html` re-reads each cited line and reports unanchored numbers, mismatched quotes, and figure numbers the local tex never uses (published versions renumber figures — cite the local tex's literal numbering). Figure rendering for the paper layer comes from `python3 ./assets/tex-figs.py <source-dir> --out lessons/img/` (caption map, PNG rendering, composite-figure warnings, contact sheet). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams and figures runs all of them; a plain lesson runs fact-check with anchor check, CSS self-check, navigation self-check, and de-slop.
 
