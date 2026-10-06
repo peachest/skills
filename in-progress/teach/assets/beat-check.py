@@ -34,10 +34,15 @@ HOOK_PAT = re.compile(r"[？?]|为什么|凭什么|怎么会|问题在于|imagin
 FORMAL_PAT = re.compile(r"\\begin\{|\\frac|\\sum|定义如下|形式化地|我们定义|definition:", re.I)
 # concrete markers
 CONCRETE_PAT = re.compile(r"[0-9]+\.[0-9]+|例如|比如|假设.{0,12}(MB|秒|条|次|个)|worked example|let's say", re.I)
-# checkpoint markers
-# checkpoint markers — question-shaped reader prompts; wide on purpose
-# (你猜/猜一猜 added from sglang-pp friction: first-draft "你猜为什么" missed)
-CHECK_PAT = re.compile(r"停下来|想一想|你能|试着|自己试|你会怎么|你猜|猜一猜|pause and|check yourself|guess", re.I)
+# checkpoint markers — question-shaped reader prompts; wide on purpose.
+# 词形口径（作者按这些词形写即可一次命中）：直接对读者发出动作指令的第二人称
+# 提问/暂停词。已收录：停下来|想一想|你能|试着|自己试|自己问|问自己|自问|
+# 先问|试着回答|你会怎么|你猜|猜一猜|pause and|check yourself|guess
+# （你猜/猜一猜 from sglang-pp friction；自己问/先问/自问/试着回答 from
+# spec-decoding friction 2026-09-24：检查点写“先问自己/试着回答”没被认出）
+CHECK_PAT = re.compile(
+    r"停下来|想一想|你能|试着|自己试|自己问|问自己|自问|先问|你会怎么|你猜|猜一猜"
+    r"|pause and|check yourself|guess", re.I)
 # callback markers in the last 25%
 CALLBACK_PAT = re.compile(r"回到开头|回到最初|现在你能|回顾.{0,10}钩子|现在可以解释|还记得.{0,30}吗|回到.{0,12}问题|revisit|back to", re.I)
 
