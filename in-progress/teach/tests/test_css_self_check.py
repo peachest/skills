@@ -118,6 +118,58 @@ class TestMultipleViolations:
         assert "3 bare literal(s)" in r.stdout
 
 
+class TestKatexDependencies:
+    """Math in prose but KaTeX bundle not referenced -> exit 1 with the
+    exact lines to add (spec-decoding lesson-0005 friction, commit 93e78fe).
+    Fixture convention here is inline HTML, same as the classes above."""
+
+    HEAD = '''<head>
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script src="../assets/katex.min.js" defer></script>
+  <script src="../assets/auto-render.min.js" defer></script>
+  <script src="../assets/render.js" defer></script>
+</head>'''
+
+    def test_math_without_bundle_fails(self, run_check):
+        html = "<html><head><title>t</title></head><body><p>设 $k$ 为层数，$$V_i=\\prod_j p_j$$。</p></body></html>"
+        r = run_check(html)
+        assert r.returncode == 1
+        assert "KaTeX 依赖缺失" in r.stdout
+        assert "katex.min.css" in r.stdout
+        assert '<script src="../assets/render.js" defer></script>' in r.stdout
+
+    def test_math_with_full_bundle_passes(self, run_check):
+        html = f"<html>{self.HEAD}<body><p>设 $k$ 为层数。</p></body></html>"
+        r = run_check(html)
+        assert r.returncode == 0
+        assert "OK" in r.stdout
+
+    def test_partial_bundle_lists_only_missing(self, run_check):
+        html = ('<html><head><script src="../assets/katex.min.js" defer></script></head>'
+                '<body><p>$p_j$ 是概率。</p></body></html>')
+        r = run_check(html)
+        assert r.returncode == 1
+        assert "render.js" in r.stdout
+        assert "katex.min.js" not in r.stdout
+
+    def test_no_math_no_requirement(self, run_check):
+        html = "<html><head></head><body><p>纯文字，无公式。</p></body></html>"
+        assert run_check(html).returncode == 0
+
+    def test_shell_prompt_dollar_not_math(self, run_check):
+        # $ npm i ... $ in <code>/<pre> must not count as math
+        html = ("<html><head></head><body>"
+                "<pre><code>$ npm install\n$ npm run build</code></pre>"
+                "<p>价格是 100$ 到 200$ 之间。</p></body></html>")
+        assert run_check(html).returncode == 0
+
+    def test_paren_delimiters_count(self, run_check):
+        html = '<html><head></head><body><p>其中 \\(C = 2nds\\) 为缓存。</p></body></html>'
+        r = run_check(html)
+        assert r.returncode == 1
+        assert "KaTeX 依赖缺失" in r.stdout
+
+
 class TestUsageError:
     def test_no_arg_exits_2(self, run_check, tmp_path):
         import subprocess

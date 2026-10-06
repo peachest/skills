@@ -98,3 +98,12 @@ def test_wider_checkpoint_vocabulary(tmp_path):
     body = GOOD.replace("让我们停下来想一想：", "你猜为什么这样？让我们")
     rc, out = run(tmp_path, body)
     assert rc == 0, out
+
+
+def test_specdec_checkpoint_vocabulary(tmp_path):
+    # "先问自己/自问/试着回答" missed by the pre-2026-09-24 pattern
+    # (spec-decoding lesson-0005 friction: 3 real checkpoints, partial match)
+    for variant in ("先问自己：", "自问一句：", "试着回答：", "问自己一个问题："):
+        body = GOOD.replace("让我们停下来想一想：", f"让我们{variant}")
+        rc, out = run(tmp_path, body)
+        assert rc == 0, f"variant {variant!r} not recognized:\n{out}"

@@ -186,6 +186,8 @@ python3 ./assets/css-self-check.py lessons/0001-your-lesson.html
 
 The script scans inline `<style>` blocks and ` style="" ` attributes for bare absolute literals (` px `/` rem `/` pt `/bare numbers) in ` font-size `/` padding `/` margin `/` line-height `. Relative ` em `/` % ` values pass (outside the token system). **Zero violations** is the completion criterion — fix each by replacing the literal with the nearest token (` var(--fs-small) `, ` var(--sp-4) `, ` var(--lh-body) `, etc.).
 
+It also checks KaTeX dependency completeness: prose containing math delimiters (` $...$ `, ` $$...$$ `, ` \(...\) `, ` \[...\] `) but a head missing any of the KaTeX bundle (` katex.min.css `, ` katex.min.js `, ` auto-render.min.js `, ` render.js `) fails with the exact lines to add — formulas would render as raw source (spec-decoding lesson-0005 friction). Code blocks with shell ` $ ` prompts and CJK currency prose don't trigger it.
+
 ## Navigation Self-Check
 
 After adding, renumbering, or renaming any lesson, run this mechanical check before the learner sees the workspace. It catches the recurring delivery failure: shipping lesson N while lesson N−1's ending link still points at nothing, or at the wrong lesson.
