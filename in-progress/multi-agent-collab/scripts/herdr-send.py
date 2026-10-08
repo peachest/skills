@@ -114,6 +114,7 @@ def main():
         deadline = time.time() + fu_ms / 1000
         started = time.time()
         seen = False  # agent seen at least once → later errors mean it died (pitfall #30)
+        last_status = "unknown"  # handoff 3.1-1: timeout failure carries a state snapshot
         ready = False
         while time.time() < deadline:
             g = subprocess.run([HERDR] + session_args + ["agent", "get", target],
@@ -139,13 +140,15 @@ def main():
                 continue
             seen = True
             status = ((gd.get("result") or {}).get("agent") or {}).get("agent_status", "")
+            last_status = status or last_status
             if status in ("idle", "done"):
                 ready = True
                 break
             time.sleep(2)
         if not ready:
-            fail(4, f"peer still busy/unreachable after {fu_ms}ms — NOT sent; pass --steer to "
-                    "deliver mid-task deliberately")
+            fail(4, f"peer still busy/unreachable after {fu_ms}ms — NOT sent (peer last state: "
+                    f"{last_status}); pass --steer to deliver mid-task deliberately, or "
+                    "retry when the peer frees up")
 
     cmd = [HERDR]
     if runtime:
@@ -163,10 +166,21 @@ def main():
         sys.exit(0)
 
     raw = proc.stdout.strip() or proc.stderr.strip()
-    try:
-        d = json.loads(raw)
-    except json.JSONDecodeError:
-        fail(2, f"non-JSON output: {raw[:300]}")
+    # handoff 3.2-4: non-JSON replies look like timing jitter (peer died mid-read);
+    # one short-backoff retry recovers most of them (forensic class c, ×6 observed)
+    attempts = 0
+    while True:
+        attempts += 1
+        raw = proc.stdout.strip() or proc.stderr.strip()
+        try:
+            d = json.loads(raw)
+            break
+        except json.JSONDecodeError:
+            if attempts >= 2:
+                fail(2, f"non-JSON output after retry: {raw[:300]}")
+            time.sleep(1)
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=(int(wait_ms) / 1000 + 60) if wait_ms else 60)
     if "error" in d:  # branch FIRST (pitfall #5)
         code = (d["error"] or {}).get("code", "")
         fail(3 if code == "agent_blocked" else 2,
