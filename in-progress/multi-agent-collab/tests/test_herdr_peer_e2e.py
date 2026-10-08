@@ -122,10 +122,11 @@ def test_send_followup_gates_on_busy_peer(peer, scripts_dir, e2e_runtime):
     """pitfall #30 guardrail: while the peer is genuinely working, followUp with a
     short timeout must exit 4 and NOT deliver; steer delivers mid-task."""
     p = peer("e2e-busy")
-    # make the peer busy with a real (short) LLM turn
+    # make the peer busy with a task long enough to cover the 3s gate window:
+    # a bash sleep inside the peer's turn keeps agent_status=working reliably
     subprocess.run(
         ["herdr", "--session", e2e_runtime, "agent", "prompt", p["pane"],
-         "Count slowly from 1 to 5, one number per line, nothing else."],
+         "Run this exact bash command and report only its output: `sleep 8 && echo done`"],
         capture_output=True, text=True, timeout=30,
     )
     busy = wait_for(

@@ -12,7 +12,6 @@ LLM-round tests are marked slow and gated behind RUN_SLOW_E2E=1.
 
 import json
 import os
-import pty
 import re
 import subprocess
 import time
@@ -22,6 +21,8 @@ import pytest
 
 RUNTIME = f"collab-e2e-{uuid.uuid4().hex[:8]}"  # one-shot runtime per test run
 PEER_BOOT_TIMEOUT = 60_000  # ms, for pi to boot in the pane
+UUID_RE = re.compile(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})')
+SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 
 
 def _clean_env():
@@ -56,26 +57,35 @@ def server_running(session=RUNTIME):
 
 
 def bootstrap_runtime(session=RUNTIME):
-    """Start the session server headlessly: pty attach (TUI dies on zero-grid, server persists)."""
+    """Start the session server headlessly: `herdr --session <name> server` is the
+    official headless form (verified 2026-10-08). The earlier pty-attach trick
+    broke when herdr started rejecting zero-grid terminals at TUI init."""
     if server_running(session):
         return False
-    scratch = "/tmp"
-    cmd = f'env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_SESSION -u HERDR_SOCKET_PATH -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID herdr session attach {session}'
-    # cwd matters: the initial pane inherits it — use a neutral dir
-    pty.spawn(["bash", "-c", f"cd {scratch} && {cmd}"])
+    env = _clean_env()
+    proc = subprocess.Popen(["herdr", "--session", session, "server"],
+                            cwd="/tmp", env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.time() + 20
     while time.time() < deadline:
         if server_running(session):
+            # keep the server process handle for teardown (foreground process)
+            bootstrap_runtime._proc = proc
             return True
         time.sleep(0.5)
-    raise AssertionError(f"runtime {session} did not come up after pty attach")
+    proc.kill()
+    raise AssertionError(f"runtime {session} did not come up via headless server")
 
 
 def initial_pane(session=RUNTIME):
+    """Headless servers start with ZERO panes (changed vs older herdr) — create a
+    workspace, whose root_pane is the first pane."""
     d = herdr_json(["pane", "list"], session=session)
     panes = (d.get("result") or {}).get("panes") or []
-    assert panes, "runtime has no initial pane"
-    return panes[0]["pane_id"]
+    if panes:
+        return panes[0]["pane_id"]
+    d = herdr_json(["workspace", "create", "--cwd", "/tmp"], session=session)
+    return ((d.get("result") or {}).get("root_pane") or {})["pane_id"]
 
 
 def fresh_pane(cwd, session=RUNTIME):
@@ -84,8 +94,12 @@ def fresh_pane(cwd, session=RUNTIME):
     'available shell' again, verified 2026-09-23)."""
     # NOTE: the positional PANE_ID documented in --help is rejected at runtime
     # ("unknown option") — split always branches off the focused pane.
-    d = herdr_json(["pane", "split", "--direction", "right", "--cwd", cwd], session=session)
-    return ((d.get("result") or {}).get("pane") or {})["pane_id"]
+    d = herdr_json(["pane", "split", "--pane", initial_pane(session),
+                    "--direction", "right", "--cwd", cwd], session=session)
+    pane = ((d.get("result") or {}).get("pane") or {}).get("pane_id")
+    if not pane:
+        raise AssertionError(f"split returned no pane_id: {json.dumps(d)[:300]}")
+    return pane
 
 
 def spawn_peer(name, cwd):
@@ -128,22 +142,24 @@ def spawn_peer(name, cwd):
     return pane
 
 
-def peer_session_file(pane, session=RUNTIME, timeout_s=30):
-    """Poll agent get until herdr resolves the peer's session JSONL path (it appears
-    lazily — pi creates the file on its first message, herdr picks the path up
-    shortly after)."""
+def peer_session_file(pane, session=RUNTIME, timeout_s=90):
+    """Poll `agent list` until herdr resolves the peer's session JSONL path (it appears
+    lazily — pi creates the file on its first message). Polls LIST, not `agent get`:
+    in full-suite runs `agent get` intermittently returns an empty result for a
+    pane whose entry agent list still carries (verified 2026-09-23)."""
     deadline = time.time() + timeout_s
+    last = ""
     while time.time() < deadline:
-        d = herdr_json(["agent", "get", pane], session=session, timeout=15)
-        val = ((d.get("result") or {}).get("agent") or {}).get("agent_session", {}).get("value", "")
-        if val:
-            return val
+        d = herdr_json(["agent", "list"], session=session, timeout=15)
+        for a in (d.get("result") or {}).get("agents") or []:
+            if a.get("pane_id") == pane:
+                val = (a.get("agent_session") or {}).get("value", "")
+                if val:
+                    return val
+        last = json.dumps(d)[:250]
         time.sleep(1)
-    raise AssertionError(f"peer {pane} never got a session path")
+    raise AssertionError(f"peer {pane} never got a session path (last agent list: {last})")
 
-
-UUID_RE = re.compile(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})')
-SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 
 
 def peer_user_injections(session_file, contains=None, since_ts=None):
@@ -189,6 +205,10 @@ def e2e_runtime():
     yield RUNTIME
     subprocess.run(["herdr", "session", "stop", RUNTIME], capture_output=True, env=_clean_env(), timeout=30)
     subprocess.run(["herdr", "session", "delete", RUNTIME], capture_output=True, env=_clean_env(), timeout=30)
+    proc = getattr(bootstrap_runtime, "_proc", None)
+    if proc:
+        try: proc.kill()
+        except Exception: pass
 
 
 @pytest.fixture()
