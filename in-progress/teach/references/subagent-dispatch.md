@@ -28,7 +28,7 @@ not auto-fixes.
   the single-command structural self-checks (navigation, resource-link, prose,
   beat) stay with the parent.
 - **Stop rules**: a suspected fabrication is reported immediately in the
-  receipt's first section, not buried; do not keep digging past the ledger —
+  receipt's first section, not buried; stop at the ledger —
   missing anchors are parent adjudication material, not blockage.
 - **Receipt shape**: findings count + first-section urgent findings +
   artifact path. The parent adjudicates on arrival; the next lesson waits
@@ -47,7 +47,9 @@ One scout per layer; prompts are distinct by layer, not clones:
 - **paper scout**: the tex path; extract the five recurring needs (method
   formulas/hyperparameters, experiment tables, observations, appendix
   material, figure map) each as `tex:<line>` + verbatim excerpt.
-- **code scout**: the repo path + commit to pin; extract config tables
+- **code scout**: the repo path + commit to pin; before hunting, read
+  *Code archaeology traps* in [source-extraction.md](./source-extraction.md).
+  Extract config tables
   (named by tier — code default / config file / CLI), core data structures,
   and every point where code disagrees with the paper's description, each
   as `<commit>:<file>:<line>`.
@@ -75,7 +77,7 @@ disagreements, and writes the fact base.
 - **Report budget**: short receipt (path + check results + one-line design
   note). Long reading lists in the prompt blow the output budget — name the
   three files that matter, not the terrain.
-- **Parent**: integrates the prototype inline (never iframe), runs the
+- **Parent**: integrates the prototype inline, runs the
   interactive-state check, then retires or untracks the prototype file.
   Sync dispatches for build tasks have failed in practice; launch async.
 
@@ -97,8 +99,6 @@ switch to a byte-precise python replace (`assert old in s` guard) — the
 edit tool normalizes CJK punctuation (full/half-width), so a matching
 looking-anchor can still miss (wiki P-T04). After writing, the U+FFFD scan
 in resource-check catches mojibake (\ufffd) before delivery.
-
-## Scheduling rules
 
 ## Scheduling rules
 

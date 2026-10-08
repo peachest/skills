@@ -287,7 +287,7 @@ note/tip/warning/success/danger 之间有强视觉区分，Anthropic 的低饱�
 
 ## Components
 
-teach 课件组件目录（沿用 CSS-CONVENTIONS.md，令牌化后规格）：
+teach 课件组件目录（沿用 CSS-CONVENTIONS.md（已移至 references/），令牌化后规格）：
 
 | 组件 | 类名 | 关键规格 |
 |---|---|---|

@@ -4,7 +4,7 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 
 ## 架构决策
 
-- **每工作区自包含**:各工作区存自己的 `assets/` 副本 (#5)
+- **每工作区自包含**:各工作区存自己的 `assets/` 副本 (#5)。检查脚本必须随模板进入每个工作区（lesson 内以 `../assets/` 相对路径从工作区根运行）——所以脚本与模板同放 assets/ 而非 skill 层 scripts/，移动会破坏工作区相对调用
 - **路径约定**:lesson 通过 `../assets/` 引用(相对路径,双击 HTML 即开)
 - **内部结构**:flat——不分 css/js 子目录
 - **更新**:修改此模板后,手动同步到各现有工作区的 `assets/`
@@ -14,6 +14,11 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 | 文件 | 用途 | 来源 ticket | 必需? |
 |---|---|---|---|
 | `base.css` | 统一 CSS 基底 | #7 | ✅ 所有工作区 |
+| `css-self-check.py` | 内联样式字面量检查（token 系统）+ KaTeX 依赖完整性 + 冻结块豁免 | 六检 | ✅ 所有工作区 |
+| `nav-chain-check.py` | 课间导航链完整性（首尾链、邻居链接） | 六检 | ✅ 所有工作区 |
+| `beat-check.py` | 认知节拍五不变量（hook/callback/concrete/checkpoint/density） | 六检 | ✅ 所有工作区 |
+| `prose-freq-check.py` | 中文散文 AI 味频次审计（flag-only，裁定不修） | 六检 | ✅ 所有工作区 |
+| `run-checks.sh` | 六检编排器（--only/--lesson 子集、findings 落文件、verdict 表尾行） | 六检 | ✅ 所有工作区 |
 | `quiz.js` | 声明式 quiz 组件 (data-quiz JSON + radio button, a11y) | #8 | 可选 |
 | `katex.min.css` | KaTeX 公式渲染样式 | #6 | 可选(有公式时) |
 | `katex.min.js` | KaTeX 公式渲染核心 | #6 | 可选(有公式时) |

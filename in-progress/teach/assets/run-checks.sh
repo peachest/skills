@@ -94,6 +94,6 @@ for k in "${ORDER[@]}"; do
   line+=" $k=${VERDICT[$k]}"
   [ "${VERDICT[$k]}" = "FAIL" ] && fail=1
 done
-echo "$line"
 echo "full findings: $REPORT"
+echo "$line"
 exit $fail

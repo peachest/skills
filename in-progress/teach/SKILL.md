@@ -1,6 +1,6 @@
 ---
 name: teach
-description: Teach the user a new skill or concept, within this workspace.
+description: Teach the user a new skill or concept through a stateful, multi-session course in the current workspace. Use when the user wants to learn or be taught anything — creating a new course, continuing an existing one, requesting a lesson, or resuming after a gap. Runs the Probe → Plan → Teach loop: builds MISSION.md, UNDERSTANDING-MAP.md and PLAN.md, generates HTML lessons with quizzes and reference docs, curates knowledge into OKB, and runs the lesson self-check battery.
 disable-model-invocation: true
 argument-hint: "What would you like to learn about?"
 ---
@@ -11,15 +11,16 @@ The user has asked you to teach them something. This is a stateful request - the
 
 Treat the current directory as a teaching workspace. The state of their learning is captured in this directory in several files:
 
-- `MISSION.md`: A document capturing the _reason_ the user is interested in the topic. This should be used to ground all teaching. Use the format in [MISSION-FORMAT.md](./MISSION-FORMAT.md).
+- `MISSION.md`: A document capturing the _reason_ the user is interested in the topic. This should be used to ground all teaching. Use the format in [references/MISSION-FORMAT.md](./references/MISSION-FORMAT.md).
 - `UNDERSTANDING-MAP.md`: A structured snapshot of what the learner currently understands. Produced by the Probe phase. Each sub-topic is marked mastered / partial / unknown. Updated (overwritten, not appended) after each Probe. This is the primary input to Plan and the basis for zone of proximal development.
 - `PLAN.md`: A dependency graph of what to learn, in what order. Nodes are concepts; edges are prerequisites. The **frontier** (currently-learnable nodes, prerequisites met) and **fog** (sensed but not yet specifiable) are marked. Small topics use a Mermaid graph in this file; large topics that span sessions escalate to a `wayfinder` map on the issue tracker.
 - `./lessons/*.html`: A directory of lessons. A **lesson** is a single, self-contained HTML output that teaches one tightly-scoped thing tied to the mission. This is the primary unit of teaching in this workspace.
 - `./session-log/*.md`: A directory of session logs. Each interactive teaching session appends one file (`0001-YYYYMMDD.md`) recording what was probed, what was taught, quiz results, and learner feedback. This is the raw flow that Plan reads to decide what to teach next and when to stop. It is distinct from learning-records — logs are the stream, records are the distillation.
 - `./reference/*.html`: A directory of reference materials. These are the compressed learnings from the lessons - cheat sheets, reference algorithms, syntax, yoga poses, glossaries. They are the raw units of learning. They should be beautiful documents which print out well, and are designed for quick reference.
-- `RESOURCES.md`: The single interface into the knowledge base. **Knowledge** entries point into **OKB** (the open-knowledge-base) — `gold/` notes when available, `silver/` otherwise. **Wisdom** entries keep community links. Use the format in [RESOURCES-FORMAT.md](./RESOURCES-FORMAT.md).
-- `./learning-records/*.md`: A directory of learning records, which capture what the user has learned. These are loosely equivalent to architectural decision records in software development - they capture non-obvious lessons and key insights that may need to be revised later, or drive future sessions. They are titled `0001-<dash-case-name>.md`, where the number increments each time. Use the format in [LEARNING-RECORD-FORMAT.md](./LEARNING-RECORD-FORMAT.md).
+- `RESOURCES.md`: The single interface into the knowledge base. **Knowledge** entries point into **OKB** (the open-knowledge-base) — `gold/` notes when available, `silver/` otherwise. **Wisdom** entries keep community links. Use the format in [references/RESOURCES-FORMAT.md](./references/RESOURCES-FORMAT.md).
+- `./learning-records/*.md`: A directory of learning records, which capture what the user has learned. These are loosely equivalent to architectural decision records in software development - they capture non-obvious lessons and key insights that may need to be revised later, or drive future sessions. They are titled `0001-<dash-case-name>.md`, where the number increments each time. Use the format in [references/LEARNING-RECORD-FORMAT.md](./references/LEARNING-RECORD-FORMAT.md).
 - `./assets/*`: Reusable **components** shared across lessons. See [Assets](#assets).
+- `GLOSSARY.md`: Subject-term definitions accumulated across lessons (teaching-loop terms live in the skill's [CONTEXT.md](./references/CONTEXT.md) instead). Use the format in [references/GLOSSARY-FORMAT.md](./references/GLOSSARY-FORMAT.md); learning-records link here instead of duplicating term definitions.
 - `NOTES.md`: A scratchpad for you to jot down user preferences, or working notes.
 
 ## The Teaching Loop: Probe → Plan → Teach
@@ -46,7 +47,7 @@ Read `UNDERSTANDING-MAP.md` and chart a dependency graph: nodes are concepts to 
 
 The plan is an index, not a store: each node is a one-liner; the detail lives in the lesson that teaches it. Present the plan to the learner (as a Mermaid graph for small topics) so they can see the route and adjust.
 
-After producing the plan, fact-check it (see [Fact-Checking](#fact-checking) — dispatched async, and the parent waits for the receipt before teaching) — a plan with a wrong premise (X depends on Y, when actually Y depends on X) makes every downstream lesson wrong. Fix premise errors before teaching.
+After producing the plan, fact-check it (see [Fact-Checking](#fact-checking)) — premise errors are fixed before teaching (why the receipt gates the start).
 
 ### Phase 3 — Teach
 
@@ -58,34 +59,9 @@ After each lesson, record what happened in `session-log/`.
 
 After generating a lesson, dispatch fact-check as a background subagent instead of running it inline — a lesson-level fact-check is read-heavy (every claim against the bronze anchors and raw sources), and running it on the teaching path is why it historically got skipped when the learner was waiting. Launch an async fresh-context reviewer the moment the lesson is written (dispatch contract: [subagent-dispatch.md](./references/subagent-dispatch.md)), then continue teaching the next beat. The gate, stated once: generation of lesson N+1 may start once receipt N lands; delivery of lesson N+1 waits until receipt N's findings are fully adjudicated — a wrong number carried across lessons becomes a defended position (a real trace carried one for 12 days). When the receipt arrives, adjudicate each flagged claim: fix genuine defects before that lesson is next revisited; correct already-shown errors in the session itself.
 
-The plan fact-check (point B below) is also dispatched async, but the parent waits for that receipt before teaching starts — a wrong premise poisons every downstream lesson, and there is no learner waiting yet.
+The plan fact-check (point B below) is also dispatched async, but the parent waits for that receipt before teaching starts — no learner is waiting yet, and the receipt gates the start.
 
-For lessons containing structural diagrams (`.drawio`), run the `drawio-skill` self-check: `validate.py` (dangling edges, duplicate IDs, overlap) and `autolayout.py` (Graphviz layout). Mechanical checks are more reliable than asking an LLM to "look at" a diagram. The single-command self-checks (CSS, navigation, prose, beat) stay inline — delegating a sub-second command costs more than running it; the anchor check runs inside the fact-check subagent, which is already reading every claim.
-
-## Philosophy
-
-To learn at a deep level, the user needs three things:
-
-- **Knowledge**, captured from high-quality, high-trust resources
-- **Skills**, acquired through highly-relevant interactive lessons devised by you, based on the knowledge
-- **Wisdom**, which comes from interacting with other learners and practitioners
-
-Knowledge lives in **OKB** (the open-knowledge-base) — the source of truth — not in your parametric memory. When `RESOURCES.md` is thin, your focus is to curate sources into OKB (ingest → distill → fact-check) so teaching has ground to stand on. Never trust your parametric knowledge.
-
-Some topics may require more skills than knowledge. Learning more about theoretical physics might be more knowledge-based. For yoga, more skills-based.
-
-### Fluency vs Storage Strength
-
-You should be careful to split between two types of learning:
-
-- **Fluency strength**: in-the-moment retrieval of knowledge
-- **Storage strength**: long-term retention of knowledge
-
-Fluency can give the user an illusory sense of mastery, but storage strength is the real goal. Try to design lessons which build long-term retention by desirable difficulty:
-
-- Using retrieval practice (recall from memory)
-- Spacing (distributing practice over time)
-- Interleaving (mixing up different but related topics in practice - for skills practice only)
+For lessons containing structural diagrams (`.drawio`), run the drawio self-check (commands in [Visualization Self-Check](#visualization-self-check)). The single-command self-checks (CSS, navigation, prose, beat) stay inline — delegating a sub-second command costs more than running it; the anchor check runs inside the fact-check subagent, which is already reading every claim.
 
 ## Source Extraction
 
@@ -93,13 +69,13 @@ Knowledge enters the course through three source layers — **paper**, **code**,
 
 Run the extraction checklist before the first lesson of a new topic; its output is the fact base (claim → anchor → ruling ledger, exported as `anchors.json` next to `PLAN.md` for the anchor check):
 
-- **paper**: extract the five recurring needs from the tex — method formulas and hyperparameters; experiment tables and ablations; observations; appendix material (topologies, training configuration — content the body covers in one line but a lesson must teach); the `\includegraphics`→caption figure map. Cite each extracted item as `tex:<line>`.
+- **paper**: extract the five recurring needs from the tex (enumerated in the paper-scout contract, [subagent-dispatch.md](./references/subagent-dispatch.md)). Cite each extracted item as `tex:<line>`.
 - **code**: when an official implementation exists, extract from it too — configuration tables, core data structures, and where the code disagrees with the paper's description. A point the paper leaves silent is settled from code at extraction time, not during fact-check.
 - **interpretation**: mark explanatory claims as interpretation, not source text; where an article contradicts the paper, get a ruling before writing prose.
 
-Completion criterion: every claim planned into a lesson carries a source anchor, and every layer disagreement has a one-line recorded ruling (anchor shapes and arbitration order are defined in the okb skill).
+Completion criterion: every claim planned into a lesson carries a source anchor, and every layer disagreement has a one-line recorded ruling (per okb).
 
-The three layers' extraction passes are independent — dispatch them as parallel async fresh-context scouts and let them run while the parent reads the OKB notes; arbitration, provenance labeling, and the recorded rulings stay with the parent. Dispatch contracts in [subagent-dispatch.md](./references/subagent-dispatch.md).
+The three layers' extraction passes are independent — dispatch them as parallel async fresh-context scouts (contracts in [subagent-dispatch.md](./references/subagent-dispatch.md)) while the parent reads the OKB notes; what stays with the parent is bounded there.
 
 Figure sources follow a decision tree: the paper's own figures first (the caption is the ground truth for what the figure shows); figures from interpretation articles when the learner endorses them; a self-drawn diagram only when no source figure fits. Three rules govern figure handling:
 
@@ -107,7 +83,7 @@ Figure sources follow a decision tree: the paper's own figures first (the captio
 2. Render every subfigure of a composite figure.
 3. Before inserting, produce a figure→lesson-position table and give the learner a contact sheet for visual review — model-side verification cannot see the image, so human review closes the loop.
 
-When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor formats, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts of the four delegated step kinds — fact-check reviewer, source-extraction scouts, prototype workers, and heavy code-archaeology scouts.
+When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor verification rules, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts (fact-check reviewer, source-extraction scouts, prototype workers, code-archaeology scouts), the scheduling rules, and the lesson-edit fallback.
 
 ## Lessons
 
@@ -117,7 +93,7 @@ A lesson should be **beautiful** — clean, readable typography and layout — s
 
 The prose must read as the user's teacher, not as generated filler. After drafting a lesson, run the de-slop pass ([Prose Self-Check](#prose-self-check)) and fix every adjudicated tell before delivery — formulaic transitions and summary padding are defects in a lesson, not style choices.
 
-The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development — grounded in `UNDERSTANDING-MAP.md`, not guessed.
+The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and in the user's zone of proximal development (see [Zone Of Proximal Development](#zone-of-proximal-development)).
 
 Each lesson links via HTML anchors to other lessons and reference documents. Navigation is a chain: each lesson ends with a next link to the following lesson and (after the first) a back link to the previous one. Delivering lesson N includes updating lesson N−1's next link to point at N — the delivery is finished only when the chain is unbroken ([Navigation Self-Check](#navigation-self-check)).
 
@@ -126,6 +102,12 @@ Each lesson should recommend a primary source for the user to read or watch. Thi
 Each lesson should contain a reminder to ask followup questions to the agent. The agent is their teacher, and can assist with anything that's unclear.
 
 ### Retrieval rhythm
+
+Two learning strengths: **fluency** (in-the-moment retrieval — gives an illusory sense of mastery) and **storage strength** (long-term retention — the real goal). Build storage strength by desirable difficulty:
+
+- Using retrieval practice (recall from memory)
+- Spacing (distributing practice over time)
+- Interleaving (for skills practice only)
 
 A lesson's practice section is a three-stage ladder, each stage a stronger form of retrieval than the last:
 
@@ -149,23 +131,17 @@ The knowledge layering of OKB (bronze → silver → gold) must stay visible in 
 
 ## Assets
 
-Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse. Interactive components (simulators, animations, visualizations with controls) are built as standalone prototypes dispatched to async workers (contract in [subagent-dispatch.md](./references/subagent-dispatch.md)); the parent integrates the accepted prototype inline and untracks it.
+Lessons are built from reusable **components**, stored in `./assets/`: stylesheets, quiz widgets, simulators, diagram helpers — anything a second lesson could reuse. Assets are copied per-workspace from the skill template at workspace creation (`assets/README.md` owns the copy semantics and file inventory). Interactive components (simulators, animations, visualizations with controls) are built as standalone prototypes dispatched to async workers (contract in [subagent-dispatch.md](./references/subagent-dispatch.md)); the parent integrates the accepted prototype inline and untracks it.
 
 Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it — keep inline code to things no future lesson would duplicate.
 
 A shared stylesheet is the first component every workspace earns: every lesson links it, so the lessons look like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
 
-When creating or styling HTML (lessons or reference documents), follow the [CSS Conventions](./CSS-CONVENTIONS.md) — component catalog, CSS variables, dark mode, and reference document styling.
+When creating or styling HTML (lessons or reference documents), follow the [CSS Conventions](./references/CSS-CONVENTIONS.md) — component catalog, CSS variables, dark mode, and reference document styling.
 
 ## The Mission
 
-Every lesson should be tied into the mission - the reason that the user is interested in learning the topic.
-
-If the user is unclear about the mission, or the `MISSION.md` is not populated, your first job should be to question the user on why they want to learn this.
-
-Failing to understand the mission will mean knowledge acquisition is not grounded in real-world goals. Lessons will feel too abstract. You will have no way of judging what the user should do next.
-
-Missions may change as the user develops more skills and knowledge. This is normal - make sure to update the `MISSION.md` and add a learning record to capture the change. Confirm with the user before changing the mission.
+If the user is unclear about the mission, or `MISSION.md` is not populated, your first job is to question the user on why they want to learn this. Missions may change as the user develops skills and knowledge — update `MISSION.md` and add a learning record, confirming with the user first.
 
 ## Zone Of Proximal Development
 
@@ -199,13 +175,13 @@ For skill acquisition, difficulty is the tool. Effortful retrieval is what build
 
 Each of these should be based on a **feedback loop**, where the user receives feedback on their performance. This feedback loop should be as tight as possible, giving feedback immediately - and ideally automatically.
 
-For quizzes, each answer should be exactly the same number of words (and characters, if possible). Don't give the user any clues about the answer through formatting. Distractors are plausible misunderstandings of the same concept, not absurd throwaways — tag each with the misconception it exposes (`misconceptions` in `quiz.js`) so a wrong pick diagnoses what to re-teach.
+For quizzes, each answer should be exactly the same number of words (and characters, if possible), with no formatting clues about the answer — the misconception-tagging contract lives in [Retrieval rhythm](#retrieval-rhythm).
 
 ## Fact-Checking
 
 Lessons and plans are not reliable enough to trust unchecked. Two integration points:
 
-- **After Plan (point B)**: run the `fact-check` skill on `PLAN.md`. A wrong premise in the dependency graph makes every downstream lesson wrong. Fix before teaching.
+- **After Plan (point B)**: dispatch `fact-check` on `PLAN.md` (async per the Teach section; the parent waits — there is no learner yet). The delivery gate is defined in the Teach section.
 - **After lesson generation (point A)**: dispatch `fact-check` on `lessons/*.html` (async, per the Teach section). Produces `lesson-XXX.factcheck.md`; adjudicate the receipt before the next lesson is delivered, and correct already-shown errors in the session itself. AFK batch generation is especially prone to fabricating details.
 
 Fact-check is claim-level (did the model state something false?), and runs as a background subagent per the Teach section — inline only when no subagent runtime is available. Alongside it, run the **anchor check** (does every number resolve to its cited origin?): `python3 ./assets/anchor-check.py <anchors.json> lessons/0001-your-lesson.html` re-reads each cited line and reports unanchored numbers, mismatched quotes, and figure numbers the local tex never uses (published versions renumber figures — cite the local tex's literal numbering). Figure rendering for the paper layer comes from `python3 ./assets/tex-figs.py <source-dir> --out lessons/img/` (caption map, PNG rendering, composite-figure warnings, contact sheet). Visualization self-check (below) is structural (is the diagram well-formed?). CSS self-check (next) is stylistic (does the HTML honor the token system?). Navigation self-check is relational (does the lesson chain link each lesson to its neighbours?). De-slopping (see [Prose Self-Check](#prose-self-check)) is voice-level (does the prose read as a human teacher wrote it?). The checks are orthogonal — a lesson with diagrams and figures runs all of them; a plain lesson runs fact-check with anchor check, CSS self-check, navigation self-check, and de-slop.
@@ -214,7 +190,7 @@ Distinct from both is **OKB** fact-checking, which runs upstream in the knowledg
 
 ## CSS Self-Check
 
-After generating or editing any lesson or reference HTML, run this mechanical check before the learner sees it. It catches the failure mode fact-check and viz-check both miss: inline `<style>` blocks (and inline ` style="" ` attributes) using bare literal font-size/spacing/line-height values instead of the token system defined in ` base.css ` and ` CSS-CONVENTIONS.md `.
+After generating or editing any lesson or reference HTML, run this mechanical check before the learner sees it. It catches the failure mode fact-check and viz-check both miss: inline `<style>` blocks (and inline ` style="" ` attributes) using bare literal font-size/spacing/line-height values instead of the token system defined in ` base.css ` and ` references/CSS-CONVENTIONS.md `.
 
 Run from the workspace root:
 
@@ -238,10 +214,10 @@ python3 ./assets/nav-chain-check.py lessons/
 
 The script orders `lessons/*.html` by leading number and verifies each lesson links to both neighbours — the first lesson needs no back link, the last needs no next link. **Zero missing links** is the completion criterion; fix by updating the neighbour's navigation block, never by deleting a link.
 
-The nav chain is only one kind of link. Run the whole check family through the battery — it handles the exit-code matrix (fix-class vs adjudication-class), writes every finding check-prefixed to ` reviews/checks-<N>.txt `, and prints a per-check verdict table as its last line:
+The nav chain is only one kind of link. Run the whole check family through the battery — it handles the exit-code matrix (fix-class vs adjudication-class), writes every finding check-prefixed to ` reviews/checks-<N|all>.txt `, and prints a per-check verdict table as its last line:
 
 ```bash
-python3 ./assets/run-checks.sh [--only css,beat,...] [--lesson N] lessons/
+bash ./assets/run-checks.sh [--only css,beat,...] [--lesson N] lessons/
 ```
 
 **The verdict table is the completion surface, not stdout findings** — `| tail -1` still recovers every result. Each check's own completion criterion (below) is unchanged; the battery only orchestrates. `--only resource` runs the href-resolution check alone (every relative `src`/`href` resolved against the lesson's own directory — assets, images, deep `../` okb paths; also catches U+FFFD mojibake). **Zero broken references** is its criterion.
@@ -309,34 +285,16 @@ The lesson loses single-file self-containment (MP4 is an external file). This is
 
 ## Acquiring Wisdom
 
-Wisdom comes from true real-world interaction - testing your skills outside the learning environment.
-
-When the user asks a question that appears to require wisdom, your default posture should be to attempt to answer - but to ultimately delegate to a **community**.
-
-A community is a place (online or offline) where the user can test their skills in the real world. This might be a forum, a subreddit, a real-world class (budget permitting) or a local interest group.
-
-You should attempt to find high-reputation communities the user can join. If the user expresses a preference that they don't want to join a community, respect it.
+Wisdom comes from real-world interaction. When a question calls for it, answer first, then point the user to a high-reputation community where they can test the skill; respect a preference not to join one.
 
 ## Reference Documents
 
-While creating lessons, you should also create reference documents. Lessons can reference these documents - they are useful for tracking raw units of knowledge useful across lessons.
-
-Lessons will rarely be revisited later - reference documents will be. They should be the compressed essence of the lesson, in a format designed for quick reference.
-
-Some learning topics lend themselves to reference:
-
-- Syntax and code snippets for programming
-- Algorithms and flowcharts for processes
-- Yoga poses and sequences for yoga
-- Exercises and routines for fitness
-- Glossaries for any topic with its own nomenclature
-
-Glossaries, in particular, are an essential reference. Once one is created, it should be adhered to in every lesson.
+Create reference documents alongside lessons: the compressed essence of the material in a quick-reference format — lessons are rarely revisited, references are (syntax, algorithms, glossaries). Once a glossary exists, adhere to it in every lesson (workspace `GLOSSARY.md`; format in [references/GLOSSARY-FORMAT.md](./references/GLOSSARY-FORMAT.md)).
 
 ## `NOTES.md`
 
-The user will sometimes express preferences of how they want to be taught, or things you should keep in mind. This is the place to record those preferences, so you can refer back to them when designing lessons or working with the user.
+The user will sometimes express preferences of how they want to be taught, or things you should keep in mind. This is the place to record those preferences, so you can refer back to them when designing lessons or working with the user. Component-annotation spec for NOTES entries: [component-analysis-spec.md](./component-analysis-spec.md).
 
 ## Glossary
 
-See [CONTEXT.md](./CONTEXT.md) for the full glossary of teaching-loop terms (Probe, Plan, Teach, subject terrain, understanding terrain, frontier, fog, fact-check points, viz-check) and their mapping to the shared navigation metaphor.
+Two glossaries, two scopes: the skill's teaching-loop terms (Probe, Plan, Teach, frontier, fog, viz-check) live in [CONTEXT.md](./references/CONTEXT.md); the workspace's subject-term definitions accumulate in `GLOSSARY.md` (format: [references/GLOSSARY-FORMAT.md](./references/GLOSSARY-FORMAT.md)) — learning-records link there instead of duplicating definitions.
