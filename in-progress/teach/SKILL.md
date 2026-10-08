@@ -1,6 +1,13 @@
 ---
 name: teach
-description: Teach the user a new skill or concept through a stateful, multi-session course in the current workspace. Use when the user wants to learn or be taught anything — creating a new course, continuing an existing one, requesting a lesson, or resuming after a gap. Runs the Probe → Plan → Teach loop: builds MISSION.md, UNDERSTANDING-MAP.md and PLAN.md, generates HTML lessons with quizzes and reference docs, curates knowledge into OKB, and runs the lesson self-check battery.
+description: >-
+  Teach the user a new skill or concept through a stateful, multi-session course
+  in the current workspace. Use when the user wants to learn or be taught
+  anything — creating a new course, continuing an existing one, requesting a
+  lesson, or resuming after a gap. Runs the Probe → Plan → Teach loop (builds
+  MISSION.md, UNDERSTANDING-MAP.md and PLAN.md, generates HTML lessons with
+  quizzes and reference docs, curates knowledge into OKB, runs the lesson
+  self-check battery).
 disable-model-invocation: true
 argument-hint: "What would you like to learn about?"
 ---
