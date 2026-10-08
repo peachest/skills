@@ -22,6 +22,7 @@ teach skill 的 **canonical assets 模板**。每个教学工作区创建时,从
 | `fonts/*.woff2` | KaTeX 字体(20 个 woff2) | #6 | 可选(有公式时) |
 | `tex-figs.py` | 论文 LaTeX 源 → 图资产(caption 映射 + PDF→PNG + 复合图警告 + contact sheet) | source-extraction | 可选(引用论文图时) |
 | `anchor-check.py` | lesson 锚点机械勾稽(未锚数字/引用不匹配/图号漂移) | source-extraction | 可选(fact-check 同步跑) |
+| `resource-check.py` | lesson 相对 src/href 可达性(资产/图片/深回溯 okb 路径) | #nav 检查族 | ✅ 所有工作区(有链接即跑) |
 | `animations/render.sh` | manim 动画渲染封装脚本 (`-ql` + 环境检测 + 安装提示) | — | 可选(有动画时,复制到工作区 `./animations/`) |
 
 ## CSS 统一策略 (#7)

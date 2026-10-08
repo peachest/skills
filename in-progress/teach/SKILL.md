@@ -226,6 +226,14 @@ python3 ./assets/nav-chain-check.py lessons/
 
 The script orders `lessons/*.html` by leading number and verifies each lesson links to both neighbours — the first lesson needs no back link, the last needs no next link. **Zero missing links** is the completion criterion; fix by updating the neighbour's navigation block, never by deleting a link.
 
+The nav chain is only one kind of link. Run its companion after any directory reshuffle or asset rename:
+
+```bash
+python3 ./assets/resource-check.py lessons/ reference/
+```
+
+It resolves every relative `src`/`href` (and inline-style `url()`) against the lesson's own directory — assets, images, deep `../` okb paths — and reports the broken ones. External URLs, `data:` URIs, and pure anchors are skipped. **Zero broken references** is the completion criterion.
+
 ## Prose Self-Check
 
 After drafting or editing a lesson, de-slop the prose before the learner sees it — the lesson is the user's teacher's voice, and generated filler reads as a defect.
