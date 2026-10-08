@@ -53,3 +53,17 @@
 - passCheck: 新开课时，课程引用的每个机制能在信源覆盖矩阵里找到"来源层"标注；仅代码有的设计默认进 coverage 对账而非依赖学习者追问暴露
 - 证据: herdr 回执 w3:p2（01a0bd84，2026-10-08）；课程 commit 80e8e93；papers/2503.01840-eagle3/source/paper.tex 461 行 vocab 零命中
 - 出现: 2026-10-08 spec-decoding 课⑦
+## P-T07 验证 regime 按课型静态路由被证伪
+- 状态: rejected
+- 现象/提案: 第二轮增量的"验证流矩阵"（tex 主导课→anchor-check；code 主导课→fact-check worker）
+- 否决证据: specforge trace（2026-10-08）——code-contract 课（0004/0006/0007/0008）恰是 anchor-check 最重度用户（21→1、40→1 收敛）；0007 同小时两种 regime 并用。按课型路由会跳过 quote/number 修复
+- 裁定: anchor-check（机械 quote/number 复核）与 fact-check worker（claim 真假）每课都跑；课型只决定 sources 的 kind 分布。 challenger D3 记录于此防重提
+- 证据: 967bea29 challenger report；FORGE jsonl 10:18-13:57
+
+## P-T08 ledger CLI 过早（schema 未稳 + 4 动词覆盖率 61%）
+- 状态: deferred
+- 现象/提案: 4 动词 CLI（add-claim/patch-quote/add-source/verdict）折叠 ~163 个 anchors.json/ledger 编辑 heredoc
+- 否决证据: 103 个真实 mutation heredoc 中 39% 是数据依赖的批量迁移（读上游算新值），CRUD 类仅 61% < 70% 自设线；schema 在 trace 内翻过面（claims dict→list）；疼痛集中两次爆发而非稳态
+- 裁定: 降级为"schema 强制器"定位（okb 侧 load/write 核心 + heredoc 逃生口），等第二门课验证 schema 不变后再评估动词集。 folding 主张撤回
+- 证据: d3eda845 challenger report（heredoc 聚类统计）
+- 出现: 2026-10-08 challenger round
