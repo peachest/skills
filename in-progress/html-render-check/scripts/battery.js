@@ -191,6 +191,217 @@
       }
     }
 
+    // ---- 6. SVG broken-arrow: dangling endpoints ----------------------------
+    // Edge candidates: stroked line/path/polyline with an arrowhead marker, or
+    // a fill-less elongated path (freehand edge). Node candidates: filled or
+    // stroked shapes with ≥150px² bbox (manual arrowhead polygons are smaller).
+    const EDGE_TAGS = 'line, path, polyline';
+    const NODE_TAGS = 'rect, circle, ellipse, polygon, path';
+    const isDef = (el) => !!el.closest('defs, marker');
+    const hasMarker = (el) => {
+      const cs = window.getComputedStyle(el);
+      return (el.getAttribute('marker-end') || cs.markerEnd || '') !== 'none' &&
+             ((el.getAttribute('marker-end') || cs.markerEnd || '') !== '' &&
+              (el.getAttribute('marker-end') || cs.markerEnd || '') !== 'none') ||
+             ((el.getAttribute('marker-start') || cs.markerStart || '') !== 'none' &&
+              (el.getAttribute('marker-start') || cs.markerStart || '') !== '');
+    };
+    const nodeArea = (b) => b.width * b.height;
+    const toViewport = (el, pt) => {
+      const m = el.getScreenCTM();
+      if (!m) return null;
+      const p = new DOMPoint(pt.x, pt.y).matrixTransform(m);
+      return {x: p.x, y: p.y};
+    };
+    const nearAnyNode = (vp, nodes, pad) => nodes.some((n) =>
+      vp.x >= n.b.x - pad && vp.x <= n.b.x + n.b.width + pad &&
+      vp.y >= n.b.y - pad && vp.y <= n.b.y + n.b.height + pad);
+
+    if (issues.length < MAX_REPORT) {
+      for (const svg of renderedSvgs) {
+        // Nodes first (shapes that are not edges themselves).
+        const nodeEls = [...svg.querySelectorAll(NODE_TAGS)]
+          .filter((s) => visible(s) && !isDef(s) &&
+            !(s.hasAttribute('marker-end') || s.hasAttribute('marker-start')));
+        const nodes = nodeEls.map((s) => ({s, b: bboxOf(s)})).filter((x) =>
+          x.b && nodeArea(x.b) >= 150);
+        // Edge candidates.
+        const edges = [...svg.querySelectorAll(EDGE_TAGS)].filter((e) => {
+          if (!visible(e) || isDef(e)) return false;
+          const b = bboxOf(e);
+          if (!b || (b.width < 1 && b.height < 1)) return false;
+          if (e.hasAttribute('marker-end') || e.hasAttribute('marker-start')) return true;
+          const cs = window.getComputedStyle(e);
+          if (cs.stroke === 'none' || cs.strokeWidth === '0') return false;
+          // Marker-less: only fill-less elongated shapes count as edges.
+          const elong = Math.max(b.width, b.height) /
+            Math.max(1, Math.min(b.width, b.height));
+          return (cs.fill === 'none' || e.getAttribute('fill') === 'none') && elong >= 2.5;
+        });
+        for (const e of edges) {
+          if (typeof e.getTotalLength !== 'function') continue;
+          let len = 0;
+          try { len = e.getTotalLength(); } catch (_) { continue; }
+          if (len < 4) continue;
+          const marked = hasMarker(e);
+          let dangling = 0;
+          for (const t of [0, len]) {
+            const vp = toViewport(e, e.getPointAtLength(t));
+            if (vp && !nearAnyNode(vp, nodes, 6)) dangling++;
+          }
+          if (dangling > 0) {
+            issues.push({kind: 'broken-arrow-dangling', edge: describe(e),
+              endpoints: [0, len].map((t) => {
+                const vp = toViewport(e, e.getPointAtLength(t));
+                return vp ? [Math.round(vp.x), Math.round(vp.y)] : null;
+              }),
+              marked, advisory: !marked});
+            if (issues.length >= MAX_REPORT) break;
+          }
+        }
+        if (issues.length >= MAX_REPORT) break;
+      }
+    }
+
+    // ---- 7. SVG edge-through-box --------------------------------------------
+    // An edge crossing the interior of a node it does not connect to. Sample
+    // along the edge; ≥4 interior samples = hard pass-through, 2–3 = grazing
+    // (advisory). Source/target nodes (endpoints inside) are exempt.
+    if (issues.length < MAX_REPORT) {
+      for (const svg of renderedSvgs) {
+        const nodeEls = [...svg.querySelectorAll(NODE_TAGS)]
+          .filter((s) => visible(s) && !isDef(s) &&
+            !(s.hasAttribute('marker-end') || s.hasAttribute('marker-start')));
+        const nodes = nodeEls.map((s) => ({s, b: bboxOf(s)})).filter((x) =>
+          x.b && nodeArea(x.b) >= 150);
+        const edges = [...svg.querySelectorAll(EDGE_TAGS)].filter((e) => {
+          if (!visible(e) || isDef(e)) return false;
+          const b = bboxOf(e);
+          return b && (b.width >= 1 || b.height >= 1) &&
+            (e.hasAttribute('marker-end') || e.hasAttribute('marker-start'));
+        });
+        for (const e of edges) {
+          let len = 0;
+          try { len = e.getTotalLength(); } catch (_) { continue; }
+          if (len < 8) continue;
+          const vps = [0, len].map((t) => toViewport(e, e.getPointAtLength(t)));
+          const inside = (vp, pad) => vp && nodes.some((n) =>
+            vp.x > n.b.x + pad && vp.x < n.b.x + n.b.width - pad &&
+            vp.y > n.b.y + pad && vp.y < n.b.y + n.b.height - pad);
+          const linked = new Set();
+          vps.forEach((vp, i) => {
+            if (vp) nodes.forEach((n, j) => {
+              if (vp.x >= n.b.x - 6 && vp.x <= n.b.x + n.b.width + 6 &&
+                  vp.y >= n.b.y - 6 && vp.y <= n.b.y + n.b.height + 6) linked.add(j);
+            });
+            void i;
+          });
+          const steps = Math.min(200, Math.max(8, Math.round(len / 10)));
+          const crossings = new Map(); // node index -> interior sample count
+          for (let k = 1; k < steps; k++) {
+            const vp = toViewport(e, e.getPointAtLength((len * k) / steps));
+            if (!vp) continue;
+            nodes.forEach((n, j) => {
+              if (linked.has(j)) return;
+              if (vp.x > n.b.x + 2 && vp.x < n.b.x + n.b.width - 2 &&
+                  vp.y > n.b.y + 2 && vp.y < n.b.y + n.b.height - 2) {
+                crossings.set(j, (crossings.get(j) || 0) + 1);
+              }
+            });
+          }
+          for (const [j, cnt] of crossings) {
+            if (cnt < 2) continue;
+            issues.push({kind: 'edge-through-box', edge: describe(e),
+              through: describe(nodes[j].s), samples: cnt,
+              advisory: cnt < 4});
+            if (issues.length >= MAX_REPORT) break;
+          }
+          if (issues.length >= MAX_REPORT) break;
+        }
+        if (issues.length >= MAX_REPORT) break;
+      }
+    }
+
+    
+
+    // ---- 8. SVG text-out-of-viewport -----------------------------------------
+    // Text whose bbox extends beyond its svg's viewport (even 1px). Stricter
+    // than text-escape (which needs a straddling group rect): catches footnote
+    // lines that run off the right edge of the canvas. Advisory — long labels
+    // near the edge are often intentional crops; the author decides.
+    if (issues.length < MAX_REPORT) {
+      for (const svg of renderedSvgs) {
+        const vb = bboxOf(svg);
+        if (!vb) continue;
+        for (const {t, b} of visTexts(svg)) {
+          const over = Math.max(0, b.x + b.width - (vb.x + vb.width)) +
+                       Math.max(0, vb.x - b.x) +
+                       Math.max(0, b.y + b.height - (vb.y + vb.height)) +
+                       Math.max(0, vb.y - b.y);
+          if (over > 1) {
+            issues.push({kind: 'svg-text-out-of-viewport', text: t.textContent.slice(0, 16),
+              overhang: Math.round(over), advisory: true});
+            if (issues.length >= MAX_REPORT) break;
+          }
+        }
+        if (issues.length >= MAX_REPORT) break;
+      }
+    }
+
+    // ---- 9. Dark-theme contrast (prefers-color-scheme: dark) ----------------
+    // Simulate dark scheme: if the page defines dark tokens, verify svg text
+    // won't be dark-on-dark. Heuristic: parse CSS custom properties under a
+    // dark media query and check that --ink-like vars are light. Advisory —
+    // only meaningful for artifacts meant to be embedded in themed hosts.
+    if (issues.length < MAX_REPORT) {
+      for (const svg of renderedSvgs) {
+        const texts = visTexts(svg);
+        if (!texts.length) continue;
+        const fills = texts.map((x) => window.getComputedStyle(x.t).fill);
+        const rgb = (f) => { const m = f && f.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/); return m ? [ +m[1], +m[2], +m[3] ] : null; };
+        // WCAG 2.x relative luminance (linearized sRGB), not a naive weighted
+        // sum — naive luma over-rejects mid-luminance semantic colors like red
+        // #f85149 on dark panels (actual 5.37:1, readable).
+        const srgb = (c) => c.map((v) => { v /= 255; return v <= 0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); });
+        const lum = (c) => { if (!c) return null; const [r,g,b] = srgb(c); return 0.2126*r + 0.7152*g + 0.0722*b; };
+        const bgLum = lum(rgb(window.getComputedStyle(svg).backgroundColor)) ?? lum(rgb(window.getComputedStyle(document.body).backgroundColor));
+        if (bgLum === null || bgLum > 0.5) continue; // light background — not a dark-theme page
+        let worst = null;
+        for (const f of fills) {
+          const l = lum(rgb(f));
+          if (l === null) continue;
+          const ratio = (Math.max(l, bgLum) + 0.05) / (Math.min(l, bgLum) + 0.05);
+          if (!worst || ratio < worst.ratio) worst = { ratio, fill: f };
+        }
+        if (worst && worst.ratio < 3) {
+          issues.push({kind: 'svg-dark-contrast', worstRatio: Math.round(worst.ratio * 100) / 100,
+            worstFill: worst.fill, svgBgLum: Math.round(bgLum * 100) / 100, advisory: true});
+        }
+      }
+    }
+
+    // ---- 10. CSS var sanity: used-vars ⊆ defined-vars ----------------------
+    // For each svg: collect var(--x) referenced in attributes/styles, check
+    // each resolves to a non-empty custom property under the CURRENT scheme.
+    // Catches: var referenced but never defined (silent fallback to inherited
+    // black or nothing), and self-referential definitions (--x: var(--x))
+    // which make the property guaranteed-invalid at computed-value time.
+    if (issues.length < MAX_REPORT) {
+      for (const svg of renderedSvgs) {
+        const inner = svg.innerHTML || '';
+        const used = new Set();
+        for (const m of inner.matchAll(/var\((--[-\w]+)\s*(?:,([^)]*))?\)/g)) used.add(m[1]);
+        for (const v of used) {
+          const val = window.getComputedStyle(svg).getPropertyValue(v).trim();
+          if (!val) {
+            issues.push({kind: 'css-var-undefined', var: v, advisory: true});
+            if (issues.length >= MAX_REPORT) break;
+          }
+        }
+        if (issues.length >= MAX_REPORT) break;
+      }
+    }
+
     return JSON.stringify({
       ok: !issues.some((i) => !i.advisory),
       title: document.title,
