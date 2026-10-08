@@ -44,6 +44,8 @@ python3 <SKILL_DIR>/scripts/doc-usage.py matrix \
 
 Columns: READ / WRITE / MENTION / sessions / read+res (read-like calls whose toolResult was non-empty — a read that returned nothing consumed nothing) / verdict. Verdicts: `consumed` (≥3 reads), `weak-read`, `only-maintained (fake-useful)` (writes, zero reads — deletion candidates), `never-touched`.
 
+**Self-pollution pitfall**: the audit session itself usually lives in the same sessions-dir — its own tool calls (running this script, quoting target names) count toward the matrix. Identify the current session file (newest mtime, or session id from the audit session) and confirm verdicts survive without it before reporting; a target whose only READs come from the audit session is `never-touched` in reality.
+
 ### 3. Escape-rate (only when the doc encodes an action rule)
 
 For rules of the form "before doing X, touch doc Y", test the contrapositive — sessions doing X without ever touching Y:
