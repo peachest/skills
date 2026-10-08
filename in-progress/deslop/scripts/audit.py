@@ -17,6 +17,7 @@ Exit codes: 0 = report produced (verdict may still be "skip"); 2 = usage error.
 """
 
 import argparse
+import html as htmllib
 import json
 import re
 import sys
@@ -103,7 +104,7 @@ def mask_code(text: str) -> str:
             text = keep_nl(text[: 3 + end.end()]) + text[3 + end.end():]
     text = re.sub(r"```.*?```", lambda m: keep_nl(m.group(0)), text, flags=re.S)
     text = re.sub(r"`[^`\n]+`", lambda m: keep_nl(m.group(0)), text)
-    return text
+    return mask_math(text)
 
 
 def split_paragraphs(text: str):
@@ -116,10 +117,39 @@ def split_paragraphs(text: str):
     return [(a, text[a:b]) for a, b in paras if text[a:b].strip()]
 
 
+# inline/display math spans: punctuation and word counts inside are not prose
+MATH_SPAN = re.compile(r"\$[^$\n]+\$|\\\([^\n]*?\\\)|\\\[[\s\S]*?\\\]")
+
+
+def mask_math(text: str) -> str:
+    return re.sub(MATH_SPAN, lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+
+
 def lang_of(chunk: str) -> str:
-    cjk = len(CJK.findall(chunk))
-    letters = len(re.findall(r"[A-Za-z]", chunk))
+    """zh sentences carry CJK; en sentences carry none. Term-dense zh
+    (draft/target/LK loss...) stays zh — any real CJK presence decides,
+    letter counts only break ties for 1-2 stray CJK chars."""
+    stripped = mask_math(chunk)
+    cjk = len(CJK.findall(stripped))
+    if cjk >= 3:
+        return "zh"
+    letters = len(re.findall(r"[A-Za-z]", stripped))
     return "zh" if cjk * 2 > letters else "en"
+
+
+def strip_html(text: str) -> str:
+    """HTML -> prose, aligned with the teach bridged-extraction dialect:
+    drop style/script/svg/head/comments, strip tags, unescape entities,
+    collapse blank runs. Line count shrinks — callers audit the extracted
+    text as a document in its own right."""
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    text = re.sub(r"<(style|script|svg|head)\b.*?</\1>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"</t[dh]>|<br\s*/?>", " ", text, flags=re.I)  # table cells stay on one row line
+    text = re.sub(r"</tr>|<[^>]+>", "\n", text, flags=re.I)
+    text = htmllib.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", text)
+    return text.strip() + "\n"
 
 
 def line_of(text: str, pos: int) -> int:
@@ -213,7 +243,7 @@ def audit_text(text: str, mode: str = "flavor") -> dict:
             if offset < 0:
                 offset = pos
             pos = offset + len(s)
-            words = len(re.findall(r"[A-Za-z0-9']+", s))
+            words = len(re.findall(r"[A-Za-z0-9']+", mask_math(s)))
             if words > limit:
                 flags.append({"rule": "EN-1", "name": f"sentence >{limit} words",
                               "lang": "en", "line": line_of(text, offset),
@@ -261,6 +291,8 @@ def main() -> int:
     args = ap.parse_args()
 
     text = Path(args.file).read_text(encoding="utf-8")
+    if args.file.endswith((".html", ".htm")) or re.search(r"<(?:html|body|div|p|section)\b", text[:2000], re.I):
+        text = strip_html(text)
     report = audit_text(text, args.mode)
     if args.force and report["verdict"].startswith("skip"):
         report["verdict"] = "skip-overridden (--force)"
