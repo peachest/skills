@@ -136,3 +136,67 @@ def test_leading_frontmatter_masked():
     doc = "---\ntitle: x\n---\n\n正文没有触发词。"
     r = audit.audit_text(doc)
     assert r["flags"] == []
+
+
+def test_inline_math_masked():
+    # semicolon / lt inside $...$ is math, not prose punctuation
+    doc = "当 $\\tau < 1 + T_{\\text{draft}}/T_{\\text{verify}}$ 时，投机采样更慢。"
+    r = audit.audit_text(doc)
+    assert "EN-2" not in hits_by_rule(r)
+    assert "ZH-10a" not in hits_by_rule(r)  # 当…时， inside math guarded? no — prose 当…时 at line start without 时，suffix won't fire anyway
+    # word count: math tokens excluded from EN-1
+    en = "The ratio " + "$\\tau/\\tau_0$ " * 8 + "settles it today."
+    r2 = audit.audit_text(en)
+    assert "EN-1" not in hits_by_rule(r2)
+
+
+def test_lang_routing_ignores_math():
+    # zh sentence full of math stays zh
+    doc = "这一步把 $E[\\tau]/(1+N_c)$ 的两个杠杆拆开看。加速从 1.9x 到 2.8x。"
+    r = audit.audit_text(doc)
+    assert all(f["lang"] == "zh" for f in r["flags"]) or r["flags"] == []
+
+
+def test_strip_html_prose():
+    html = """<html><head><style>.x{color:red}</style><script>var a=1;</script></head>
+<body><h1>标题</h1><p>第一段——有破折号。</p><p>第二段；有分号。</p></body></html>"""
+    t = audit.strip_html(html)
+    assert "——" in t and "；" in t
+    assert ".x" not in t and "var a" not in t
+    r = audit.audit_text(t)
+    h = hits_by_rule(r)
+    assert "ZH-4" in h          # —— flagged
+    assert "EN-2" not in h      # fullwidth ；is zh prose; EN-2 matches ascii ; only
+
+
+def test_strip_html_unescapes_entities():
+    html = "<p>当 $\\tau &lt; 1$ 时更快。</p>"
+    t = audit.strip_html(html)
+    assert "&lt;" not in t and "<" in t
+
+
+def test_html_autodetect_in_audit_text_pipeline():
+    # end-to-end: audit_text on raw html via strip path (simulating main())
+    html = "<html><body><p>真正的壁垒不是技术，而是认知。</p></body></html>"
+    t = audit.strip_html(html)
+    assert "ZH-1" in hits_by_rule(audit.audit_text(t))
+
+
+def test_table_cells_stay_on_row_line():
+    # a lone '：' inside a table cell must not become an idle-colon line
+    html = "<table><tr><td>词</td><td>：</td></tr><tr><td>a</td><td>b</td></tr></table>"
+    t = audit.strip_html(html)
+    assert audit.idle_colon_lines(t) == []
+
+
+def test_math_dash_masked():
+    # —— inside $...$ is math notation, not a prose dash
+    doc = "其定义 $x——y$ 成立。"
+    assert "ZH-4" not in hits_by_rule(audit.audit_text(doc))
+
+
+def test_katex_term_dense_zh_sentence_stays_zh():
+    doc = "③⑤⑦ EAGLE 系列（特征层起草、动态树、training-time test）；⑭ LK loss 把 当训练目标。"
+    r = audit.audit_text(doc)
+    zh_flags = [f for f in r["flags"] if f["rule"].startswith("ZH")]
+    assert zh_flags  # 顿号罗列 fires on the zh reading, not swallowed by en routing
