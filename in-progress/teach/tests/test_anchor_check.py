@@ -142,3 +142,63 @@ class TestUsage:
         aj.write_text("{}")
         r = run(str(aj), str(tmp_path / "nope.html"))
         assert r.returncode == 2
+
+
+class TestRulings:
+    """_rulings suppressions: adjudicated findings print but don't fail exit."""
+
+    def test_ruled_finding_printed_but_exit_zero(self, tmp_path):
+        tex = tmp_path / "p.tex"
+        tex.write_text("unrelated")
+        aj = tmp_path / "anchors.json"
+        aj.write_text(json.dumps({
+            "claims": [],
+            "sources": {},
+            "_rulings": ["UNANCHORED '100%': CSS width syntax, not a claim"]}))
+        lesson = tmp_path / "l.html"
+        lesson.write_text("<p>占比 100% 以上。</p>")
+        r = run(str(aj), str(lesson))
+        assert r.returncode == 0, r.stdout
+        assert "ADJUDICATED (kept)" in r.stdout
+        assert "0 open / 1 adjudicated" in r.stdout
+
+    def test_unruled_similar_finding_still_fails(self, tmp_path):
+        aj = tmp_path / "anchors.json"
+        aj.write_text(json.dumps({
+            "claims": [], "sources": {},
+            "_rulings": ["UNANCHORED '100%': css"]}))
+        lesson = tmp_path / "l.html"
+        lesson.write_text("<p>达到 95% 以上。</p>")
+        r = run(str(aj), str(lesson))
+        assert r.returncode == 1
+
+
+class TestFalsePositiveFamilies:
+    """Field-identified FP classes (specforge ~56% of UNANCHORED lines)."""
+
+    def test_citation_line_number_excluded(self, tmp_path):
+        aj = tmp_path / "anchors.json"
+        aj.write_text(json.dumps({"claims": [], "sources": {}}))
+        lesson = tmp_path / "l.html"
+        lesson.write_text("<p>见 tex:147 与 paper.tex:513 的原文。</p>")
+        r = run(str(aj), str(lesson))
+        assert r.returncode == 0, r.stdout
+
+    def test_css_media_context_excluded(self, tmp_path):
+        aj = tmp_path / "anchors.json"
+        aj.write_text(json.dumps({"claims": [], "sources": {}}))
+        lesson = tmp_path / "l.html"
+        lesson.write_text('<style>@media (max-width: 800px) { .x { color: #fff } }</style>')
+        r = run(str(aj), str(lesson))
+        assert r.returncode == 0, r.stdout
+
+
+def test_rulings_dict_shape_also_accepted(tmp_path):
+    aj = tmp_path / "anchors.json"
+    aj.write_text(json.dumps({
+        "claims": [], "sources": {},
+        "_rulings": {"UNANCHORED '100%'": "css width syntax"}}))
+    lesson = tmp_path / "l.html"
+    lesson.write_text("<p>占比 100% 以上。</p>")
+    r = run(str(aj), str(lesson))
+    assert r.returncode == 0, r.stdout
