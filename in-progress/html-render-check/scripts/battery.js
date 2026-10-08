@@ -29,6 +29,26 @@
       brokenImgs: [...document.querySelectorAll('img')]
         .filter((i) => i.complete && i.naturalWidth === 0).length,
     };
+    // DOM truncation census (added 2026-10-09, eagle3 span-in-svg incident):
+    // an HTML tag (e.g. <span>) inside <svg> makes the parser relocate all
+    // following content out of the SVG namespace — silently dropping whole
+    // subtrees while geometry checks pass on the remainder (false green).
+    // Direct evidence in-DOM: HTML-namespace children inside svg.
+    // Heuristic (browser has no source access): an HTML tag inside <svg>
+    // (e.g. <span>) makes the parser relocate ALL following content — svg
+    // siblings appear as orphan HTML elements (rect/text as html tags, svg
+    // closed early). Detect: svg-namespace tag names existing outside any
+    // svg, or an html child inside svg.
+    const isSvgTagName = (t) => /^(svg|rect|circle|ellipse|line|polyline|polygon|path|text|tspan|g|defs|marker|use|symbol|title|desc)$/.test(t);
+    for (const el of document.body.querySelectorAll('*')) {
+      if (el.closest('svg')) continue; // inside a real svg — fine
+      if (isSvgTagName(el.tagName.toLowerCase())) {
+        issues.push({kind: 'orphan-svg-content', tag: el.tagName.toLowerCase(),
+          hint: 'an HTML tag (span/b/...) inside <svg> closed it early; move it to tspan',
+          advisory: false});
+        break;
+      }
+    }
     for (const img of document.querySelectorAll('img')) {
       if (img.complete && img.naturalWidth === 0) {
         issues.push({kind: 'broken-image', src: (img.getAttribute('src') || '').slice(0, 80)});
@@ -272,8 +292,12 @@
         const nodeEls = [...svg.querySelectorAll(NODE_TAGS)]
           .filter((s) => visible(s) && !isDef(s) &&
             !(s.hasAttribute('marker-end') || s.hasAttribute('marker-start')));
+        // fill=none shapes are open containers (group frames), not solid
+        // nodes — an edge passing through a container is legitimate layout.
         const nodes = nodeEls.map((s) => ({s, b: bboxOf(s)})).filter((x) =>
-          x.b && nodeArea(x.b) >= 150);
+          x.b && nodeArea(x.b) >= 150 &&
+          x.s.getAttribute('fill') !== 'none' &&
+          window.getComputedStyle(x.s).fill !== 'none');
         const edges = [...svg.querySelectorAll(EDGE_TAGS)].filter((e) => {
           if (!visible(e) || isDef(e)) return false;
           const b = bboxOf(e);
