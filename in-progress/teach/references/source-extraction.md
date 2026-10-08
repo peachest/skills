@@ -1,8 +1,7 @@
 # Source Extraction Reference
 
 Reference for the Source Extraction workflow in SKILL.md. Read when doing code
-archaeology, adjudicating a paper-vs-code divergence, or writing/validating a
-source anchor. Definitions only — the steps live in SKILL.md; layer
+archaeology, adjudicating a paper-vs-code divergence, or writing a source anchor. Definitions only — the steps live in SKILL.md; layer
 arbitration order lives in the okb skill.
 
 ## Anchor formats
@@ -35,8 +34,7 @@ past it.
 
 1. **Star-imported symbols hide consumption.** A symbol may be defined in
    one file and consumed everywhere via `from x import *` — grep for the
-   symbol across the repo, never just the defining file, and grep the import
-   lines to find the consumers.
+   symbol across the repo and grep the import lines to find the consumers.
 2. **A variable is not a file.** Searching by identifier with
    `find -name "*foo*"` misses a variable defined inside a module. Locate
    definitions with grep over contents, not filename search.
@@ -78,7 +76,7 @@ statement rests on.
    X where the paper describes Y (a simplified knob shared between two
    parameters, an acceptance rule that skips a textbook step). Label the
    lesson text as *implementation difference* and describe what the code
-   does; do not silently harmonize the lesson to the paper.
+   does.
 3. **Historical implementation vs current HEAD.** The behavior existed in
    one era and was removed or replaced later. Write both layers — "in the
    <era> design X; as of <commit/era>, Y" — and cite the commit for each.
