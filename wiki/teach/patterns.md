@@ -45,3 +45,11 @@
 - passCheck: 15-20% 带内问句不再硬 FAIL，改为带提示的 finding
 - 证据: spec-decoding reviews/0004-spec-review.json（beat hook finding adjudicated kept，问句 15.8% vs 15% window）
 - 出现: 2026-10-06 spec-audit；同 2026-09-24 lesson-0003
+## P-T06 知识点覆盖缺口：paper 版本外的设计无抽取触发（知识工程盲区）
+- 状态: open
+- 现象: spec-decoding 课⑦ 漏讲 EAGLE-3 词表压缩（32k 子集 + d2t/t2t）——该设计不在 ACL 版 paper.tex（461 行逐行核零命中），只在 tech report 与代码（cnets.py:487、specforge/data/preprocessing.py:626-782）。学习者从工程课的六算法矩阵追问才暴露。回补已交付（课程 commit 80e8e93，五检全绿）
+- 根因: 信源抽取以"论文管道"为单位（tex 五类清单），paper-外的机制性设计（tech report 独有、代码独有）没有对应的抽取触发点；PLAN 节点描述也是按论文口径写的，交付 gate 无"代码实现 vs 论文描述"覆盖对账
+- 方案（分两层）: ① 开课 checklist（teach 侧，立即可做）：机制性设计逐条标注 论文仅/代码仅/两处——即"代码对账"从分歧处理升级为交付前置；② 知识点工程（结构层，待设计）：以 PLAN 节点为覆盖清单，对账三层信源的可用知识点（tex sections × repo modules × 解读文章），产出覆盖矩阵，交付 gate 校验"节点声明的主机制在每个有它的信源层都被抽取过"
+- passCheck: 新开课时，课程引用的每个机制能在信源覆盖矩阵里找到"来源层"标注；仅代码有的设计默认进 coverage 对账而非依赖学习者追问暴露
+- 证据: herdr 回执 w3:p2（01a0bd84，2026-10-08）；课程 commit 80e8e93；papers/2503.01840-eagle3/source/paper.tex 461 行 vocab 零命中
+- 出现: 2026-10-08 spec-decoding 课⑦
