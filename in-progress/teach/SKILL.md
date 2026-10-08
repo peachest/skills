@@ -36,6 +36,8 @@ Probe maps two terrains: the **subject** (what there is to learn) and the **unde
 
 On the very first session with no prior learning-records and a topic the learner has never touched, calibration will find everything unknown — that is expected. Probe still runs because intake (choosing what to learn from a large subject) is valuable even when calibration finds nothing.
 
+**Decay probing** — answers the veto "没有问的也不代表真的理解了" (unasked ≠ understood): question-driven signals carry survivorship bias, so on returning to a course after a gap (or when the map's rows have aged past a few sessions), generate a probe bank — 3-4 questions per lesson, each tagged with the transferable principle it tests and drawn from the lesson's load-bearing assertions. Persist the bank to `probe-bank.md` with per-question status (已验证/待回收) **before the first question is asked**; a bank that lives only in conversation dies with the session. Consume it as a priority queue interleaved with teaching beats (5-8 per beat, resumable), not a linear sweep. Adjudication protocol: before marking an answer wrong, search for a wider context that makes it true (engine-layer vs layout-layer); a disagreement is confirmed with the learner before entering the ledger. Probe verdicts update the corresponding `UNDERSTANDING-MAP.md` row (with date + evidence) in the same turn as the判读 — the map is the thing Plan reads.
+
 ### Phase 2 — Plan
 
 Plan produces `PLAN.md` (or escalates to wayfinder for large topics).
@@ -236,14 +238,13 @@ python3 ./assets/nav-chain-check.py lessons/
 
 The script orders `lessons/*.html` by leading number and verifies each lesson links to both neighbours — the first lesson needs no back link, the last needs no next link. **Zero missing links** is the completion criterion; fix by updating the neighbour's navigation block, never by deleting a link.
 
-The nav chain is only one kind of link. Run its companion after any directory reshuffle or asset rename:
+The nav chain is only one kind of link. Run the whole check family through the battery — it handles the exit-code matrix (fix-class vs adjudication-class), writes every finding check-prefixed to ` reviews/checks-<N>.txt `, and prints a per-check verdict table as its last line:
 
 ```bash
-python3 ./assets/resource-check.py lessons/ reference/
+python3 ./assets/run-checks.sh [--only css,beat,...] [--lesson N] lessons/
 ```
 
-It resolves every relative `src`/`href` (and inline-style `url()`) against the lesson's own directory — assets, images, deep `../` okb paths — and reports the broken ones. External URLs, `data:` URIs, and pure anchors are skipped. **Zero broken references** is the completion criterion.
-
+**The verdict table is the completion surface, not stdout findings** — `| tail -1` still recovers every result. Each check's own completion criterion (below) is unchanged; the battery only orchestrates. `--only resource` runs the href-resolution check alone (every relative `src`/`href` resolved against the lesson's own directory — assets, images, deep `../` okb paths; also catches U+FFFD mojibake). **Zero broken references** is its criterion.
 ## Prose Self-Check
 
 After drafting or editing a lesson, de-slop the prose before the learner sees it — the lesson is the user's teacher's voice, and generated filler reads as a defect.

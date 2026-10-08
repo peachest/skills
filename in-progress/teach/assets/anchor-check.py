@@ -62,9 +62,32 @@ def resolve_line(src: dict, anchor: str) -> tuple[str | None, str | None]:
     return lines[n - 1], None
 
 
+def _ruling_for(detail: str, rulings: list[str]) -> str | None:
+    """Match a finding against _rulings entries: a ruling matches when it
+    contains the finding's quoted token (signature-style key or free text)."""
+    m = re.search(r"['\"]([^'\"]+)['\"]", detail)
+    if not m:
+        return None
+    token = m.group(1)
+    for entry in rulings:
+        if token in entry:
+            return entry
+    return None
+
+
 def check_anchors(ledger: dict, lessons: list[pathlib.Path]) -> list[str]:
     findings: list[str] = []
     sources = ledger.get("sources", {})
+    # _rulings: adjudicated suppressions from the course ledger (field-proven in
+    # specforge-training before landing here). Two shapes exist in the wild:
+    #   dict  {"UNANCHORED '100%'": "reason"}            (keyed by signature)
+    #   list  ["UNANCHORED '100%' ... — reason", ...]     (free-text lines)
+    # Both accepted: a ruling matches a finding when the ruling text contains
+    # the finding's quoted token. Matching findings are printed as ADJUDICATED
+    # (kept) and do not count toward exit.
+    rulings_list = ledger.get("_rulings") or []
+    if isinstance(rulings_list, dict):
+        rulings_list = [f"{k}: {v}" for k, v in rulings_list.items()]
     for lesson in lessons:
         html = lesson.read_text(encoding="utf-8", errors="ignore")
         # strip markup for quote matching
@@ -102,9 +125,16 @@ def check_anchors(ledger: dict, lessons: list[pathlib.Path]) -> list[str]:
                         f"{lesson.name}: FIG-DRIFT — cites Fig. {num} but the local "
                         f"tex never mentions Figure {num} (version renumbering?)")
         # numeric claims with no anchor at all (spot-check level, not exhaustive)
+        # FP-exclusion contexts (specforge field data: ~56% of UNANCHORED lines
+        # were token-internal): identifier:line citation references (tex:123),
+        # CSS/media-query values, percentages inside <style>-adjacent markup
+        CTX_REF_RE = re.compile(r"(?:tex|paper|source|fig|file|line|commit)[\w.\-]*:\s*\d", re.I)
+        CSS_CTX_RE = re.compile(r"@media|max-width|min-width|width:\s*\d|height:\s*\d|px\b")
         for m in NUM_RE.finditer(prose):
             ctx = prose[max(0, m.start() - 30):m.end() + 10]
-            if "var(" in ctx or "katex" in ctx.lower():
+            if "var(" in ctx or "katex" in ctx.lower() or CSS_CTX_RE.search(ctx):
+                continue
+            if CTX_REF_RE.search(ctx):
                 continue
             val = _normalize(m.group(0))
             # only report distinctive values (skip years, indices)
@@ -128,14 +158,25 @@ def main() -> int:
             print(f"FAIL: lesson not found: {lesson}", file=sys.stderr)
             return 2
     findings = check_anchors(ledger, lessons)
+    rulings_list = [str(x) for x in (ledger.get("_rulings") or [])]
     if findings:
-        print(f"ANCHOR CHECK: {len(findings)} finding(s)")
-        for f in findings[:40]:
+        open_findings = []
+        for f in findings:
+            kind = f.split(" — ")[0].split(": ")[-2] if ": " in f else f.split(":")[1].strip()
+            r = _ruling_for(f, rulings_list)
+            if r:
+                print(f"  ADJUDICATED (kept): {f.split(' — ')[-1][:70]} — {r[:60]}")
+            else:
+                open_findings.append(f)
+        print(f"ANCHOR CHECK: {len(open_findings)} open / "
+              f"{len(findings) - len(open_findings)} adjudicated")
+        for f in open_findings[:40]:
             print(f"  - {f}")
-        if len(findings) > 40:
-            print(f"  … and {len(findings) - 40} more")
-        print("每条 finding 需就地裁定：补锚点、修正引用，或确认无锚（回 okb 补 bronze 摘录）")
-        return 1
+        if len(open_findings) > 40:
+            print(f"  … and {len(open_findings) - 40} more")
+        print("每条 open finding 需就地裁定：补锚点、修正引用、确认无锚（回 okb 补 bronze 摘录），"
+              "或写入 _rulings（ledger 抑制，带理由）")
+        return 1 if open_findings else 0
     print("ANCHOR CHECK: all anchors verified")
     return 0
 

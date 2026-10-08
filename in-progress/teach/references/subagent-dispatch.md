@@ -90,12 +90,30 @@ disagreements, and writes the fact base.
   cited lines, check the commit) before the conclusion enters a lesson or a
   ruling. A scout's summary is a lead, not a fact.
 
+## Lesson edit fallback
+
+When an exact-match lesson edit fails to find its anchor, retry once, then
+switch to a byte-precise python replace (`assert old in s` guard) — the
+edit tool normalizes CJK punctuation (full/half-width), so a matching
+looking-anchor can still miss (wiki P-T04). After writing, the U+FFFD scan
+in resource-check catches mojibake (\ufffd) before delivery.
+
+## Scheduling rules
+
 ## Scheduling rules
 
 - Lesson fact-check: one in flight per lesson; the next lesson's dispatch
   may overlap the previous receipt's adjudication, but lesson N+1 is
   delivered only after receipt N's findings are fully adjudicated.
-- Scouts: parallel across layers is the point; do not run two scouts on the
-  same layer.
+- Stagger parallel launches: dispatches fired in the same second abort at
+  boot (4-concurrent wave lost 3/4 in the field; seconds of separation fix
+  it without serializing). The parallel-scout and prototype contracts stay —
+  only same-instant bursts go.
+- Retry ladder: one same-protocol resend after an abort; a second identical
+  abort stops the ladder (escalate or degrade). Failures that name a limit
+  (turn cap, timeout) get a parameter-adjusted resend, not repetition.
+- Receipts: a completion notification for an already-adjudicated run is
+  idempotent — skip it without re-adjudicating. Dedupe on live in-flight
+  workers, never on output-path history (intentional retries reuse paths).
 - Every dispatch gets a stable key so receipts are addressable
   (`factcheck-0005`, `scout-paper-eagle2`).

@@ -40,6 +40,11 @@ def check_file(path: pathlib.Path) -> list[str]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     base = path.parent
     missing = []
+    # mojibake check (same write pass, same command): \ufffd from a botched
+    # CJK encode is invisible in a browser but destroys the sentence
+    for i, line in enumerate(text.splitlines(), 1):
+        if "\ufffd" in line:
+            missing.append(f"  {path.name}:{i} → U+FFFD mojibake: {line.strip()[:50]}")
     seen: set[str] = set()
     for ref in collect_refs(text):
         ref = ref.strip()

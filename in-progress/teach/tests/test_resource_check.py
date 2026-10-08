@@ -111,3 +111,11 @@ class TestUsage:
     def test_nonexistent_arg(self, tmp_path):
         r = run(str(tmp_path / "nope"))
         assert r.returncode == 2
+
+
+class TestMojibake:
+    def test_ufffd_flagged(self, tmp_path):
+        make_workspace(tmp_path, "<p>PLAN 节点 L1.5\ufffd\ufffd\ufffd全景插班课</p>", {})
+        r = run(str(tmp_path / "lessons"))
+        assert r.returncode == 1
+        assert "U+FFFD" in r.stdout
