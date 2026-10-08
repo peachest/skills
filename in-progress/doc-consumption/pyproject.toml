@@ -1,0 +1,8 @@
+[project]
+name = "doc-consumption"
+version = "0.1.0"
+description = "Audit whether agents actually read and write project docs, from pi session logs"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest>=8"]
