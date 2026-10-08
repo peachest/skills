@@ -75,11 +75,11 @@ export default function (pi: ExtensionAPI) {
 		name: "herdr_send",
 		label: "herdr send",
 		description:
-			"Deliver a prompt to a peer herdr agent pane. FollowUp by default: waits for the peer to reach idle/done (bounded, 30min, then fails without sending) and delivers as a clean new task; pass steer=true to deliver immediately mid-task (corrections/blockers only). Message MUST follow the five-part shape: [caller identity] (auto-prepended via --from) / [context] / [tasks] / [output + reply]. Receipt (agent_status/revision) is returned on delivery.",
+			"Deliver a prompt to a peer herdr agent pane. FollowUp by default: polls the peer until idle/done then delivers as a clean new task; steer=true delivers immediately mid-task (corrections/blockers/ACKs to peers waiting on you). TOOL-CALL TIMEOUT SAFETY: when invoked as a tool (inside your turn), the followUp gate waits only 90s — a busy peer returns delivered=false with a structured reason instead of freezing your turn for 30min; for the full 30min gate run the CLI herdr-send.py under bg_run, or use steer. Message MUST follow the five-part shape: [caller identity] (auto-prepended via --from) / [context] / [tasks] / [output + reply]. Receipt (agent_status/revision) is returned on delivery.",
 		promptSnippet: "Send a protocol-shaped prompt to a peer herdr agent (followUp default, steer opt-in)",
 		promptGuidelines: [
 			"Use herdr_send for peer dispatches and receipts instead of hand-rolled `herdr agent prompt` — it enforces quoting, error-first envelopes, and the caller-identity section.",
-			"herdr_send runs in followUp mode by default; pass steer=true only for corrections/blockers/answers the peer must see mid-task.",
+			"herdr_send runs in followUp mode by default (90s gate when called as a tool; for the full 30min gate run CLI herdr-send.py under bg_run); pass steer=true only for corrections/blockers/ACKs the peer must see mid-task — ACK/receipt replies to a peer waiting on you are mid-task answers by definition.",
 		],
 		parameters: Type.Object({
 			to: Type.String({ description: "Target pane id, e.g. w3:p2 (runtime-qualified targets: use runtime param)" }),
@@ -106,10 +106,55 @@ export default function (pi: ExtensionAPI) {
 			if (params.runtime) args.push("--runtime", params.runtime);
 			if (params.wait_ms != null) args.push("--wait", String(params.wait_ms));
 
-			// followup gate may block up to 30min + settle wait
-			const timeout = (params.wait_ms ?? 0) + 31 * 60 * 1000;
+			// Deadlock guard (2026-10-08): as a TOOL, this call runs inside our own turn —
+			// a long gate would freeze the turn and hold our agent_status at working,
+			// which can deadlock against a peer running the same tool against us
+			// (mutual 30min wait). Tool calls therefore gate for 90s max and return a
+			// structured delivered=false receipt with advice; the full 30min gate belongs
+			// to bg_run + CLI herdr-send.py (our turn stays free, peers see us idle).
+			const fuMs = Math.min(Number(process.env.HERDR_FOLLOWUP_MS || 1_800_000), 90_000);
+			const timeout = (params.wait_ms ?? 0) + fuMs + 3 * 60 * 1000;
 			const res = await pi.exec("python3", args, { timeout, signal });
-			const receipt = parseEnvelope(res.stdout.trim() || res.stderr.trim(), "herdr-send");
+			const raw = res.stdout.trim() || res.stderr.trim();
+			const rawParsed = (() => { try { return JSON.parse(raw); } catch { return null; } })();
+
+			// followUp gate expired (script exit 4): NOT an error — a structured
+			// delivered=false receipt with a mutual-wait deadlock guard and advice.
+			if (rawParsed && rawParsed.error && rawParsed.error.includes?.("NOT sent")) {
+				const lastState = (rawParsed.error.match(/peer last state: ([\w]+)/) || [])[1] || "unknown";
+				return {
+					content: [{ type: "text", text: JSON.stringify({
+						delivered: false,
+						peer_last_state: lastState,
+						mutual_wait_possible: true,
+						advice: [
+							"bg_run: `python3 <skills>/scripts/herdr-send.py <pane> <file> --from ...` — full 30min gate with your turn free (peer sees you idle, gate passes)",
+							"rerun this tool with steer=true — mid-task delivery for corrections/ACKs",
+							"or wait for the peer to free up and resend",
+						],
+						detail: rawParsed.error,
+					}, null, 2) }],
+					details: { delivered: false },
+				};
+			}
+			const receipt = parseEnvelope(raw, "herdr-send");
+			if (receipt.delivered === false) {
+				// followUp gate expired (exit 4): structured advice, NOT a frozen turn
+				return {
+					content: [{ type: "text", text: JSON.stringify({
+						delivered: false,
+						peer_last_state: receipt.peer_last_state || "unknown",
+						mutual_wait_possible: true,
+						advice: [
+							"bg_run: `python3 <skills>/scripts/herdr-send.py <pane> <file> --from ...` — full 30min gate with your turn free (peer sees you idle, gate passes)",
+							"rerun this tool with steer=true — mid-task delivery for corrections/ACKs",
+							"or wait for the peer to free up and resend",
+						],
+						detail: receipt,
+					}, null, 2) }],
+					details: receipt,
+				};
+			}
 			return {
 				content: [{ type: "text", text: JSON.stringify(receipt, null, 2) }],
 				details: receipt,
