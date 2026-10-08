@@ -25,8 +25,8 @@ not auto-fixes.
   verified, (d) the correction where one is known. The subagent also runs
   the mechanical claim-level checks (anchor-check against the anchors.json
   ledger, css-self-check) and folds their output into the same receipt —
-  the single-command structural self-checks (navigation, prose, beat) stay
-  with the parent.
+  the single-command structural self-checks (navigation, resource-link, prose,
+  beat) stay with the parent.
 - **Stop rules**: a suspected fabrication is reported immediately in the
   receipt's first section, not buried; do not keep digging past the ledger —
   missing anchors are parent adjudication material, not blockage.
