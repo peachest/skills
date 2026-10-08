@@ -62,6 +62,10 @@ disagreements, and writes the fact base.
 ## Prototype workers (interactive component before lesson integration)
 
 - **Goal**: a standalone HTML prototype at a named path, rendering-checked.
+  For figure dispatches the ground truth carries three fields: stuck point
+  (the learner follow-up that created the demand), structure type (dataflow /
+  spatial / parallel / steps), and code anchor. The prototype is the figure
+  carrier; the GT fields keep the review adjudicable.
 - **Target**: explicit output file path; shared `base.css` path; the source
   concept and constraints (standalone except base.css, no iframe).
 - **Authority**: writes only the prototype file and its render-check

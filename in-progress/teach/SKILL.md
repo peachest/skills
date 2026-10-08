@@ -131,6 +131,16 @@ A lesson's practice section is a three-stage ladder, each stage a stronger form 
 2. **Quiz** — recognition check via the `quiz.js` component. Distractors are plausible misunderstandings of the same concept, each tagged with the misconception it exposes (the `misconceptions` field). A wrong answer is diagnostic: write the exposed misconception into the session log so the next Probe starts from it.
 3. **Quest** — a practice task with an observable outcome (an artifact, a comparison, a decision with criteria, an inspection of a real project). If the task produces nothing inspectable, it is not a quest — restate it until it does.
 
+### Visualization demand
+
+A figure is a replacement for a structure that text has failed to carry, and the demand for one is observable rather than a matter of taste. Three signals, in rising order of formality:
+
+1. **Recurring follow-up** — the strongest. A concept questioned once is a prose problem; questioned again after re-explanation means its structure does not fit prose. Track follow-up recurrence per concept in the session log; the second round on the same concept is a figure requirement.
+2. **Structure type** — at authoring time, filter by content shape: dataflow/pipeline (where things come from and go), spatial/topology relations, parallel comparisons, and step-by-step walks belong in figures; argument chains and causal reasoning belong in prose or callouts (a callout is the right carrier for "why this tradeoff pays off" — it is reasoning, not structure).
+3. **Section–figure audit** — at delivery, list every `<section>` against every `<figure>`/`<img>`; sections with no visual are adjudication candidates, not defects (a text-appropriate section legitimately has none). A `grep`-level audit, run per delivery.
+
+Demand goes straight into the dispatch GT — each figure's ground truth is *stuck point + structure type + code anchor* (contract in [subagent-dispatch.md](./references/subagent-dispatch.md)). No separate backlog document: stuck-point-driven needs expire faster than lists. Downstream quality gates are the [Visualization Self-Check](#visualization-self-check) and the render check.
+
 ### Provenance in presentation
 
 The knowledge layering of OKB (bronze → silver → gold) must stay visible in the lesson itself. Claims restated from OKB use the source callout (`.callout-note`, titled *Source*), carrying their claim-level footnotes back to the OKB note. AI-derived illustrations — analogies, mental models, scenarios — use the derived callout (`.callout-tip`), with a title that names its kind and marks it as derived, e.g. *类比 · AI 衍生*. Never present derived content as source knowledge: the learner must always be able to tell "the source says" from "the AI explains". Source-callout footnotes carry the anchor in one of the three anchor shapes (defined in the okb skill) — the evidence chain closes in OKB bronze, so the lesson-side anchor only needs to be re-checkable, not a URL.
