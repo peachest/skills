@@ -33,7 +33,7 @@ skills/
 │           ├── personal/
 │           └── productivity/
 ├── AGENTS.md                ← agent 项目规范
-├── CONTEXT.md               ← 术语表（导航隐喻系统）
+├── GLOSSARY.md               ← 术语表（导航隐喻系统）
 └── LICENSE
 ```
 
@@ -53,7 +53,7 @@ skills/
 - **[then-what](./engineering/then-what/SKILL.md)** — 探索每个选项的真实后果，以用户故事重呈现
 - **[hail](./engineering/hail/SKILL.md)** — agent 迷路时生成 distress signal（已试什么、当前位置、需要什么救援）
 
-> `orient` → `project-wiki` → `review-spec` → `then-what` → `hail` 共享一套[导航隐喻](./CONTEXT.md)，每个 skill 名本身就是一个导航动作。
+> `orient` → `project-wiki` → `review-spec` → `then-what` → `hail` 共享一套[导航隐喻](./GLOSSARY.md)，每个 skill 名本身就是一个导航动作。
 
 ### 效能工具（productivity/）
 
