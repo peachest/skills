@@ -7,9 +7,9 @@ description: >-
   unreconciled contradictions, missing waymark coverage, dropped decisions,
   under-specified passages — and routes each to the skill that closes it
   (research, prototype, grilling, task). At most two inspect rounds, then
-  traverse. On a Held verdict, a challenger sub-agent attacks the findings in
-  the background while grilling gaps go to the user in the foreground. Re-runs
-  on each new frontier in the review-implement cycle.
+  traverse. On a Held verdict, a `/skill:challenge-audit` pass runs against
+  the reports in the background while grilling gaps go to the user in the
+  foreground. Re-runs on each new frontier in the review-implement cycle.
 ---
 
 A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set of **tickets** about to guide `/skill:implement` — through the terrain. Before anyone traverses it, **inspect** the route. A route that reads complete rarely is: claims drift from their **ground truth**, sources contradict each other silently, and acceptance criteria cover three dimensions when the traverse will touch five. This skill finds those **gaps** and forces them closed.
@@ -133,12 +133,12 @@ End with a verdict:
 
 The review itself can be wrong — a finding may be overblown, its evidence may come from a stale version of the route, or the gap may be settled elsewhere. When the verdict is **Held**, split the follow-up into two parallel lanes before routing:
 
-- **Challenger lane (background).** Spawn one sub-agent (`agent: "challenger"`, `context: 'fresh'`, async; verify registration the same way as Step 3) over every **non-grilling** gap. If the five reports are no longer at hand (session compacted), first consolidate them — findings, classifications, rulings — into one findings document on disk and pass its path; the challenger needs a cross-examinable artifact, not reconstructed memory. Its brief carries the route path, the five report paths (or the consolidated findings document), the terrain-source paths (Step 3's completeness rule: children see only what you pass them), and its job: attack each finding — is the evidence real, does the route actually say what the finding claims, is the gap already settled — and attack each ruling's *justification* — a ruling can stand while its stated reason is wrong (session 01a11f50: the setter ruling survived, but its "a wrapper is no simpler" rationale was falsified; the real cause was a pointer-bound gRPC registration that no wrapper could ever shadow). Stake a position with evidence and a decidable demand (accept / partial / rebut).
+- **Audit lane (background).** Spawn one sub-agent (`context: 'fresh'`, async; prefer `agent: "challenger"`, verified as in Step 3) to run `/skill:challenge-audit` over the five reports. The brief carries the report paths, the route path, and the terrain-source paths (Step 3's completeness rule: children see only what you pass them). The audit skill owns the attack axes, the trust score, and the recommendation — this skill adds only the adjudication rules below.
 - **User lane (foreground).** Immediately present the **grilling** gaps to the user in one batched decision round (`ask_user_question`), each question carrying the evidence the review gathered. Do not wait for the challenger; its terminal notification wakes the session.
 
-Merge when both lanes return. Before accepting any challenger claim, spot-check its load-bearing facts against the terrain yourself (grep the cited line, read the cited function) — challenger evidence is claim-grade until verified. User rulings and challenger-confirmed findings enter the revision. A finding the challenger **rebuts with evidence** drops from the classification table — annotate it in the report, never drop silently. A challenger flag without an evidence-backed ruling stays a user decision like any other: challenger positions never replace user adjudication.
+Merge when both lanes return. User rulings and audit-confirmed findings enter the revision. A review finding the audit **rebuts with evidence** drops from the classification table — annotate it in the report, never drop silently. An audit flag without an evidence-backed ruling stays a user decision like any other: audit positions never replace user adjudication. (For 有条件放行, the audit's mechanical closes route as task gaps through [Routing](#routing) — they do not land directly; the confirm-the-routing step still applies.)
 
-The challenger lane spends no inspect budget — it runs inside the current round. After the merge, apply the rulings (task gaps inline, research/prototype per [Routing](#routing); grilling is already adjudicated), then re-inspect as round 2/2.
+The audit lane spends no inspect budget — it runs inside the current round. After the merge, apply the rulings (task gaps inline, research/prototype per [Routing](#routing); grilling is already adjudicated), then re-inspect as round 2/2.
 
 ## Routing
 
