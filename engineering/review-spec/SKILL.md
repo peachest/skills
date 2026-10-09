@@ -105,7 +105,7 @@ Every gap found by the five checks gets classified into one of four wayfinder ti
 |------|-------------------|-----------|------------|
 | **research** | Knowledge outside the current working directory — an API contract, a third-party behavior, a doc fact the route assumed but no terrain source confirmed. | `/skill:research` | AFK sub-agent |
 | **prototype** | "How should it look or behave?" — the route is silent on a shape, interaction, or data structure that a throwaway artifact would clarify. | `/skill:prototype` | HITL |
-| **grilling** | A decision the route left open or under-specified — two paths are possible and the route didn't pick. Sharpen it through one-question-at-a-time dialogue. | `/skill:grill-with-docs` | HITL |
+| **grilling** | A decision the route left open or under-specified — two paths are possible and the route didn't pick. Resolved in the challenger round's user lane: batched `ask_user_question` in the foreground while the challenger runs. | User decision round | HITL |
 | **task** | Manual work that must happen before a decision can be made — provisioning access, moving data, signing up for a service so its API can be judged. Nothing to decide, prototype, or research, but the route is blocked until it's done. | Manual execution (HITL checklist or AFK where the agent can drive) | HITL or AFK |
 
 **How to classify:** read the gap's "what's missing" and ask — is the missing thing a *fact* (research), a *shape* (prototype), a *decision* (grilling), or a *blocking chore* (task)? When a gap could fit two types, pick the one whose skill would most directly close it; note the alternative in the report.
