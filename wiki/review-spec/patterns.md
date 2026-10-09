@@ -33,3 +33,11 @@
 - 落契约: ①re-inspect 改 diff-scoped（修正轮只审 diff + findings 闭环，五轴全量只在首轮）②challenger 攻击面加裁决论证 ③parent 收口前对 load-bearing 声称做 terrain 抽查
 - 证据: 01a11f50#271/#276/#282（裁决链挑战）/ #355/#366（流程挑战）
 - 附带教训（route 发布侧）: spec 全文发布 + diff 复审可把 4 轮压 2 轮——属 spec 撰写侧而非本 skill，已在作者 memory 沉淀
+## P-005 challenger 落盘与分类审计（2026-10-10，session 01a0aeb3）
+
+- 状态: accepted-reduced（四轴任务书结构未采纳——用户裁定，见 skill-impact rejected 记录）
+- 触发条件: challenger 派发 / gap 分类
+- 现象: 01a0aeb3 对 pi-events-daemon 12 份 spec 两轮 review 意见做 challenger 审计，可信度 78/100 有条件放行，9 项发现（2A/5B/2C）全真。两个可吸收点：①session 已压缩、五份报告不在手上——parent 先把两轮 findings+裁决合并落盘 review-findings.md 再派发，challenger 需要可交叉审阅的文档而非重建记忆；②分类轴战果——SQLite 裁定被判"过度 grilling 化"（terrain vs terrain 可机械对齐，#31 头部 declared 单一权威来源），accept。round-1/2 复盘 task 占绝大多数、grilling 仅 2 项其中 1 项属过度升级
+- 未采纳: challenger 四轴任务书结构（假 gap/漏检/分类/终判）。本次战果主力在漏检轴（五轴集体漏掉的 7/9 项），但现有契约的逐条攻击+裁决论证攻击已覆盖主要面，四轴扩展被用户否决——无新证据不得重提
+- 落契约: ①Gap classification 补"过度 grilling 化是分类错误"②Challenger lane 补"报告不在手上先落盘合并文档"
+- 证据: 01a0aeb3#2007（任务书）/ #2016-2017（挑战挑战者 grep 核实）/ review-findings.md Challenger 审计节
