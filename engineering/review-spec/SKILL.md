@@ -8,6 +8,8 @@ description: >-
   under-specified passages — and routes each to the skill that closes it
   (research, prototype, grilling, task). At most two inspect rounds, then
   traverse. Re-runs on each new frontier in the review-implement cycle.
+  Optionally, a challenger round attacks the route and the review findings
+  themselves when the user asks.
 ---
 
 A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set of **tickets** about to guide `/skill:implement` — through the terrain. Before anyone traverses it, **inspect** the route. A route that reads complete rarely is: claims drift from their **ground truth**, sources contradict each other silently, and acceptance criteria cover three dimensions when the traverse will touch five. This skill finds those **gaps** and forces them closed.
@@ -126,6 +128,16 @@ End with a verdict:
 
 - **Clear to traverse** — zero gaps. The route can hand off to the next skill (`/skill:to-tickets` for a spec route, `/skill:implement` for a ticket route).
 - **Held** — N gaps across M checks. List the classification table. The route must be revised and re-inspected.
+
+## Challenger round (optional)
+
+The review itself can be wrong — findings may be overblown, evidence may come from a stale version of the route, or a "gap" may already be settled elsewhere. When the user asks for a challenger round ("have challenger 挑战意见"), spawn one more sub-agent (`agent: "challenger"`, `context: 'fresh'`; verify registration the same way as Step 3) to attack **both sides**: the route where it deserves attack, and the five reports where they are wrong, overblown, or missing the real risk.
+
+The challenger's task text carries the route path, all five report paths (Step 3's outputs), and the terrain-source paths — same completeness rule as Step 3: children see only what you pass them. For every **grilling** gap, the challenger stakes a position with evidence and a decidable demand (accept / partial / rebut-with-evidence) instead of routing to a one-question-at-a-time dialogue — this is the sanctioned alternative when the user declines the grilling dialogue.
+
+**Challenger positions do not replace user adjudication.** Every gap that needs a user decision still goes to the user: present the challenger's positions and its new findings in one batched decision round (`ask_user_question`) and let the user overrule any position. Only a review finding the challenger **explicitly rebuts with evidence** may be dropped from the classification table without user sign-off — "looks fine to me" does not qualify.
+
+The challenger round does not consume the 2-round inspect budget: it runs inside the current round, before classification. Challenger-confirmed gaps and challenger new findings enter the classification table together; review findings the challenger refuted are annotated in the report, not silently deleted.
 
 ## Routing
 
