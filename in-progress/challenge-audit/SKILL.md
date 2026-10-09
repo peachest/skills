@@ -21,7 +21,7 @@ Run this first when report trust is in doubt; run `fix` on the findings that sur
 
 ### 1 — Assemble the three layers
 
-Collect, as paths for cross-reading:
+Collect, as paths for cross-reading (if a round's reports live only in a compacted session, consolidate them — findings, classifications, rulings — into one findings document on disk first; the audit needs a cross-examinable artifact, not reconstructed memory):
 
 - **Reports under audit** — every round, verbatim, including closure claims ("全部已收口", "fixed in commit X").
 - **The reviewed target** — post-revision state, since closures claim edits landed there.
@@ -33,7 +33,7 @@ Collect, as paths for cross-reading:
 
 One pass per axis. **Evidence first**: a finding without a citable location in report + target + terrain is noise — cut it. Under 800 words total.
 
-- **A — Invented or distorted findings**. For each gap the report claims, trace report → cited source → quoted passage. A gap whose source doesn't say what the report says is **invented**; one whose source says less than claimed is **distorted**. Special target: **closure claims** — re-verify each "fixed" item in the target text itself. Recurring defect: the fix landed in one site of the file while a sibling line with the same defect stayed (same-file siblings are where verified-but-unlanded hides).
+- **A — Invented or distorted findings**. For each gap the report claims, trace report → cited source → quoted passage. A gap whose source doesn't say what the report says is **invented**; one whose source says less than claimed is **distorted**. Attack each ruling's *justification* too — a ruling can stand while its stated reason is wrong (session 01a11f50: the setter ruling survived, but its "a wrapper is no simpler" rationale was falsified; the real cause was a pointer-bound gRPC registration no wrapper could ever shadow). Special target: **closure claims** — re-verify each "fixed" item in the target text itself. Recurring defect: the fix landed in one site of the file while a sibling line with the same defect stayed (same-file siblings are where verified-but-unlanded hides).
 - **B — Collective misses**. What did every reviewer pass over? Reviewers scanning file-by-file systematically miss **cross-file ownership holes** — a decision with no owner because each reviewer only checked their own assignment list. Sweep the source of truth section by section: does every commitment land somewhere in the target? Misses of *structural ownership* (who executes this) outweigh missed field details.
 - **C — Misclassification**. Findings routed to the wrong handler: escalated to a user decision when sources could be mechanically reconciled against each other (the authoritative-source declaration in the terrain itself settles it), or demoted to mechanical when a real choice exists. Count escalation waste — every grilling-that-was-a-lookup is process cost.
 - **D — Verdict soundness**. Attack the report's own conclusion (pass / hold / clear-to-proceed). Would the next stage re-open decisions the verdict said were closed? Is the residual-risk list honest about what was deferred, or does it bury a must-close item?
