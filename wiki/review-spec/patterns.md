@@ -25,3 +25,11 @@
 - 状态: closed-historical（2026-09-22 challenger）
 - 原发现: 01a018e7 re-inspect 等待期间 8 次计划外 poll + 1 interrupt + 2 steer
 - 结论: 证据来自 08-19（native async wake 引入前）；当前 pi-subagents 契约明确 native wake 且 review-spec Step 3 强制读 execution-controls.md，等待指引一读可达。interrupt 是否净收益不可知（也可能及时解卡）。不加规则；保留作历史行为记录
+## P-004 challenger 实证攻击模式（2026-10-10，session 01a11f50）
+
+- 状态: accepted → 已落契约（三项）
+- 触发条件: challenger 轮收口
+- 现象: 01a11f50 两次 challenger——①攻击两轮 review 裁决链：0 A/4 B，裁决结论全部站住但 4 处论证被证伪，含"结论对理由错"（setter 裁决存留但其 wrapper 论证被 server.go:191 指针绑定实证推翻）与两轮联合漏报（异构 pod 并发写同 key 丢更新）；②攻击流程本身：1A/3B/2C，判决"30-40% 可剪"——round-1 的 14 gap 中 12 条是 spec v2 发布压缩细节自造（发布即降级，非 review 功劳）；decision-trace 3 次全绿、bearing 2 次空手
+- 落契约: ①re-inspect 改 diff-scoped（修正轮只审 diff + findings 闭环，五轴全量只在首轮）②challenger 攻击面加裁决论证 ③parent 收口前对 load-bearing 声称做 terrain 抽查
+- 证据: 01a11f50#271/#276/#282（裁决链挑战）/ #355/#366（流程挑战）
+- 附带教训（route 发布侧）: spec 全文发布 + diff 复审可把 4 轮压 2 轮——属 spec 撰写侧而非本 skill，已在作者 memory 沉淀
