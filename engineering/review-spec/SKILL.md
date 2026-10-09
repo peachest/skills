@@ -7,9 +7,9 @@ description: >-
   unreconciled contradictions, missing waymark coverage, dropped decisions,
   under-specified passages — and routes each to the skill that closes it
   (research, prototype, grilling, task). At most two inspect rounds, then
-  traverse. Re-runs on each new frontier in the review-implement cycle.
-  Optionally, a challenger round attacks the route and the review findings
-  themselves when the user asks.
+  traverse. On a Held verdict, a challenger sub-agent attacks the findings in
+  the background while grilling gaps go to the user in the foreground. Re-runs
+  on each new frontier in the review-implement cycle.
 ---
 
 A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set of **tickets** about to guide `/skill:implement` — through the terrain. Before anyone traverses it, **inspect** the route. A route that reads complete rarely is: claims drift from their **ground truth**, sources contradict each other silently, and acceptance criteria cover three dimensions when the traverse will touch five. This skill finds those **gaps** and forces them closed.
@@ -29,7 +29,7 @@ A route has arrived — a **spec** about to guide `/skill:to-tickets`, or a set 
    Each sub-agent gets: the route (path or full text), the **route type**, every terrain-source path it should cross-check against, and the check's body as its brief. For Check 3 and Check 5, pass only the branch matching the route type. Use `runs.all` with five children, `agent: "doc-reviewer"`, `context: 'fresh'` each. List every terrain-source path explicitly in each sub-agent's task text — sub-agents have `context: 'fresh'` and see only what you pass them, so a bare "the terrain sources" with no paths leaves them blind.
 4. **Aggregate** the five reports. Present each check's report under its own heading, verbatim or lightly cleaned — the five axes are separate, so each stays on its own heading. The `runs.all` return value already carries each child's `.output` — read it directly from the resolved array; do not `find`/`read` sub-agent session files to locate outputs.
 5. **Classify every gap** by the wayfinder ticket type it routes to (see [Gap classification](#gap-classification)).
-6. **Report** per check, then the classification table, then a verdict. If gaps exist, ask the user which to route — see [Routing](#routing).
+6. **Report** per check, then the classification table, then a verdict. On **Held**, run the [Challenger round](#challenger-round), then route — see [Routing](#routing).
 
 ## The five checks
 
@@ -129,25 +129,25 @@ End with a verdict:
 - **Clear to traverse** — zero gaps. The route can hand off to the next skill (`/skill:to-tickets` for a spec route, `/skill:implement` for a ticket route).
 - **Held** — N gaps across M checks. List the classification table. The route must be revised and re-inspected.
 
-## Challenger round (optional)
+## Challenger round
 
-The review itself can be wrong — findings may be overblown, evidence may come from a stale version of the route, or a "gap" may already be settled elsewhere. When the user asks for a challenger round ("have challenger 挑战意见"), spawn one more sub-agent (`agent: "challenger"`, `context: 'fresh'`; verify registration the same way as Step 3) to attack **both sides**: the route where it deserves attack, and the five reports where they are wrong, overblown, or missing the real risk.
+The review itself can be wrong — a finding may be overblown, its evidence may come from a stale version of the route, or the gap may be settled elsewhere. When the verdict is **Held**, split the follow-up into two parallel lanes before routing:
 
-The challenger's task text carries the route path, all five report paths (Step 3's outputs), and the terrain-source paths — same completeness rule as Step 3: children see only what you pass them. For every **grilling** gap, the challenger stakes a position with evidence and a decidable demand (accept / partial / rebut-with-evidence) instead of routing to a one-question-at-a-time dialogue — this is the sanctioned alternative when the user declines the grilling dialogue.
+- **Challenger lane (background).** Spawn one sub-agent (`agent: "challenger"`, `context: 'fresh'`, async; verify registration the same way as Step 3) over every **non-grilling** gap. Its brief carries the route path, the five report paths, the terrain-source paths (Step 3's completeness rule: children see only what you pass them), and its job: attack each finding — is the evidence real, does the route actually say what the finding claims, is the gap already settled — and stake a position with evidence and a decidable demand (accept / partial / rebut).
+- **User lane (foreground).** Immediately present the **grilling** gaps to the user in one batched decision round (`ask_user_question`), each question carrying the evidence the review gathered. Do not wait for the challenger; its terminal notification wakes the session.
 
-**Challenger positions do not replace user adjudication.** Every gap that needs a user decision still goes to the user: present the challenger's positions and its new findings in one batched decision round (`ask_user_question`) and let the user overrule any position. Only a review finding the challenger **explicitly rebuts with evidence** may be dropped from the classification table without user sign-off — "looks fine to me" does not qualify.
+Merge when both lanes return. User rulings and challenger-confirmed findings enter the revision. A finding the challenger **rebuts with evidence** drops from the classification table — annotate it in the report, never drop silently. A challenger flag without an evidence-backed ruling stays a user decision like any other: challenger positions never replace user adjudication.
 
-The challenger round does not consume the 2-round inspect budget: it runs inside the current round, before classification. Challenger-confirmed gaps and challenger new findings enter the classification table together; review findings the challenger refuted are annotated in the report, not silently deleted.
+The challenger lane spends no inspect budget — it runs inside the current round. After the merge, apply the rulings (task gaps inline, research/prototype per [Routing](#routing); grilling is already adjudicated), then re-inspect as round 2/2.
 
 ## Routing
 
-When the verdict is **Held**, route every gap by its type. **Research, prototype, and grilling gaps must route to their follow-up skills — they cannot be closed by inline revision.** Each requires something inline writing cannot provide: a fact the cwd doesn't contain (research), a shape to react to (prototype), or a one-question-at-a-time decision dialogue (grilling). Offering "revise spec inline" for these types bypasses the very process that closes them — the agent unilaterally picks a path instead of the user deciding. Only **task** gaps (mechanical work — filling an under-reflected decision into the route body, updating a file reference) may be fixed inline.
+When the verdict is **Held** and the challenger round has merged, route the remaining gaps by their type. **Research and prototype gaps must route to their follow-up skills — they cannot be closed by inline revision.** Each requires something inline writing cannot provide: a fact the cwd doesn't contain (research), a shape to react to (prototype). Offering "revise spec inline" for these types bypasses the very process that closes them — the agent unilaterally picks a path instead of the user deciding. Grilling gaps were already put to the user in the challenger round; their rulings enter the revision directly. Only **task** gaps (mechanical work — filling an under-reflected decision into the route body, updating a file reference) may be fixed inline.
 
 Ask the user to confirm the routing, grouped by type:
 
 > Found N gaps. Routing plan:
 > - research (M gaps) → `/skill:research` (AFK sub-agent): #1, #5
-> - grilling (K gaps) → `/skill:grill-with-docs` (HITL dialogue, one question at a time): #2, #7, #9
 > - prototype (J gaps) → `/skill:prototype` (HITL artifact): #3
 > - task (L gaps) → fix inline or manual checklist: #4, #6, #8
 > Confirm to proceed, or adjust the plan.
@@ -162,7 +162,6 @@ Ask the user to confirm the routing, grouped by type:
 
 - **research** → spawn a `/skill:research` sub-agent (`context: 'fresh'`) with the gap as its question and a path to write findings to. AFK — no human in the loop. Feed the findings back into the route.
 - **prototype** → invoke `/skill:prototype` in the parent session (HITL — the user reacts to the artifact). Feed the prototype result back into the route.
-- **grilling** → invoke `/skill:grill-with-docs` in the parent session (HITL — one question at a time). Each grilling gap is one decision; the resolved decision goes into the route before the next gap is grilled.
 - **task** → fix inline directly (the agent writes the missing content into the route) or hand the user a precise checklist (HITL). Feed any resulting facts back into the route.
 
 This skill inspects, classifies, and routes. The pressure of the report — every gap named, every claim held to its ground truth, every gap tagged with the skill that closes it — is what forces the route to improve. Closing the gaps is the follow-up skills' job, not this skill's.
