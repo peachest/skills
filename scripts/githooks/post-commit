@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# post-commit — reinstall any skill whose files changed in HEAD, so the global
+# install (~/.agents/skills/) never drifts from the repo. Fixes "改了源码忘了重装".
+#
+# Scope: a changed file maps to its enclosing skill dir (nearest ancestor with
+# SKILL.md). Non-skill paths (docs/, vendor/, loose md) are ignored. Output is
+# advisory only — post-commit never blocks the commit it ran after.
+
+set -u
+
+changed=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null) || exit 0
+[ -n "$changed" ] || exit 0
+
+# Map each changed file to its skill root (first ancestor holding SKILL.md).
+roots=()
+while IFS= read -r f; do
+    dir=$(dirname "$f")
+    while [ "$dir" != "." ]; do
+        if [ -f "$dir/SKILL.md" ]; then
+            printf '%s\n' "$dir" >> /tmp/.post-commit-roots.$$
+            break
+        fi
+        dir=$(dirname "$dir")
+    done
+done <<< "$changed"
+[ -f /tmp/.post-commit-roots.$$ ] || exit 0
+
+# Dedupe, preserving order
+mapfile -t roots < <(sort -u /tmp/.post-commit-roots.$$)
+rm -f /tmp/.post-commit-roots.$$
+
+fail=0
+for root in "${roots[@]}"; do
+    name=$(basename "$root")
+    echo "post-commit: reinstalling skill '$name' (changed in HEAD)..." >&2
+    if ! npx skills add -g "$PWD/$root" -a pi -y >&2; then
+        echo "post-commit: WARN reinstall failed for '$name' — global install may be stale. Run: npx skills add -g $PWD/$root -a pi -y" >&2
+        fail=1
+    fi
+done
+exit 0
