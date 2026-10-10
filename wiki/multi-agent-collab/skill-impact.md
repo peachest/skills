@@ -16,3 +16,11 @@
 - 落点: SKILL.md "Bootstrap a named peer" 首行重写
 - 验证: to-peer tests/test.sh 9/9 + live smoke；两个 skill 均重装全局
 - 状态: accepted
+
+## 2026-09-24 回报触发面补全（现场静默案例 + 用户指正归属）
+- 现象: to-peer 派生的子 session 与用户讨论后做出关闭 MR 的决策，只向用户汇报即静默，用户主动提醒后才回传父 session
+- 归属修正: 上一版把"父子回传义务"写进了 to-peer；用户指正协议义务的源头在 multi-agent-collab（五段消息/闭环信号都定义在此，子 session 被注入的是本协议）——to-peer 保留派发者侧的 prompt 构造提醒即可
+- 提案: dispatch contract 加 "Report-back trigger surface" 段：回报义务覆盖 完成工作/与用户中途达成决策（尤其推翻原方向）/任务暂停 三类触发面，目标地址取 bootstrap [caller identity]，不等用户提醒
+- 落点: SKILL.md dispatch contract；to-peer SKILL.md 父子段已先行（eb094b8），形成 双侧约束：协议定义义务（本条）+ 创建器写 prompt（to-peer）
+- 证据: <session-id>#187,#190,#191（脱敏）
+- 状态: accepted
