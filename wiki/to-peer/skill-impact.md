@@ -31,3 +31,12 @@
 - 提案: 用户澄清 to-peer 契约 = 恒新建，不做复用判断；复用路径归 multi-agent-collab（用户显式给 session id/名称）。上一条"跨项目/跨职责默认新建"的判定写复杂了——那不是 to-peer 里的决策，误投案例的教训是"复用已有 session 前确认职责"，归属 multi-agent-collab 侧的复用路径
 - 落点: SKILL.md "新建与复用的分工" 段重写
 - 状态: accepted
+
+## 2026-09-24 安装链影子副本事故（pre-commit 检查触发）
+- 现象: post-commit 钩子装的是 ~/.agents/skills（npx 现行 canonical），但 ~/.pi/agent/skills/to-peer 残留 10-01 的真实目录旧副本；pi 资源扫描 ~/.pi 先于 ~/.agents，同名 skill 旧副本遮蔽新副本（源码级确认 package-manager.js addResources 顺序 + loadSkills 先到先得）
+- 根因: 环境问题——旧版 npx 安装行为留下的真实目录副本，npx 升级后只更新 ~/.agents；三个 skill 中招（to-peer/review-spec/tool-call-extract），vendor-ascend session 09:20 注入的还是 10-01 路径
+- 方案: 删除 ~/.pi/agent/skills 下被遮蔽的陈旧真实目录（to-peer/review-spec/tool-call-extract），让 canonical ~/.agents 接管；pi 解析验证三例均落 ~/.agents
+- 触发条件: pre-commit 检查安装链一致性时 diff ~/.pi vs 源仓
+- passCheck: pi --mode json --print "/skill:<name>" 注入的 location 为 ~/.agents 路径；~/.pi/agent/skills 无同名真实目录遮蔽
+- 证据: 本 session（2026-09-24 pre-commit 检查轮）
+- 出现: 2026-09-24（人工判定）
