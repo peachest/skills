@@ -11,7 +11,7 @@
 - 提案: 用户 topology = 每项目一个 herdr ws，跨项目任务需把 peer 建到目标项目 ws（现场案例：<session-id> 需把 chart 更改派到 <project-ws> ws）。加 --workspace（id 或 label，精确→片段匹配，歧义报错列候选）；顺带吸收 call-extract 发现的两个缺口：cwd 缺省 $PWD、--prompt-file - 走 stdin（免 /tmp 中转）。创建后回读实际 workspace_id（daemon 前缀迁移 w1B:→w1: 教训），以回读值为准
 - 落点: scripts/herdr-tab-peer.sh + SKILL.md 参数表 + tests/test.sh（11/11，含真实跨 ws smoke）
 - 验证: live smoke 在 w1 建 tab + agent start + 关 tab；ws smoke 断言 workspace_id 回读一致
-- 状态: accepted
+- 状态: accepted（判定段后经用户澄清重写，见下条）
 
 ## 2026-09-24 --runtime 跨 runtime（现场案例补全）
 - 提案: 现场案例落实时发现目标 ws 在另一个 herdr runtime（dev），脚本默认只打当前 runtime；加 --runtime R（herdr --session R）支持跨 runtime 建 peer。同 label 多 ws（<project-ws> w6/wJ）由 workspace 歧义报错路径兜住，人工消歧后用 id
@@ -26,3 +26,8 @@
 - passCheck: SKILL.md 含"新建 vs 复用"段；后续 dispatch 决策 trace 中出现"职责"判定
 - 证据: <session-id>#348,#351,#352-#358
 - 出现: 2026-09-24（人工判定，非 diagnose 流程）
+
+## 2026-09-24 分工修正（用户澄清原意）
+- 提案: 用户澄清 to-peer 契约 = 恒新建，不做复用判断；复用路径归 multi-agent-collab（用户显式给 session id/名称）。上一条"跨项目/跨职责默认新建"的判定写复杂了——那不是 to-peer 里的决策，误投案例的教训是"复用已有 session 前确认职责"，归属 multi-agent-collab 侧的复用路径
+- 落点: SKILL.md "新建与复用的分工" 段重写
+- 状态: accepted
