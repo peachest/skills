@@ -6,3 +6,9 @@
 - 验证: tests/test.sh 9/9（含 live smoke：真实建 tab + agent start + 关 tab）；check-env PASS；npx skills add -g 两个 skill 均装成功
 - 状态: accepted
 - 关联: academy/scripts/spawn-course.sh 的 ponytail 注释（"第二个 tab-spawn 消费者出现时上提"）——本 skill 即该消费者；academy 未改动，后续可考虑改走 to-peer
+
+## 2026-09-24 --workspace 支持（用户需求实锤：跨项目派发）
+- 提案: 用户 topology = 每项目一个 herdr ws，跨项目任务需把 peer 建到目标项目 ws（现场案例：<session-id> 需把 chart 更改派到 <project-ws> ws）。加 --workspace（id 或 label，精确→片段匹配，歧义报错列候选）；顺带吸收 call-extract 发现的两个缺口：cwd 缺省 $PWD、--prompt-file - 走 stdin（免 /tmp 中转）。创建后回读实际 workspace_id（daemon 前缀迁移 w1B:→w1: 教训），以回读值为准
+- 落点: scripts/herdr-tab-peer.sh + SKILL.md 参数表 + tests/test.sh（11/11，含真实跨 ws smoke）
+- 验证: live smoke 在 w1 建 tab + agent start + 关 tab；ws smoke 断言 workspace_id 回读一致
+- 状态: accepted
