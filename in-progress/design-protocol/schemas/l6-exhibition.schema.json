@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L6 Exhibition (display context)",
+  "type": "object",
+  "required": ["name", "medium"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "medium": {"type": "string"},
+    "orientation": {"enum": ["portrait", "landscape", "any"]},
+    "viewport": {"type": "string"},
+    "interaction_modalities": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

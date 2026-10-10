@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L7 Template (bundled L1-L6 decisions)",
+  "type": "object",
+  "required": ["name", "includes"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "includes": {
+      "type": "object",
+      "properties": {
+        "tokens": {"type": "string"},
+        "components": {"type": "string"},
+        "direction": {"type": "string"},
+        "scene": {"type": "string"},
+        "page": {"type": "string"},
+        "exhibition": {"type": "string"}
+      },
+      "required": ["tokens", "components"]
+    }
+  },
+  "additionalProperties": false
+}

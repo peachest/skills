@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L1 Token (W3C DTCG subset)",
+  "type": "object",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "$type": {},
+        "$value": {},
+        "$description": {"type": "string"},
+        "$extensions": {"type": "object"}
+      },
+      "patternProperties": {
+        "^[^$]": {"$ref": "#/$defs/node"}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {"if": {"required": ["$type"]}, "then": {"required": ["$value"]}},
+        {"if": {"required": ["$value"]}, "then": {"required": ["$type"]}}
+      ]
+    }
+  },
+  "$ref": "#/$defs/node"
+}

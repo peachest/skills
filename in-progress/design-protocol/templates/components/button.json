@@ -1,0 +1,29 @@
+{
+  "name": "button",
+  "category": "interaction",
+  "variants": [
+    "default",
+    "secondary",
+    "destructive",
+    "ghost"
+  ],
+  "props": {
+    "size": {
+      "type": "enum",
+      "values": [
+        "sm",
+        "md",
+        "lg"
+      ],
+      "default": "md"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "constraints": {
+    "max_label_length": 20,
+    "min_touch_target": "44px"
+  }
+}
