@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L4 Scene (direction applied to a business context)",
+  "type": "object",
+  "required": ["name", "direction"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "direction": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "density_override": {"enum": ["compact", "comfortable", "spacious"]},
+    "layout_pattern": {"type": "string"},
+    "spacing_scale": {"type": "string"},
+    "component_preferences": {"type": "object"}
+  },
+  "additionalProperties": false
+}

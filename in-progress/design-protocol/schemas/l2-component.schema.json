@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L2 Component contract",
+  "type": "object",
+  "required": [
+    "name",
+    "category",
+    "variants",
+    "props"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "category": {
+      "type": "string"
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "props": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "string",
+              "boolean",
+              "number",
+              "enum"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {}
+        },
+        "required": [
+          "type"
+        ]
+      }
+    },
+    "constraints": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

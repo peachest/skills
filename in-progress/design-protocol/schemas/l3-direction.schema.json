@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L3 Direction (design intent)",
+  "type": "object",
+  "required": ["name", "mood", "color_strategy", "density", "motion"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "mood": {"type": "string"},
+    "color_strategy": {"type": "string"},
+    "density": {"enum": ["compact", "comfortable", "spacious"]},
+    "motion": {"type": "string"},
+    "typography_emphasis": {"type": "string"}
+  },
+  "additionalProperties": false
+}
