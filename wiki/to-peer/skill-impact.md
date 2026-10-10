@@ -40,3 +40,12 @@
 - passCheck: pi --mode json --print "/skill:<name>" 注入的 location 为 ~/.agents 路径；~/.pi/agent/skills 无同名真实目录遮蔽
 - 证据: 本 session（2026-09-24 pre-commit 检查轮）
 - 出现: 2026-09-24（人工判定）
+
+## 2026-09-24 父子回传义务（用户拍板，现场静默案例）
+- 现象: to-peer 派生的 hami-fix peer（<session-id>）与用户讨论后做出关闭 MR !24 的决策（09:38），只向用户汇报即静默；用户主动提醒"通知父 peer"（09:46）后才回传主 session <parent-session-id>。决策与回传间隔 7.5 分钟
+- 根因: contract gap——bootstrap 写了"完成后按五段格式回复"，peer 把"完成"理解为任务终结；用户中途决策（尤其推翻原任务方向的决策）不在回传触发面里
+- 方案: SKILL.md 加"父子回传义务"段：to-peer 派生的 session 存在父子关系，子 session 完成工作/与用户达成决策/任务暂停时主动通知父 session（地址取 [caller identity]），不等用户提醒；--prompt-file 引导文案同步
+- 触发条件: to-peer bootstrap prompt 构造；子 session 与用户交互产生决策时
+- passCheck: SKILL.md 含"父子回传义务"段；后续 bootstrap trace 中出现决策回传（无需用户提醒）
+- 证据: <session-id>#187,#190,#191,#192-#194
+- 出现: 2026-09-24（人工判定）
