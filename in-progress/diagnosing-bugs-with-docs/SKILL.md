@@ -4,8 +4,9 @@ description: >
   Diagnosis loop for hard bugs and performance regressions, with vault
   integration: search the ops diagnosis vault (~/ops) for prior diagnoses
   before hypothesising, and persist the finished diagnosis back into it at
-  Phase 6. Use when the user says "diagnose"/"debug this" AND wants the trail
-  recorded, or reports something broken/throwing/failing/slow in the ops
+  Phase 6. Use when the user says "diagnose"/"debug this"/"排查"/"诊断"/"debug 这个"
+  AND wants the trail recorded, or reports something
+  broken/throwing/failing/slow/坏了/挂了/报错/失败/变慢/有问题/发现问题 in the ops
   domain (clusters, GPU virtualisation, k8s internals).
 ---
 
