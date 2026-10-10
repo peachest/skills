@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # herdr-tab-peer — create a peer agent in a NEW herdr tab (no pane split).
-#   herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus]
+#   herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus] [--runtime R]
 # repo-cwd defaults to $PWD. --workspace accepts a workspace id (w3) or label
 # (exact match first, then fragment; ambiguity = error listing candidates).
-# --prompt-file - reads the prompt from stdin.
+# --prompt-file - reads the prompt from stdin. --runtime R targets another herdr
+# session (herdr --session R ...), e.g. creating in the dev runtime from elsewhere.
 # Prints JSON: {name, tab_id, pane_id, workspace_id, cwd, status, prompt}.
 # Exit: 0 ok · 1 usage/validation · 2 herdr error.
 set -euo pipefail
@@ -14,9 +15,11 @@ jqget() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.ar
 
 [ $# -ge 1 ] || usage
 NAME="$1"; shift
-CWD=""; WORKSPACE=""; PROMPT_FILE=""; LABEL=""; FOCUS=""
+CWD=""; WORKSPACE=""; PROMPT_FILE=""; LABEL=""; FOCUS=""; RUNTIME=""
+hr() { "$HERDR" ${RUNTIME:+--session "$RUNTIME"} "$@"; }
 while [ $# -gt 0 ]; do
   case "$1" in
+    --runtime) RUNTIME="${2:?--runtime needs a herdr session name}"; shift 2 ;;
     --workspace) WORKSPACE="${2:?--workspace needs an id or label}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:?--prompt-file needs a path or -}"; shift 2 ;;
     --label) LABEL="${2:?--label needs text}"; shift 2 ;;
@@ -36,7 +39,7 @@ CWD="${CWD:-$PWD}"; CWD="${CWD%/}"
 # resolve workspace: bare id passes through; otherwise match against workspace list
 if [ -n "$WORKSPACE" ]; then
   if ! echo "$WORKSPACE" | grep -qE '^w[0-9A-Za-z]+$'; then
-    WS_JSON=$("$HERDR" workspace list)
+    WS_JSON=$(hr workspace list)
     WS_ID=$(printf '%s' "$WS_JSON" | python3 -c "
 import json,sys
 ws=json.load(sys.stdin)['result']['workspaces']
@@ -56,22 +59,22 @@ TAB_ARGS=(--cwd "$CWD" --label "$LABEL")
 [ -n "$WORKSPACE" ] && TAB_ARGS+=(--workspace "$WORKSPACE")
 [ -z "$FOCUS" ] && TAB_ARGS+=(--no-focus)
 
-TAB_JSON=$("$HERDR" tab create "${TAB_ARGS[@]}")
+TAB_JSON=$(hr tab create "${TAB_ARGS[@]}")
 TAB_ID=$(printf '%s' "$TAB_JSON" | jqget "d['result']['tab']['tab_id']")
 PANE_ID=$(printf '%s' "$TAB_JSON" | jqget "d['result']['root_pane']['pane_id']")
 # actual ws of the created tab (daemon prefix migration can rewrite ids — read back, never echo the input)
 WS_ACTUAL=$(printf '%s' "$TAB_JSON" | jqget "d['result']['tab']['workspace_id']")
 [ -n "$WORKSPACE" ] && [ "$WS_ACTUAL" != "$WORKSPACE" ] && echo "note: workspace resolved to $WS_ACTUAL" >&2
 
-START_JSON=$("$HERDR" agent start "$NAME" --kind pi --pane "$PANE_ID")
+START_JSON=$(hr agent start "$NAME" --kind pi --pane "$PANE_ID")
 STATUS=$(printf '%s' "$START_JSON" | jqget "d['result']['agent'].get('agent_status','?')")
 
 PROMPT_STATE=none
 if [ -n "$PROMPT_FILE" ]; then
   if [ "$PROMPT_FILE" = "-" ]; then
-    "$HERDR" agent prompt "$NAME" "$(cat)" >/dev/null
+    hr agent prompt "$NAME" "$(cat)" >/dev/null
   else
-    "$HERDR" agent prompt "$NAME" "$(cat "$PROMPT_FILE")" >/dev/null
+    hr agent prompt "$NAME" "$(cat "$PROMPT_FILE")" >/dev/null
   fi
   PROMPT_STATE=sent
 fi

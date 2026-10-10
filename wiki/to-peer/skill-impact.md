@@ -12,3 +12,8 @@
 - 落点: scripts/herdr-tab-peer.sh + SKILL.md 参数表 + tests/test.sh（11/11，含真实跨 ws smoke）
 - 验证: live smoke 在 w1 建 tab + agent start + 关 tab；ws smoke 断言 workspace_id 回读一致
 - 状态: accepted
+
+## 2026-09-24 --runtime 跨 runtime（现场案例补全）
+- 提案: 现场案例落实时发现目标 ws 在另一个 herdr runtime（dev），脚本默认只打当前 runtime；加 --runtime R（herdr --session R）支持跨 runtime 建 peer。同 label 多 ws（base-charts w6/wJ）由 workspace 歧义报错路径兜住，人工消歧后用 id
+- 落点: scripts/herdr-tab-peer.sh（hr() 包装）+ SKILL.md；tests 11/11
+- 状态: accepted
