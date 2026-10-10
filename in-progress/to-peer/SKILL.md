@@ -10,6 +10,8 @@ argument-hint: "<name> <cwd> [--prompt-file F] [--label L] [--focus]"
 
 **新建与复用的分工（用户拍板）**：to-peer = 每次都新建一个全新 peer session，不做复用判断。要把任务派给一个已存在的 session（复用），走 multi-agent-collab 并显式提供 session id 或名称。向已有 peer 投递新任务前，确认它没有自己的在办职责——`idle` 只表示 agent 空闲，不表示它没有已承接的任务线（case：wJ:p1 idle 但在忙自己的镜像检查任务，被误投后用户纠正）。
 
+**父子回传义务（用户拍板）**：to-peer 派生的 session 本质上存在父子关系（派发方 = 父）。子 session 的 bootstrap prompt 必须含回传条款：**完成工作、与用户达成决策（尤其是推翻原任务方向的决策）、或任务暂停时，主动按五段格式通知父 session（地址取自 [caller identity]），不等用户提醒**。case：hami-fix peer 与用户讨论后关闭 MR !24，只向用户汇报即静默，用户主动提醒后才通知父 session。没写 prompt-file 时，后续用 multi-agent-collab 派任务时同规则附带此条款。
+
 ## 为什么是新 tab 而不是 split pane
 
 用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。split pane 的旧路径（multi-agent-collab 的 `scripts/herdr-peer.sh`）仅在该 skill 自身被引用且无新 tab 要求时才考虑；用户明确提到 to-peer 或新 tab 时，走本 skill。
@@ -33,7 +35,7 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 - `<name>`：peer 的 agent 名，`[a-z][a-z0-9_-]{0,31}`，必须全局唯一
 - `[repo-cwd]`：peer 的工作目录，缺省用当前目录（`$PWD`）；跨项目派发时必须显式给目标仓路径
 - `--workspace W`：可选。目标 workspace 的 id（`w4`）或 label（`<project-ws>`；精确匹配优先，其次片段匹配，歧义报错列出候选）。**跨项目派发必带**：peer 必须落在目标项目的 ws 里，落错 ws 用户的 topology 就乱了。创建后脚本回读实际 ws id（daemon 迁移会改写前缀，如 `w1B:` → `w1:`），以回读值为准
-- `--prompt-file F`：可选。`F` 为文件路径，或 `-` 从 stdin 读（`echo ... | ... --prompt-file -`，免 /tmp 中转）。prompt 内容若是 bootstrap，按 multi-agent-collab 五段模板写，并带 `/skill:multi-agent-collab` 前缀（仅首条）
+- `--prompt-file F`：可选。`F` 为文件路径，或 `-` 从 stdin 读（`echo ... | ... --prompt-file -`，免 /tmp 中转）。prompt 内容若是 bootstrap，按 multi-agent-collab 五段模板写，并带 `/skill:multi-agent-collab` 前缀（仅首条），且必须含父子回传义务条款（见上）
 - `--label L`：可选，tab 标签（默认用 name）
 - `--focus`：可选，创建后聚焦新 tab（默认不抢焦点）
 - `--runtime R`：可选。跨 herdr runtime 创建（`herdr --session R ...`），如从 default runtime 会话往 dev runtime 的目标项目 ws 派 peer；不带则打当前 runtime
