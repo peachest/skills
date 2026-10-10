@@ -11,11 +11,15 @@ t() { # t <desc> <expected-exit> <args...>
 }
 
 t "no args → usage(1)"            1
-t "one arg → usage(1)"            1 foo
+t "two positional args → usage(1)"  1 foo /tmp extra
 t "bad name chars → 1"            1 BadName /tmp
 t "name too long → 1"             1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /tmp
 t "nonexistent cwd → 1"           1 okname /nonexistent-dir-xyz
-t "prompt-file missing → 1"       1 okname /tmp --prompt-file /nonexistent-f.txt
+# cwd now defaults to $PWD — one-arg form is valid validation, only herdr/HERDR_ENV gates it
+if env -u HERDR_ENV bash "$S/herdr-tab-peer.sh" okname >/dev/null 2>&1; then got=0; else got=$?; fi
+if [ "$got" = "1" ]; then pass=$((pass+1)); echo "PASS one arg (cwd=$PWD) fails on HERDR_ENV"; else fail=$((fail+1)); echo "FAIL one arg (exit $got, want 1)"; fi
+# prompt-file stdin marker passes validation too (reads stdin only after herdr calls)
+t "--prompt-file - → fails on HERDR_ENV, not usage"  1 okname /tmp --prompt-file -
 
 # assert the script refuses before touching herdr when HERDR_ENV unset
 t "HERDR_ENV unset → 1 (no herdr call)" 1 okname /tmp
@@ -29,6 +33,14 @@ if [ "${HERDR_ENV:-}" = 1 ] && command -v herdr >/dev/null 2>&1; then
   if echo "$OUT" | grep -q '"pane_id"'; then pass=$((pass+1)); echo "PASS live smoke (tab created)";
   else fail=$((fail+1)); echo "FAIL live smoke: $OUT"; fi
   herdr tab close "$(echo "$OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tab_id"])')" >/dev/null 2>&1 || true
+  # cross-ws smoke: resolve an existing workspace by label/id and create there
+  WSTEST=$(herdr workspace list | python3 -c "import json,sys; ws=json.load(sys.stdin)['result']['workspaces']; print(ws[0]['workspace_id'] if ws else '')")
+  if [ -n "$WSTEST" ]; then
+    OUT2=$(bash "$S/herdr-tab-peer.sh" to-peer-ws-smoke /tmp --workspace "$WSTEST" 2>&1)
+    if python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d['workspace_id']=='$WSTEST' else 1)" <<< "$OUT2"; then pass=$((pass+1)); echo "PASS ws smoke (created in $WSTEST)";
+    else fail=$((fail+1)); echo "FAIL ws smoke: $OUT2"; fi
+    herdr tab close "$(echo "$OUT2" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tab_id"])')" >/dev/null 2>&1 || true
+  fi
 else
   echo "SKIP live smoke (not in herdr env)"
 fi
