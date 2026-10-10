@@ -90,11 +90,12 @@ confirm with the user is always clean.
    fails **silently** (empty output, exit 0): go straight to the glab-api
    skill's API path; do not loop on `glab mr create`.
 
-6. **Title** — derive, then confirm. Offer a short descriptive title naming
-   the behavior change or symptom (recommended: what the MR *does*, not which
-   files it touches), alongside the first commit's subject line of
-   `<target>..HEAD` as the alternative. If neither works, transform the branch
-   name (`<type>/<name>` → `Type: name`). Clean title, no draft prefix. Ask the
+6. **Title** — derive, then confirm. The style is fixed:
+   **behavior-change titles only** — state what the MR *does* (behavior
+   before → after, or the symptom it fixes), not which files it touches. Do
+   not offer commit-subject or branch-name transforms as alternatives; the
+   preflight TITLE_CANDIDATE (first commit subject) is raw material for
+   phrasing, never the title itself. Clean title, no draft prefix. Ask the
    user to confirm or edit.
 
 7. **Description** — yours to write, no fixed skeleton (MRs are not all fixes).
