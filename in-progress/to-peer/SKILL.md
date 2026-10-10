@@ -8,6 +8,8 @@ argument-hint: "<name> <cwd> [--prompt-file F] [--label L] [--focus]"
 
 本 skill 只负责**创建**：一个新 tab + 一个 pi agent + 可选的首条 prompt。peer 起来之后的通信协议（五段消息、followUp 门、回执对账）由 **multi-agent-collab** skill 负责，创建完成后走那边。
 
+**新建 vs 复用**：给已有 peer 派新任务前，除了查 `agent_status`，还要确认它没有自己的在办职责——`idle` 只表示 agent 空闲，不表示它没有已承接的任务线（case：wJ:p1 idle 但在忙 <registry-a> 镜像检查，被误投后用户纠正）。跨项目/跨职责派发默认新建 peer（本 skill），同任务线内追加工作才发给已有 peer。
+
 ## 为什么是新 tab 而不是 split pane
 
 用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。split pane 的旧路径（multi-agent-collab 的 `scripts/herdr-peer.sh`）仅在该 skill 自身被引用且无新 tab 要求时才考虑；用户明确提到 to-peer 或新 tab 时，走本 skill。

@@ -17,3 +17,12 @@
 - 提案: 现场案例落实时发现目标 ws 在另一个 herdr runtime（dev），脚本默认只打当前 runtime；加 --runtime R（herdr --session R）支持跨 runtime 建 peer。同 label 多 ws（<charts-repo> w6/wJ）由 workspace 歧义报错路径兜住，人工消歧后用 id
 - 落点: scripts/herdr-tab-peer.sh（hr() 包装）+ SKILL.md；tests 11/11
 - 状态: accepted
+
+## 2026-09-24 新建 vs 复用判定（现场误投案例）
+- 现象: 01a124ba（ascend-device-plugin）向 <charts-repo> peer wJ:p1 投递 chart 任务，delivered=true；但 wJ:p1 有自己的在办职责（<registry-a> 镜像检查），用户纠正后 via to-peer 新建 vendor-ascend（wJ:p2）重新派发
+- 根因: agent 即兴——agent 查了 agent_status=idle 就投递，但 idle ≠ 无在办职责；"查状态" ≠ "查职责"。状态机里没有"该 peer 是否已被占用"的判据
+- 方案: SKILL.md 加"新建 vs 复用"判定：跨项目/跨职责派发默认新建 peer；同任务线追加工作才发给已有 peer
+- 触发条件: 向已存在的 peer 投递新任务前的 target 选择
+- passCheck: SKILL.md 含"新建 vs 复用"段；后续 dispatch 决策 trace 中出现"职责"判定
+- 证据: <session-id>#348,#351,#352-#358
+- 出现: 2026-09-24（人工判定，非 diagnose 流程）
