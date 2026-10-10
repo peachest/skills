@@ -10,6 +10,7 @@
 | 2026-09-09 | S3 怪癖入 SKILL.md：URL 归一化规则与跨实例 -R 形式（step 2）、404 甄别 + tos/* 静默失败短路（step 5） | engineering/create-mr/SKILL.md | 落地 commit 见 git log | 下轮 diagnose 验证 P-002 absent | accepted 2026-09-10 |
 | 2026-09-09 | S4 独立 glab-json.py 脚本 | — | — | — | rejected: 环境已有 jq，按仓库"文档优先于新脚本"惯例，文档化一条 jq 规范命令即可 |
 | 2026-09-09 | S5 job-trace ANSI 剥离一行命令（`sed 's/\x1b\[[0-9;]*m//g'` 再 grep）归并 glab-api skill | in-progress/glab-api/SKILL.md | — | 下轮 diagnose 验证 P-007 相关场景 absent | proposed |
+| 2026-10-14 | S7 标题风格固定为行为变更式：step 6 删除 commit-subject / 分支名转换备选，仅允许行为变更（前后变化/症状修复）式标题；TITLE_CANDIDATE 降为措辞素材 | engineering/create-mr/SKILL.md | a146aa3 | 下轮 diagnose 验证 title 风格漂移 absent | accepted 2026-10-14 |
 | 2026-09-10 | S6 step 0 陈旧度规则（二次执行/隔日 session 必重读 SKILL.md）+ step 1 多 remote 必问强化 + step 8 确认门定义（仅本 session 显式用户输入算确认）——对应 diagnose#2 遵循度结论 | engineering/create-mr/SKILL.md | 落地 commit 见 git log | 下轮 diagnose 验证 step1/step8 违规与 draft 漂移 absent | accepted 2026-09-10 |
 
 备注：harbor registry 鉴权脚本的重复内联（诊断报告中有记录）属部署诊断域，超出
