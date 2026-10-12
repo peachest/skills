@@ -70,6 +70,7 @@ never `/tmp` — see Operational Notes.
 | --------- | --------- | ---------- |
 | `mp.weixin.qq.com` | `adapters/weixin.py` | curl + Referer header → to_md.py (markitdown) |
 | `bilibili.com/video` | `adapters/bilibili.py` | WBI-signed API → download audio only |
+| `zhuanlan.zhihu.com/p/<id>` | `adapters/zhihu.py` | Playwright + login cookie, NO proxy env |
 | `youtube.com` / `youtu.be` | `adapters/youtube.py` | yt-dlp subtitles if available, else best-audio download |
 | anything else | `adapters/generic.py` | Scrapling CLI first, curl + html2text fallback, r.jina.ai reader proxy as last resort (Cloudflare bypass) |
 
@@ -89,6 +90,28 @@ If CC subtitles are available, saves them directly (skip ASR).
 Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
 
 See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR.
+
+### Zhihu (知乎专栏)
+
+Zhihu blocks non-browser TLS fingerprints — `curl` gets a hard 403 — and
+cookie-less browsers get HTTP 200 with `{"code": 40362}` in the body
+(cookie expired / not logged in). The only working path is **Playwright
+Chromium + injected login cookies + all proxy env stripped** (the corporate
+proxy fails to tunnel to zhihu).
+
+Setup:
+
+- Cookie file `~/tmp/zhihu-cookies.txt` — a `"name=value; name=value"`
+  string containing `z_c0` / `d_c0` / `__zse_ck` (get from a logged-in
+  browser; sensitive, do not echo). Override with `ZHIHU_COOKIE_FILE`.
+- Playwright runner at `~/tools/playwright-runner`
+  (node_modules/playwright), override with `ZHIHU_PLAYWRIGHT_RUNNER`.
+
+On `40362` / CAPTCHA the adapter fails with an explicit message — ask the
+user for a fresh cookie instead of retrying or bypassing.
+
+Only `zhuanlan.zhihu.com/p/<id>` article URLs are supported; other zhihu
+URLs (questions, answers) fall through to the generic adapter.
 
 ### YouTube
 
