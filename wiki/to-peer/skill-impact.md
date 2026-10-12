@@ -49,3 +49,11 @@
 - passCheck: SKILL.md 含"父子回传义务"段；后续 bootstrap trace 中出现决策回传（无需用户提醒）
 - 证据: <session-id>#187,#190,#191,#192-#194
 - 出现: 2026-09-24（人工判定）
+
+## 2026-10-12 全量 stale 审计（影子副本事故的根因级清理）
+- 现象: ~/.pi/agent/skills 仍有 104 个真实目录（非 symlink），分三类——48 个第三方 skill（无本地源，npx 直装，无碰撞，保留）；56 个有本地源，其中 47 个内容与源仓一致；9 个漂移
+- 9 个漂移的根因分两型: ①7 个 stale——9-03~9-24 sanitize/升级提交后未重装，安装副本还停在脱敏前/旧版本（kb-bootstrap、diag-search、dockerfile-cache-xp、vscode-extension、ci-pipeline-profiler、multi-arch-harbor-push 带内网标识；python-design 停在 v1）；②2 个 overlay 被上游覆盖——10-09 subtree pull + npx update 链把 setup-matt-pocock-skills/wayfinder 的安装副本刷回 vendor 上游版（in-progress overlay 是 canonical 安装源），上游版缺 discovery-routing.md 等 overlay 内容
+- 方案: 9 个全部 `npx skills add -g` 从源仓重装；5 个 pi 真实目录（kb-bootstrap/diag-search/dockerfile-cache-xp/vscode-extension/ci-pipeline-profiler）删除并按既有模式建相对 symlink；终验三层（源仓==agents==pi symlink）全绿 + 内网标识零残留
+- 教训: sanitize 提交只改源仓不重装 = 安装副本长期携带已删除的内网数据；上游同步 checklist 的"同步后重装"步骤必须指定 in-progress overlay 为安装源，npx update 会用上游版覆盖 overlay 安装副本
+- 证据: 本 session（2026-10-12 审计轮，4+9 skill 三层 diff）
+- 出现: 2026-10-12（人工判定）
