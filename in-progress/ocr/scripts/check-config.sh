@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Verify the active ocr provider config actually sends extra_body (thinking-disable)
-# to the LLM gateway — by replaying the REAL config against a local fake OpenAI
-# server and inspecting the captured request body.
+# Verify the active ocr provider config actually sends the thinking-control
+# extra_body to the LLM gateway — by replaying the REAL config against a local
+# fake OpenAI server and inspecting the captured request body.
 #
 # Why: when `provider <name>` is active, ocr ignores every `llm.*` setting
 # (including llm.extra_body). Reading the config file cannot prove what goes on
 # the wire; only a captured request can. Adapted from
 # ~/projects/ocr-image/diagnostics (fake-llm-server.py + config test matrix).
+#
+# Thinking-control semantics (GLM-5.3, verified 2026-09-03, see memory
+# glm53-thinking-semantics): thinking.type=disabled ERRORS on GLM-5.3 and
+# enable_thinking:false is silently ignored — the only live knob is
+# chat_template_kwargs.reasoning_effort (low/high/max; default max causes
+# gateway timeouts). GLM-5.2 and below accept the old fields. This check
+# accepts EITHER: (a) reasoning_effort present (GLM-5.3 way), or
+# (b) thinking.type=disabled + enable_thinking=false (GLM-5.2 way).
 #
 # Usage:
 #   bash <SKILL_DIR>/scripts/check-config.sh
@@ -29,7 +37,8 @@ cleanup() {
 trap cleanup EXIT
 
 FIX_HINT="Fix (SKILL.md chapter 2):
-  ocr config set custom_providers.<name>.extra_body '{\"thinking\": {\"type\": \"disabled\"}, \"chat_template_kwargs\": {\"enable_thinking\": false}}'
+  GLM-5.3 (glm53-*): ocr config set custom_providers.<name>.extra_body '{\"chat_template_kwargs\": {\"reasoning_effort\": \"low\"}}'
+  GLM-5.2 and below: ocr config set custom_providers.<name>.extra_body '{\"thinking\": {\"type\": \"disabled\"}, \"chat_template_kwargs\": {\"enable_thinking\": false}}'
 Note: llm.extra_body is ignored when a provider is active."
 
 command -v ocr >/dev/null 2>&1 || { echo "FAIL: ocr not installed"; exit 1; }
@@ -53,15 +62,23 @@ if not isinstance(entry, dict):
     print(f"FAIL: provider '{provider}' is active but custom_providers.{provider} is missing")
     sys.exit(11)
 eb = entry.get("extra_body") or {}
+# Accept either thinking-control style: GLM-5.3 (reasoning_effort) or GLM-5.2 (disabled)
+re = (eb.get("chat_template_kwargs") or {}).get("reasoning_effort")
 think = (eb.get("thinking") or {}).get("type")
 ctk = (eb.get("chat_template_kwargs") or {}).get("enable_thinking")
-if think != "disabled" or ctk is not False:
-    print(f"WARN: static check — extra_body at custom_providers.{provider}.extra_body has "
-          f"thinking.type={think!r}, enable_thinking={ctk!r} (expected 'disabled' / False)")
-    code = 12
-else:
-    print(f"static check: extra_body present at custom_providers.{provider}.extra_body")
+if re in ("low", "high", "max"):
+    print(f"static check: extra_body present at custom_providers.{provider}.extra_body "
+          f"(GLM-5.3 style, reasoning_effort={re!r})")
     code = 0
+elif think == "disabled" and ctk is False:
+    print(f"static check: extra_body present at custom_providers.{provider}.extra_body "
+          f"(GLM-5.2 style, thinking=disabled + enable_thinking=False)")
+    code = 0
+else:
+    print(f"WARN: static check — extra_body at custom_providers.{provider}.extra_body has "
+          f"reasoning_effort={re!r}, thinking.type={think!r}, enable_thinking={ctk!r} "
+          f"(expected reasoning_effort low/high/max, or disabled+False)")
+    code = 12
 if cfg.get("llm", {}).get("extra_body"):
     print("note: llm.extra_body is also set — it is IGNORED while a provider is active")
 entry["url"] = fake_url  # api_key stays, only ever travels to the local fake server
@@ -90,7 +107,13 @@ if [ -z "$listening" ]; then
 fi
 
 # --- 3. Replay one llm test through the patched config ------------------------
-OCR_CONFIG_PATH="$PATCHED" ocr llm test >/dev/null 2>&1 || true
+# ocr reads only ~/.opencodereview/config.json (no override env exists), so
+# swap the real config for the patched copy, run, and restore immediately.
+cp "$CONFIG" "$WORK/config.real.bak"
+cp "$PATCHED" "$CONFIG"
+restore() { cp "$WORK/config.real.bak" "$CONFIG"; }
+trap 'restore; cleanup' EXIT
+ocr llm test >/dev/null 2>&1 || true
 
 # --- 4. Inspect the captured request body --------------------------------------
 python3 - "$WORK/requests.jsonl" <<'PY'
@@ -107,14 +130,19 @@ if not reqs:
     print("FAIL: no request captured — ocr llm test did not reach the fake server")
     sys.exit(3)
 body = reqs[0].get("body") if isinstance(reqs[0].get("body"), dict) else {}
+re = (body.get("chat_template_kwargs") or {}).get("reasoning_effort")
 think = (body.get("thinking") or {}).get("type")
 ctk = (body.get("chat_template_kwargs") or {}).get("enable_thinking")
+if re in ("low", "high", "max"):
+    print(f"PASS: request body carries reasoning_effort={re!r} (GLM-5.3 style), "
+          f"model={body.get('model')!r} ({len(reqs)} request(s) captured)")
+    sys.exit(0)
 if think == "disabled" and ctk is False:
     print(f"PASS: request body carries thinking=disabled, enable_thinking=False "
-          f"({len(reqs)} request(s) captured)")
+          f"(GLM-5.2 style) ({len(reqs)} request(s) captured)")
     sys.exit(0)
-print(f"FAIL: on the wire thinking.type={think!r}, enable_thinking={ctk!r} — "
-      "thinking-disable is NOT being sent")
+print(f"FAIL: on the wire reasoning_effort={re!r}, thinking.type={think!r}, "
+      "enable_thinking={ctk!r} — thinking-control is NOT being sent")
 sys.exit(2)
 PY
 rc=$?
