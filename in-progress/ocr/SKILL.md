@@ -98,13 +98,14 @@ reasoning_content against a live endpoint) use the ocr-image repo's
 | `--effort medium` | default | Review rounds per file: low=1, medium=2, high=3. Medium for the first full review. Use `low` when verification matters more than depth: re-review after `/skill:fix`, large scopes (>15 files), quick pre-MR sanity checks — it halves the LLM work. |
 | `--max-tokens-budget` | optional | Runaway-cost guard for very large scopes. Measured ~129k tokens/file — input-dominated by agent-loop context accumulation (file_read / code_search), far above naive diff-size estimates. E.g. `--max-tokens-budget 4000000` for a ~30-file diff. When exceeded, dispatch stops, partial results still publish, exit 0. |
 | `--audience agent` | always | Summary-only output on stdout. |
-| `-b` / `--background` | agent-written | Write 1–3 sentences from the current session context: what the change does, why, and key constraints. You already hold the full context — compose it yourself. |
+| `--format json` + `-o <file>` | always | Machine-readable findings land in a file (also gives `retry_report` for troubleshooting); sessions dir remains the source of truth. Never parse the stdout summary. |
+| `-b` / `--background` | agent-written | Write 1–3 sentences from the current session context: what the change does, why, and key constraints. You already hold the full context — compose it yourself. The background must carry real architecture knowledge and a concrete review checklist (modules touched, invariants at risk, what to look for) — never a generic "review for bugs"; a vague background yields vague findings. |
 | `--exclude` | as needed | doublestar full-path match — bare patterns (`*_mock.go`) only match the repo root, deep matches need a `**/` prefix. v1.11's built-in default list (46 patterns) already excludes tests / `*.gen.go` / `*.pb.go` / testdata / fixtures — only fill gaps: `'**/*_mock.go,**/mock_*.go,**/go.sum,**/go.mod'`, lockfiles, `'**/*.min.js'`. |
 
 Canonical invocation:
 
 ```bash
-OCR_LLM_TIMEOUT=300 ocr review --audience agent --timeout 30 --concurrency <n> --effort <low|medium> -b "<background>"
+OCR_LLM_TIMEOUT=300 ocr review --audience agent --format json -o <file> --timeout 30 --concurrency <n> --effort <low|medium> -b "<background>"
 ```
 
 ## 4. Scenario routing
@@ -122,6 +123,11 @@ never look for one; get the session id via `ocr session list` (chapter 7).
 
 ## 5. Result handling and the fix loop
 
+- **Verify every finding against the source before reporting** — LLM findings
+  must never be relayed verbatim. Check each one against the actual code; the
+  three failure classes to filter out: hallucinated (no such code path),
+  stale (code was fixed after the diff), mislocated (real issue, wrong
+  file/line). Drop what fails verification.
 - Each comment carries native `severity` (critical / high / medium / low) and
   `category`. Report to the user in Chinese, grouped by severity. Discard `low`
   — likely false positives or nitpicks.
@@ -146,6 +152,8 @@ OCR_LLM_TIMEOUT=300 ocr scan --audience agent --timeout 30 --concurrency <n> --e
 - Run `--preview` first to count files → set concurrency per chapter 3.
 - `--no-plan`: skips the per-file PLAN pre-pass — faster on small scopes and
   re-scans.
+- **Full-repo scan: add `--no-plan --no-summary` — measured ~30% time
+  saved.**
 - `--batch by-directory | by-language | none`: choose `by-directory` for
   repo-layout-driven audits; `none` for single-file scans.
 - Findings flow into the same severity report and `/skill:fix` handoff as
