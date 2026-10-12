@@ -14,6 +14,11 @@
 
 安装或同步 skill 到全局 agent 时，必须用 `npx skills add -g ./<path> -a pi -y`，禁止手动 `cp`。完整规范见 `docs/agents/install-skills.md`。
 
+## 安装副本与源仓的关系
+
+- 直接修改 `~/.pi/agent/skills/<name>/`（安装副本）不会同步回本源仓。修 skill 必须改本仓源文件，改完 diff 源仓 vs 安装副本确认一致后，再 `npx skills add -g` 重装。
+- skill "表现不对劲"时，先 `diff ~/.agents/skills/<name>/ <源仓路径>` 排除 stale 副本：`~/.pi` 下可能残留一个旧的真实目录（非 symlink），遮蔽了新版本。
+
 ## 测试
 
 A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present (`uv run pytest` from the skill directory). A green run is the completion criterion for the change; a skill with no tests is exempt.
