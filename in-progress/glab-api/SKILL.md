@@ -13,7 +13,7 @@ Climb only as high as needed:
 
 1. **`glab` subcommand** — MR create/close/ready/list, issue, repo. Try first.
 2. **`glab api`** — single GET/POST/PUT/DELETE. Add `-H "Content-Type: application/json"` whenever a body is sent.
-3. **Raw `curl`** — when `glab api` persistently 500/400s on the same call (see quirks table: discussion resolve is the known case). Token: `$(glab config get token --host <host>)`; always `-o` to a file (rtk intercepts stdout curl).
+3. **Raw `curl`** — when `glab api` PUT/POST persistently 500/400s on the same call. Not limited to the discussion-resolve case: any endpoint that keeps failing gets the curl fallback (`-o` to file, then parse — rtk eats stdout). Token: `$(glab config get token --host <host>)`; always `-o` to a file (rtk intercepts stdout curl).
 4. **Python + urllib** — only for: retry loops, multi-step orchestration, JSON transformation, concurrency. Use the helper at the bottom.
 
 ## Instance selection
@@ -78,6 +78,8 @@ Each quirk below silently wasted time; the workaround is the point of this file.
 | `glab api -X POST .../discussions/<id>/notes` with `-f body=...` → 400 | same encoding issue | `glab mr note <iid> -m "..."` subcommand works fine |
 | Raw curl blocked by rtk hook | rtk intercepts inline HTTP output | always `curl -s -o /tmp/x.json` then parse the file with python | 
 | Trace shows `<cmd> # collapsed multi-line command` | runner 15.11 truncates command echoes | analyze command *output*, not the echoed command line |
+| A failed `when:manual` job is retried and the old job ID stays failed forever | manual retry creates a NEW job ID; the old one is terminal | monitor at pipeline level (`GET projects/<pid>/pipelines/<id>` status or its latest jobs list), never poll the old job ID |
+| API `sha=` (or ref/sha filter param) with a short SHA returns 200 + empty list, no error | filter silently matches nothing on truncated SHA | always pass the full 40-char SHA (`git rev-parse` / from commit lookup); empty result on a filter → first suspect a short SHA, not "no matches" |
 
 Token for python fallback: parse `~/.config/glab-cli/config.yml` with **yaml** (`cfg['hosts'][<host>]['token']`). Regex extraction silently matched nothing → empty token → misleading 401s.
 
