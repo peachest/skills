@@ -24,3 +24,9 @@
 - 落点: SKILL.md dispatch contract；to-peer SKILL.md 父子段已先行（eb094b8），形成 双侧约束：协议定义义务（本条）+ 创建器写 prompt（to-peer）
 - 证据: <session-id>#187,#190,#191（脱敏）
 - 状态: accepted
+
+## 2026-10-12 herdr daemon 重启行为沉淀（pi-memory 审计回流）
+- 提案: 把 daemon 切换的三个后果（workspace id 前缀整体迁移 w1B:*→w1:*、agent 状态重置 revision=1/seq 归零、session UUID 不变）与三步恢复（重枚举 agent list 按 UUID 尾段重建映射、向活跃 peer 广播新地址、不拿旧 seq 对比新状态）写成 pitfall
+- 落点: pitfalls.md #31（Addressing 组）+ 头部计数 30→31 + SKILL.md 触发清单补 "addresses stopped working after a herdr daemon restart" 与计数
+- commit: 97355fe
+- 验证: uv run pytest 4 passed 4 skipped；sanitize-check CLEAN
