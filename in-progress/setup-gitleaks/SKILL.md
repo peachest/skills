@@ -98,6 +98,17 @@ exit 1 with the finding, expects exit 0 on a clean tree, and expects a WARN
 (not a silent pass) when gitleaks or the config is missing. Re-run after any
 rule change: bad fixtures must FAIL, the clean tree must stay green.
 
+## Triage a finding before acting
+
+A gitleaks hit — especially from a whole-tree `gitleaks dir` scan — is a
+trigger to investigate, not a verdict. Before deleting a file or rewriting
+history, verify in order: `git ls-files` (is the path actually tracked?),
+`git log -p -- <path>` (does the secret exist in reachable history?), and
+remote branches (`git branch -r` / the push target). A hit in an untracked
+cache, a vendored tree, or a file never committed is not a leak — deleting
+the file fixes nothing and may destroy the only copy. Action follows
+verification, never the raw scan output.
+
 ## Scope shapes
 
 | Repo shape | Pattern layer | gitleaks rules |
