@@ -1,4 +1,4 @@
-# Pitfalls — 30 failure modes (28 observed in real sessions, #24/#26-#30 partly doc/mining-derived)
+# Pitfalls — 31 failure modes (28 observed in real sessions, #24/#26-#31 partly doc/mining-derived)
 
 Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by category; mechanics rows cross-reference the `herdr` skill (herdr branch) or orca-routing.md (orca branch). Consult when a send fails, a parse crashes, or a peer seems stuck.
 
@@ -41,6 +41,7 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 | 16 | Pane ID churn | "Pane ID 变了" after restart / cross-workspace move; broadcast hits stale targets | Address by agent name; on failure re-enumerate `agent list` and filter by cwd/title |
 | 17 | `agent start` false-ready | `interactive_ready: true` but pi sits at its session picker → later `agent_not_found`, pane missing from `agent list` | Restart from a clean shell pane |
 | 18 | Name constraints | `[a-z][a-z0-9_-]{0,31}` — a Chinese course dir name forced a rename ("以符合 herdr agent 命名规则") | ASCII-only names from the start |
+| 31 | herdr daemon restart migrates workspace ids and resets agent state | daemon switch moved the whole workspace-id prefix (`w1B:*` → `w1:*`) and reset agent state (`revision=1`, `state_change_seq` back to 0); sends to old pane addresses fail or silently miss; comparing a pre-restart seq against post-restart state misreads progress. Session UUIDs are UNCHANGED — they are the stable identity (memory-derived, 2026-09-23) | After a daemon restart: ① re-enumerate `herdr agent list` and rebuild the address map by matching session-UUID tails ② broadcast your new address to all active peers (their old copy of it is dead) ③ never diff an old `state_change_seq` against the new state |
 
 ## Environment
 
