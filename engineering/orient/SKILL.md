@@ -1,6 +1,6 @@
 ---
 name: orient
-description: Orient before you wayfind — read the project's terrain so planning starts grounded in what already exists.
+description: Orient before you wayfind — read the project's terrain so planning starts grounded in what already exists. Use when the user asks to 看地形/查看地形/查看现状/收集现状/先探索/先收集/先看现状, resumes a stale session ("这个 session 很久了，重新收集现状"), or enters a new repo/node and needs the current state surveyed before acting.
 ---
 
 Before you **wayfind**, **orient**. Wayfinding charts a way from *here* to a destination, but you can't chart from here if you don't know where here is. **Orienting** reads the **terrain** the requirement lands on, so every subsequent plan is grounded in what already exists.
