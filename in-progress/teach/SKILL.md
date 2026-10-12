@@ -209,6 +209,15 @@ The script scans inline `<style>` blocks and ` style="" ` attributes for bare ab
 
 It also checks KaTeX dependency completeness: prose containing math delimiters (` $...$ `, ` $$...$$ `, ` \(...\) `, ` \[...\] `) but a head missing any of the KaTeX bundle (` katex.min.css `, ` katex.min.js `, ` auto-render.min.js `, ` render.js `) fails with the exact lines to add — formulas would render as raw source (spec-decoding lesson-0005 friction). Code blocks with shell ` $ ` prompts and CJK currency prose don't trigger it.
 
+## HTML Structure Self-Check
+
+Structural edits to lesson HTML (merging/moving/closing sections, restructuring a block) must not be done as python string-replace surgery — replace splices have produced unclosed nested sections and replacement strings contaminating unrelated content (2026-10-10 incident). Make structural changes with the edit tool on balanced blocks, then validate immediately:
+
+- **Tag balance**: strip `<script>`/`<style>` content, then walk the remaining tags with a stack — per tag, open count must equal close count, and unclosed/mis-nested tags are reported. A page that *renders* correctly in a DOM is not proof the source structure is correct (browsers silently repair broken nesting).
+- **Block-count assertions**: before editing, count the structural blocks you expect to be affected (sections, figures, callouts); after editing, the counts must match intent — a doubled block or a vanished one fails the check.
+
+Run these as part of the battery verdict before the learner sees the file.
+
 ## Navigation Self-Check
 
 After adding, renumbering, or renaming any lesson, run this mechanical check before the learner sees the workspace. It catches the recurring delivery failure: shipping lesson N while lesson N−1's ending link still points at nothing, or at the wrong lesson.
@@ -227,7 +236,7 @@ The nav chain is only one kind of link. Run the whole check family through the b
 bash ./assets/run-checks.sh [--only css,beat,...] [--lesson N] lessons/
 ```
 
-**The verdict table is the completion surface, not stdout findings** — `| tail -1` still recovers every result. Each check's own completion criterion (below) is unchanged; the battery only orchestrates. `--only resource` runs the href-resolution check alone (every relative `src`/`href` resolved against the lesson's own directory — assets, images, deep `../` okb paths; also catches U+FFFD mojibake). **Zero broken references** is its criterion.
+**The verdict table is the completion surface, not stdout findings** — `| tail -1` still recovers every result. Each check's own completion criterion (below) is unchanged; the battery only orchestrates. `--only resource` runs the href-resolution check alone (every relative `src`/`href` resolved against the lesson's own directory — assets, images, deep `../` okb paths; also catches U+FFFD mojibake). **Zero broken references** is its criterion. When a resource fails to load, first confirm the host service is alive (Live Preview server running, correct port) before suspecting the path — a dead preview server produces the same symptom as a broken href.
 ## Prose Self-Check
 
 After drafting or editing a lesson, de-slop the prose before the learner sees it — the lesson is the user's teacher's voice, and generated filler reads as a defect.
@@ -239,7 +248,7 @@ After drafting or editing a lesson, de-slop the prose before the learner sees it
 python3 ./assets/prose-freq-check.py lessons/0001-your-lesson.html
 ```
 
-The script extracts visible text (style/script/svg stripped) and reports stylistic tics: `恰好` (>5), `永远` (>2), `不多不少` / `同一件事` / `都只是` (any occurrence), and `——` density (>25 per 100 prose lines, calibrated on a real before/after de-slop pair). A flag is a prompt to adjudicate in context, never authorization to edit: load-bearing uses stay (mathematical `恰好` = exactness, safety-rule `永远`), decorative uses get minimal fixes — never rewrite the paragraph. Structural tells the scanner cannot see, check by reading: self-congratulatory callout titles ("漂亮在哪：…"), "X、Y、Z——同一件事" codas, "后面的一切都只是" scaffolding, triplet parallels whose tail items are consequences rather than peers, and subtitles that restate the opening thesis.
+The script extracts visible text (style/script/svg stripped) and reports stylistic tics: `恰好` (>5), `永远` (>2), `不多不少` / `同一件事` / `都只是` (any occurrence), and `——` density (>25 per 100 prose lines, calibrated on a real before/after de-slop pair). A flag is a prompt to adjudicate in context, never authorization to edit: load-bearing uses stay (mathematical `恰好` = exactness, safety-rule `永远`), decorative uses get minimal fixes — never rewrite the paragraph. Structural tells the scanner cannot see, check by reading: manual `<br>` line breaks inside headings or body prose (an AI writing tell — let text wrap naturally; only a poster-level hero may break lines, and only where each line is semantically complete), self-congratulatory callout titles ("漂亮在哪：…"), "X、Y、Z——同一件事" codas, "后面的一切都只是" scaffolding, triplet parallels whose tail items are consequences rather than peers, and subtitles that restate the opening thesis.
 
 Completion criterion: **every flag adjudicated** (kept with reason, or fixed) — not zero flags. Formulas, numbers, citations, KaTeX, and visualizations stay untouched; keep the change rate to a few percent with zero words added (unslop's `diff_check`).
 
