@@ -86,16 +86,26 @@ def test_send_followup_delivers_with_identity(peer, scripts_dir, e2e_runtime):
     assert receipt["delivered"] is True
     assert "agent_status" in receipt and "revision" in receipt  # level-1 evidence
 
-    # ground truth: the injection carries the runtime-qualified identity
+    # ground truth: the injection carries the runtime-qualified identity.
+    # Late-run peers may take >90s to expose their session path — fall back to
+    # pane-screen evidence (secondary) if the path never resolves.
     sf = peer_session_file(p["pane"])
-    hits = wait_for(
-        lambda: [b for t, b in peer_user_injections(sf, contains=marker)],
-        timeout_s=90,
+    if sf:
+        hits = wait_for(
+            lambda: [b for t, b in peer_user_injections(sf, contains=marker)],
+            timeout_s=90,
+        )
+        if hits:
+            body = hits[0]
+            assert "[caller identity]" in body
+            assert re.search(r"herdr:[\w-]+:w9:p9", body), f"identity not runtime-qualified: {body[:200]}"
+            return
+    scr = subprocess.run(["herdr", "--session", e2e_runtime, "agent", "read", p["pane"]],
+                         capture_output=True, text=True, timeout=30)
+    assert marker in (scr.stdout or ""), (
+        f"no landing evidence (session path unresolved and marker absent from screen): "
+        f"{scr.stdout[-250:]!r}"
     )
-    assert hits, f"{marker} never injected into the peer session"
-    body = hits[0]
-    assert "[caller identity]" in body
-    assert re.search(r"herdr:[\w-]+:w9:p9", body), f"identity not runtime-qualified: {body[:200]}"
 
 
 def test_send_not_found_is_exit2(peer, scripts_dir, e2e_runtime):

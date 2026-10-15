@@ -45,6 +45,13 @@ def main():
             fail(1, "--runtime requires a name (see: herdr session list)")
         runtime = args[i + 1]
         del args[i:i + 2]
+    machine = None
+    if "--machine" in args:
+        i = args.index("--machine")
+        if i + 1 >= len(args):
+            fail(1, "--machine requires a saved machine label (see: herdr machine list)")
+        machine = args[i + 1]
+        del args[i:i + 2]
     if "--wait" in args:
         i = args.index("--wait")
         if i + 1 >= len(args):
@@ -93,7 +100,8 @@ def main():
         # reply must reach the SENDER's runtime: bare `herdr` follows the
         # replier's own HERDR_SOCKET_PATH (pitfall #27), so always qualify.
         my_rt = os.environ.get("HERDR_SESSION") or "default"
-        reply_cmd = f"herdr --session {my_rt} agent prompt {pane}"
+        machine_prefix = f"--machine {machine} " if machine else ""
+        reply_cmd = f"herdr {machine_prefix}--session {my_rt} agent prompt {pane}"
         text = (f"[caller identity] I am {from_id}; reach me at herdr:{my_rt}:{pane}\n\n"
                 + text
                 + f"\n\n[output + reply] reply via: {reply_cmd} \"<summary + artifact path>\"")
@@ -103,7 +111,15 @@ def main():
     # would instead follow HERDR_SOCKET_PATH, which is not always the sender's
     # logical runtime (pitfall #27).
     runtime = runtime or os.environ.get("HERDR_SESSION")
-    session_args = ["--session", runtime] if runtime else []
+    # --machine is mutually exclusive with --session (herdr semantics): the saved
+    # machine entry pins its own session. Target runtime defaults to $HERDR_SESSION.
+    if machine and runtime:
+        fail(1, "--machine and --runtime are mutually exclusive (a machine pins its session)")
+    if machine:
+        session_args = ["--machine", machine]
+    else:
+        runtime = runtime or os.environ.get("HERDR_SESSION")
+        session_args = ["--session", runtime] if runtime else []
 
     if followup:  # followUp: idle/done gate BEFORE send (pitfall #24 mitigation)
         # get-poll instead of `agent wait`: wait's target resolution lags for
@@ -150,10 +166,7 @@ def main():
                     f"{last_status}); pass --steer to deliver mid-task deliberately, or "
                     "retry when the peer frees up")
 
-    cmd = [HERDR]
-    if runtime:
-        cmd += ["--session", runtime]   # cross-runtime: pane ids are runtime-local (pitfall #27)
-    cmd += ["agent", "prompt", target, text]
+    cmd = [HERDR] + session_args + ["agent", "prompt", target, text]
     if wait_ms is not None:
         cmd += ["--wait", "--timeout", str(wait_ms)]
     try:
@@ -189,7 +202,7 @@ def main():
     agent = ((d.get("result") or {}).get("agent") or {})
     receipt = {
         "delivered": True,
-        "target": f"{runtime}:{target}" if runtime else target,
+        "target": f"{machine}:{runtime}:{target}" if machine else (f"{runtime}:{target}" if runtime else target),
         "agent_status": agent.get("agent_status"),
         "revision": agent.get("revision"),
         "state_change_seq": agent.get("state_change_seq"),
