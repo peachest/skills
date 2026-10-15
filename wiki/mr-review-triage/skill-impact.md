@@ -3,6 +3,38 @@
 Ledger for behavioral changes to this skill. Sanitized per repo rules: no
 internal hosts/projects/credentials; tickets reference public GitHub issues.
 
+## 2026-10-15 — spec #57 / ticket #59: verdict.py, classified.json sole writer
+
+- Proposal: spec #57 (triage-mr scripted redesign), ticket #59 — the agent
+  never touches discussion ids or state files during classification; it only
+  produces ordinal + verdict semantics, and the script does the copying.
+- Landing: new `scripts/verdict.py` — `verdict.py <MR> <no> --class
+  TP|FP|Edge|OOS|Q --reason ... [--fix-plan] [--priority high|medium|low]
+  [--resolved true|false] [--force]`. Copies the full discussion_id
+  byte-exact from `.triage/<MR>/issues.json` (pull stdout redirect), stores
+  anchor = sha256(body)[:16], writes schema 2 entries to
+  `.triage/<MR>/classified.json` via `triage_state_dir` (cwd/realpath) with
+  atomic read-modify-write (tmp + os.replace). Exit codes: 0 ok / 1 state
+  error (missing pull file, unknown no, existing verdict without --force,
+  corrupt or non-schema-2 state files) / 2 usage (argparse: missing flags,
+  bad enums, non-integer or <1 ordinal, unsafe state-dir name, TP without
+  --fix-plan). Per-item resolved decided at verdict time per Amendment R2
+  修订 A: Edge defaults resolved=true (overridable), Q defaults open (only
+  explicit --resolved true closes), TP/FP/OOS leave the field unset so post
+  applies its mode map. Refuses same-ordinal re-verdict and same-finding
+  (thread + anchor) re-append under a reshuffled ordinal without --force;
+  --force replaces the slot in place (no stale fields). Fallback-note
+  sub-issues sharing one discussion_id still append (different anchors).
+  Success echo = no + author + first body line; the id never reaches
+  human-readable output (no full or truncated shapes). New
+  tests/test_verdict.py (28 CLI-level cases) incl. the #58-recorded Q
+  end-to-end acceptance through ocr-post-labels and Edge/Q resolved
+  propagation through post in triage mode; conftest gains `run_verdict`.
+- Commit: 9830bda (branch feat/triage-t59-verdict)
+- Verification: 80 pytest cases green (uv run pytest; 52 pre-existing + 28
+  new), ruff clean on the touched files, fake-API e2e asserts Q stays open
+  and Edge resolves via post --mode triage.
+
 ## 2026-10-15 — spec #57 / ticket #60: pull ordinal + digest reconciliation
 
 - Proposal: spec #57 (triage-mr scripted redesign), ticket #60 — add stable
