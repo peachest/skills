@@ -18,6 +18,7 @@ FAKE_BIN = TESTS_DIR / "fake_bin"
 
 PULL_SCRIPT = SKILL_DIR / "scripts" / "ocr-pull-discussions.py"
 POST_SCRIPT = SKILL_DIR / "scripts" / "ocr-post-labels.py"
+VERDICT_SCRIPT = SKILL_DIR / "scripts" / "verdict.py"
 
 # ocr_platform (underscore name) is importable directly for unit-level checks
 # of the exported triage_state_dir helper; hyphen-named scripts stay subprocess-only.
@@ -69,6 +70,16 @@ def run_post(*args, stdin_text="", platform="gitlab", api_log=None):
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,
+    )
+
+
+def run_verdict(*args):
+    """Run verdict.py — pure local state script; touches no platform API."""
+    return subprocess.run(
+        [sys.executable, str(VERDICT_SCRIPT), *args],
+        capture_output=True,
+        text=True,
         timeout=60,
     )
 
