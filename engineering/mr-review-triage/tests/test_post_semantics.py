@@ -31,6 +31,12 @@ def anchor_of(body):
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
 
 
+def rev_of(cls, reason, fix_plan=""):
+    """Mirror of the post-side verdict revision fingerprint (H2):
+    sha256(classification|reason|fix_plan)[:16]."""
+    return hashlib.sha256(f"{cls}|{reason}|{fix_plan}".encode("utf-8")).hexdigest()[:16]
+
+
 def finding(no, disc_id, body):
     return {"no": no, "discussion_id": disc_id, "file": "src/app.py",
             "line": 1, "author": "ocr-bot", "body": body}
@@ -79,13 +85,14 @@ def serve(tmp_path, routes, name="routes.json"):
     return str(path)
 
 
-def marked_thread_routes(tmp_path, anchor, disc_id=DISC_A):
-    """A thread whose wall already carries the verdict marker for `anchor`.
-    The sweep's listing GET needs its own (empty) route — "discussions?per_page"
-    wins before "/discussions" because fake_api is first-pattern-wins."""
+def marked_thread_routes(tmp_path, anchor, rev, disc_id=DISC_A):
+    """A thread whose wall already carries the verdict marker for `anchor`
+    (H2: marker = anchor + verdict revision fingerprint). The sweep's listing
+    GET needs its own (empty) route — "discussions?per_page" wins before
+    "/discussions" because fake_api is first-pattern-wins."""
     thread = {"id": disc_id, "notes": [
         {"id": 201, "resolvable": True, "resolved": False,
-         "body": f"### 🟡 边缘\n\n**原因**: earlier verdict\n\n<!-- triage-anchor: {anchor} -->"}]}
+         "body": f"### 🟡 边缘\n\n**原因**: earlier verdict\n\n<!-- triage-anchor: {anchor} rev:{rev} -->"}]}
     return serve(tmp_path, {"discussions?per_page": {"file": "listing.json", "content": []},
                             "/discussions": {"file": "thread.json", "content": thread}})
 
@@ -180,8 +187,9 @@ def test_valid_anchor_recomputed_from_same_pull_passes(workdir, api_log):
     proc = run_post(MR, "--classified", str(path), api_log=api_log)
     assert proc.returncode == 0, proc.stderr
     calls = read_api_log(api_log)
-    # the anchor marker rides on the wall — the key content dedup searches for
-    assert f"<!-- triage-anchor: {anchor_of(BODY_A)} -->" in reply_bodies(calls, DISC_A)[0]
+    # the anchor + revision marker ride on the wall — what content dedup matches
+    assert f"triage-anchor: {anchor_of(BODY_A)} rev:{rev_of('FP', 'design intent')}" \
+        in reply_bodies(calls, DISC_A)[0]
     puts = [c for c in calls if c["method"] == "PUT"]
     assert len(puts) == 1 and DISC_A in puts[0]["url"]  # FP resolves, Q stays open
 
@@ -195,7 +203,8 @@ def test_dedup_skips_reply_but_still_resolves(workdir, tmp_path, api_log):
                 "resolved": True, "posted": False}]
     path = write_classified(workdir, entries)
     proc = run_post(MR, "--classified", str(path), api_log=api_log,
-                    routes_file=marked_thread_routes(tmp_path, anchor_of(BODY_A)))
+                    routes_file=marked_thread_routes(tmp_path, anchor_of(BODY_A),
+                                                     rev_of("Edge", "earlier verdict")))
     assert proc.returncode == 0, proc.stderr
     calls = read_api_log(api_log)
     assert not [c for c in calls if c["method"] == "POST"]  # zero new replies
@@ -211,11 +220,54 @@ def test_dedup_leaves_q_open_without_resolve(workdir, tmp_path, api_log):
                 "classification": "Q", "reason": "earlier verdict", "resolved": False}]
     path = write_classified(workdir, entries)
     proc = run_post(MR, "--classified", str(path), api_log=api_log,
-                    routes_file=marked_thread_routes(tmp_path, anchor_of(BODY_A)))
+                    routes_file=marked_thread_routes(tmp_path, anchor_of(BODY_A),
+                                                     rev_of("Question", "earlier verdict")))
     assert proc.returncode == 0, proc.stderr
     calls = read_api_log(api_log)
     assert not [c for c in calls if c["method"] == "POST"]
     assert not [c for c in calls if c["method"] == "PUT"]
+
+
+def test_revised_verdict_reposts_over_superseded_reply(workdir, tmp_path, api_log):
+    """H2: the dedup marker carries a verdict revision fingerprint alongside
+    the body anchor. verdict.py --force revising Q→FP (new reason, same body
+    anchor) must re-post — dedup must not skip the revised verdict and resolve
+    the thread with only the superseded explanation on the wall; the old reply
+    stays as history."""
+    anchor = anchor_of(BODY_A)
+    routes = serve(tmp_path, {
+        "discussions?per_page": {"file": "listing.json", "content": []},
+        "/discussions": {"file": "thread.json", "content": {"id": DISC_A, "notes": [
+            {"id": 201, "resolvable": True, "resolved": False, "body": BODY_A},
+            {"id": 202, "resolvable": False, "resolved": False,
+             "body": (f"### ⏸️ 需讨论\n\nneeds input\n\n"
+                      f"<!-- triage-anchor: {anchor} rev:{rev_of('Question', 'needs input')} -->")}]}},
+    })
+    entries = [{"discussion_id": DISC_A, "no": 1, "anchor": anchor,
+                "classification": "FP", "reason": "design intent", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log, routes_file=routes)
+    assert proc.returncode == 0, proc.stderr
+    body = reply_bodies(read_api_log(api_log), DISC_A)[0]
+    assert f"triage-anchor: {anchor} rev:{rev_of('FP', 'design intent')}" in body
+    assert "design intent" in body
+
+
+def test_unchanged_verdict_still_deduped_by_anchor_and_rev(workdir, tmp_path, api_log):
+    """H2: same anchor AND same verdict content → dedup still suppresses the
+    reply (the rev fingerprint only unlocks re-posting on a changed verdict)."""
+    anchor = anchor_of(BODY_A)
+    entries = [{"discussion_id": DISC_A, "no": 1, "anchor": anchor,
+                "classification": "Edge", "reason": "earlier verdict", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log,
+                    routes_file=marked_thread_routes(tmp_path, anchor,
+                                                     rev_of("Edge", "earlier verdict")))
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    assert not [c for c in calls if c["method"] == "POST"]
+    assert [c for c in calls if c["method"] == "PUT"]
+    assert "content dedup" in proc.stderr
 
 
 def test_unrelated_thread_still_gets_its_reply(workdir, tmp_path, api_log):
@@ -226,7 +278,7 @@ def test_unrelated_thread_still_gets_its_reply(workdir, tmp_path, api_log):
     path = write_classified(workdir, entries)
     other = anchor_of("a different verdict body")
     proc = run_post(MR, "--classified", str(path), api_log=api_log,
-                    routes_file=marked_thread_routes(tmp_path, other))
+                    routes_file=marked_thread_routes(tmp_path, other, rev_of("FP", "r")))
     assert proc.returncode == 0, proc.stderr
     assert reply_bodies(read_api_log(api_log), DISC_A)
 
@@ -335,7 +387,7 @@ def test_github_dedup_skips_reply(workdir, tmp_path, api_log):
         # H1: replies are listed via the PR review-comments listing filtered by
         # in_reply_to — GitHub has no GET on the /replies endpoint (POST-only)
         "in_reply_to": {"file": "replies_marked.json", "content": [
-            {"id": 555, "body": f"### 🟡 边缘\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} -->"}]},
+            {"id": 555, "body": f"### 🟡 边缘\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} rev:{rev_of('Edge', 'r')} -->"}]},
         "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
         "/comments": {"file": "comments.json", "content": []},
         # summary sweep + classified resolve: PR fetch + the thread listing
@@ -368,7 +420,7 @@ def test_github_dedup_probe_lists_replies_via_in_reply_to(workdir, tmp_path, api
     anchor = anchor_of(GH_BODY)
     routes = serve(tmp_path, {
         "in_reply_to": {"file": "replies_marked.json", "content": [
-            {"id": 555, "body": f"### ❌ 假阳性\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} -->"}]},
+            {"id": 555, "body": f"### ❌ 假阳性\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} rev:{rev_of('Edge', 'r')} -->"}]},
         "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
         "/comments": {"file": "comments.json", "content": []},
         "/pulls/1": {"file": "pr.json", "content": {"number": 1, "node_id": "PR_node_1"}},
