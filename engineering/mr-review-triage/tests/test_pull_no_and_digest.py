@@ -49,6 +49,15 @@ def test_pull_no_is_stable_across_repull(platform, expected_ids):
         [(f["discussion_id"], f["no"]) for f in second]
 
 
+def test_pull_ignores_caller_env_bot_login(monkeypatch):
+    """ocr r1 F4: harness pins OCR_BOT_LOGIN to the fixture's bot — a caller
+    env value must not flip reviewer filtering and drop bot comments."""
+    monkeypatch.setenv("OCR_BOT_LOGIN", "some-other-bot")
+    proc = run_pull("9", platform="github")
+    assert proc.returncode == 0, proc.stderr
+    assert [f["discussion_id"] for f in json.loads(proc.stdout)] == GITHUB_IDS
+
+
 def test_digest_outputs_only_new_findings():
     against = FIXTURES_DIR / "against" / "flat_old.json"
     proc = run_pull("9", "--digest", "--against", str(against))
