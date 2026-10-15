@@ -241,6 +241,26 @@ def test_start_resolves_when_end_thread_completed(workdir, api_log, tmp_path):
     assert any(END_DISC in c["url"] for c in puts)
 
 
+def test_resolved_end_thread_still_closes_start(workdir, api_log, tmp_path):
+    """H3: run 1 resolved the ✅ end but left 🔍 start open (e.g. the
+    classified reply failed). The sweep builders used to discard resolved
+    threads — has_end stayed false forever and start could never close. A
+    resolved summary thread must ride the listing as closure evidence: never
+    re-replied, never re-resolved, but it counts toward has_end."""
+    end = summary_thread(END_DISC, END_BODY)
+    end["notes"][0]["resolved"] = True
+    listing = [summary_thread(START_DISC, START_BODY), end]
+    proc = run_post(MR, stdin_text=classified(), api_log=api_log,
+                    routes_file=sweep_routes(tmp_path, listing))
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    assert reply_bodies(calls, START_DISC)    # start still gets its confirmation
+    assert not reply_bodies(calls, END_DISC)  # completed end never re-replied
+    puts = [c for c in calls if c["method"] == "PUT"]
+    assert any(START_DISC in c["url"] for c in puts)   # run 2 closes the start
+    assert not any(END_DISC in c["url"] for c in puts)
+
+
 def test_start_stays_open_when_classified_phase_failed(workdir, api_log, tmp_path):
     entries = [{"discussion_id": FINDING_DISC, "no": 1, "anchor": anchor_of(FINDING_BODY),
                 "classification": "Edge", "reason": "r", "resolved": True}]
@@ -357,6 +377,23 @@ def test_github_start_thread_resolves_after_end(gh_workdir, api_log, tmp_path):
     assert proc.returncode == 0, proc.stderr
     muts = [c for c in read_api_log(api_log) if "resolveReviewThread" in c["url"]]
     assert {c["vars"]["threadId"] for c in muts} == {GH_START_NODE, GH_END_NODE}
+
+
+def test_github_resolved_end_thread_still_closes_start(gh_workdir, api_log, tmp_path):
+    """H3 GitHub side: an already-resolved ✅ end thread is closure evidence —
+    the sweep must not re-reply or re-resolve it, but has_end must count it so
+    the open start can close on the next run."""
+    threads = gh_threads_payload(
+        gh_summary_thread(GH_START_NODE, GH_START_CMT, GH_START_BODY),
+        gh_summary_thread(GH_END_NODE, GH_END_CMT, GH_END_BODY, resolved=True))
+    proc = run_post("1", stdin_text=classified(), platform="github", api_log=api_log,
+                    routes_file=gh_routes(tmp_path, threads))
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    replies = [c for c in calls if c["method"] == "POST"]
+    assert len(replies) == 1 and f"comments/{GH_START_CMT}/replies" in replies[0]["url"]
+    muts = [c for c in calls if "resolveReviewThread" in c["url"]]
+    assert len(muts) == 1 and muts[0]["vars"] == {"threadId": GH_START_NODE}
 
 
 def test_github_sweep_dedup_skips_reply_still_resolves(gh_workdir, api_log, tmp_path):

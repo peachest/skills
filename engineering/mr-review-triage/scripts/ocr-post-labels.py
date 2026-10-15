@@ -561,12 +561,18 @@ def _sweep_summary_threads(threads, classified_ok, stats, fix_files, reply, reso
     ok = True
     error_seen = False
     end_ok = True
+    # H3: already-resolved summary threads ride the listing as closure
+    # evidence — a resolved ✅ end counts toward has_end so a start left open
+    # by a failed round 1 can still close on run 2.
     has_end = any(t["cls"] == _SUMMARY_END for t in threads)
     # end + error first: the start-thread resolve decision needs their outcome
     ordered = ([t for t in threads if t["cls"] != _SUMMARY_START]
                + [t for t in threads if t["cls"] == _SUMMARY_START])
     for t in ordered:
         cls = t["cls"]
+        if t.get("resolved"):
+            print(f"[SKIP] summary {cls} thread: already resolved (closure evidence)", file=sys.stderr)
+            continue
         marker = _ANCHOR_MARKER.format(anchor=t["anchor"])
         deduped = any(marker in body for body in t["note_bodies"])
         if deduped:
@@ -698,7 +704,7 @@ def _sweep_summaries_gitlab(mr_iid, classified_ok, stats, fix_files):
             if not notes:
                 continue
             resolvable = [n for n in notes if n.get("resolvable", False)]
-            if not resolvable or not any(n.get("resolved", False) is False for n in resolvable):
+            if not resolvable:
                 continue
             root_body = notes[0].get("body") or ""
             cls = _classify_summary_body(root_body)
@@ -707,6 +713,9 @@ def _sweep_summaries_gitlab(mr_iid, classified_ok, stats, fix_files):
             threads.append({
                 "id": disc.get("id", ""),
                 "cls": cls,
+                # H3: fully-resolved summary threads stay in the listing as
+                # closure evidence instead of vanishing (has_end false forever)
+                "resolved": all(n.get("resolved", False) for n in resolvable),
                 "anchor": hashlib.sha256(root_body.encode("utf-8")).hexdigest()[:16],
                 "note_bodies": [n.get("body") or "" for n in notes],
             })
@@ -986,8 +995,6 @@ def _sweep_summaries_github(pr_number, classified_ok, stats, fix_files):
 
     threads = []
     for t in threads_raw:
-        if t.get("isResolved"):
-            continue
         comments = [c for c in t.get("comments", {}).get("nodes", []) if isinstance(c, dict)]
         if not comments:
             continue
@@ -998,6 +1005,9 @@ def _sweep_summaries_github(pr_number, classified_ok, stats, fix_files):
         threads.append({
             "id": t.get("id", ""),
             "cls": cls,
+            # H3: resolved summary threads stay in the listing as closure
+            # evidence (the runner never re-replies or re-resolves them)
+            "resolved": bool(t.get("isResolved")),
             "anchor": hashlib.sha256((root.get("body") or "").encode("utf-8")).hexdigest()[:16],
             "note_bodies": [c.get("body") or "" for c in comments],
             "root_comment_id": root.get("databaseId"),
