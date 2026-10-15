@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from conftest import FIXTURES_DIR, read_api_log, run_post
+from conftest import FIXTURES_DIR, read_api_log, run_post, run_verify
 
 STATE_PATH = ".triage/123/classified.json"
 DISC_Q = "a1b2c3d4e5f60718"
@@ -279,6 +279,18 @@ def test_unknown_classification_zero_calls_on_github(api_log):
 
 
 # ── .triage state-path helper (cwd/realpath, never $HOME) ──
+
+
+def test_fixture_env_scrubs_inherited_ocr_remote(tmp_path, monkeypatch):
+    """M8: the shared fixture env must scrub OCR_REMOTE (and pin
+    CI_SERVER_URL) — an inherited OCR_REMOTE=origin pointed at a remote the
+    tmp cwd does not have, so fixture runs died with the exit-2 config error
+    before ever reaching the offline fixtures."""
+    monkeypatch.setenv("OCR_REMOTE", "origin")
+    monkeypatch.chdir(tmp_path)
+    proc = run_verify("!9")  # default routes: unresolved threads → exit 1
+    assert proc.returncode == 1, proc.stderr
+    assert "OCR_REMOTE" not in proc.stderr
 
 
 def test_triage_state_dir_resolves_cwd_realpath_not_home(monkeypatch, tmp_path):
