@@ -470,4 +470,6 @@ def test_preflight_gh_pr_list_targets_selected_remote(tmp_path, review_url):
     pr_calls = [ln for ln in (tmp_path / "api.log").read_text().splitlines()
                 if "pr list" in ln]
     assert pr_calls, "gh pr list should have been invoked"
-    assert any("--repo team/app" in ln for ln in pr_calls), pr_calls
+    # M1: the host is pinned too — plain owner/repo lets gh's GH_HOST send the
+    # query at an enterprise instance despite the explicit remote selection.
+    assert any("--repo github.com/team/app" in ln for ln in pr_calls), pr_calls
