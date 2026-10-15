@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 
-from ocr_platform import _git_remote_url
+from ocr_platform import _git_remote_url, pipeline_in_flight
 
 MAX_RETRY_DELAY = 60.0
 
@@ -235,16 +235,32 @@ def check_runs_status(pr_number):
         if isinstance(pr_body, dict) else None
     if not head_sha:
         return ""
-    status, runs, _ = curl(
-        f"/repos/{owner_repo}/commits/{head_sha}/check-runs?per_page=100")
-    if status != 200 or not isinstance(runs, dict):
-        return ""
-    entries = runs.get("check_runs") or []
+    # M3: aggregate every page — a single per_page=100 request declared
+    # completed while queued/in-flight checks sat on page 2 of a busy head.
+    entries = []
+    page = 1
+    while True:
+        status, runs, _ = curl(
+            f"/repos/{owner_repo}/commits/{head_sha}/check-runs"
+            f"?per_page=100&page={page}")
+        if status != 200 or not isinstance(runs, dict):
+            return ""
+        batch = runs.get("check_runs") or []
+        entries.extend(batch)
+        total = runs.get("total_count")
+        if (not batch or len(batch) < 100
+                or (isinstance(total, int) and len(entries) >= total)):
+            break
+        page += 1
+        if page > 10:  # shortcut: 1000-check cap; aggregate beyond is unrealistic, revisit if a head ever exceeds it
+            break
     if not entries:
         return ""
     for run in entries:
         run_status = str(run.get("status", "")).strip().lower()
-        if run_status in ("queued", "in_progress"):
+        # M4: one spelling with the shared predicate — waiting/pending/
+        # requested are nonterminal and must block the gate.
+        if pipeline_in_flight(run_status):
             return run_status
     return "completed"
 
