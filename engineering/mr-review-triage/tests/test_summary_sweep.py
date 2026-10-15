@@ -459,8 +459,10 @@ def test_github_resolve_not_found_reports_failure_not_silent_success(
         gh_summary_thread("PRRT_otherthread", 9999, "some other finding body"))
     proc = run_post("1", "--mode", "triage", "--classified", str(path), platform="github",
                     api_log=api_log, routes_file=gh_routes(tmp_path, threads))
-    assert proc.returncode == 0, proc.stderr  # reply ok; resolve failure warns, gate catches
+    # ocr r2 M7: resolve failure counts as failure — non-zero exit, sweep sees incomplete run
+    assert proc.returncode != 0, proc.stderr
     assert f"no open review thread contains comment {GH_DISC}" in proc.stderr
+    assert "1 failed" in proc.stderr
     assert not [c for c in read_api_log(api_log) if "resolveReviewThread" in c["url"]]
 
 
