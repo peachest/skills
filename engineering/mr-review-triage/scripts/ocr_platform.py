@@ -69,9 +69,12 @@ def run_auth_probe(platform):
     One project lookup compared against the local remote's path — a valid
     token on the wrong instance would otherwise pass and silently pull
     unrelated data. Exits 2 on mismatch. Skipped (no error) when there is
-    no local remote path to compare, e.g. GITHUB_REPOSITORY env takes
-    precedence over remote parsing on GitHub.
+    no local remote path to compare: GITHUB_REPOSITORY env takes precedence
+    over remote parsing on GitHub, and OCR_PLATFORM forces the platform so
+    the remote→host derivation the probe validates is bypassed.
     """
+    if os.environ.get("OCR_PLATFORM", "").strip().lower() in ("gitlab", "github"):
+        return
     if platform == "github":
         from ocr_github import probe_auth
     else:
