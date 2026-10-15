@@ -46,7 +46,7 @@ skills/
 - **[fix](./engineering/fix/SKILL.md)** — 验证、grill、修复 code-review 发现的问题
 - **[learn-from-examples](./engineering/learn-from-examples/SKILL.md)** — 分析示例项目/源码仓库，提取可复用模式、最佳实践、接口契约
 - **[mr-review-triage](./engineering/mr-review-triage/SKILL.md)** — 从 GitLab MR / GitHub PR 拉取 OCR review 评论，分类打标，解决线程
-- **[triage-mr](./engineering/triage-mr/SKILL.md)** — 拉取未解决 review 评论，委托 /skill:fix 分类修复，回贴标签并 resolve
+- **[triage-mr](./engineering/triage-mr/SKILL.md)** — 拉取未解决 review 评论，委托 /skill:fix 分类修复，verdict.py 落盘、脚本回贴标签并 resolve（closure gate 收口）
 - **[orient](./engineering/orient/SKILL.md)** — 出发前先读地形：survey 项目现状，让规划基于已有内容
 - **[project-wiki](./engineering/project-wiki/SKILL.md)** — 一次性 survey 代码库地形，用 SHA 漂移检测保持地图最新
 - **[review-spec](./engineering/review-spec/SKILL.md)** — traverse 前检查路线：找出 spec 与 ground truth 的偏差并路由到修复 skill
