@@ -7,6 +7,7 @@ only (gitlab.blue.example / github.com) — no internal names (pre-push sanitize
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -271,6 +272,24 @@ def test_explicit_ocr_remote_origin_without_origin_is_config_error(tmp_path):
     assert r.returncode == 2, r.stderr
     assert "OCR_REMOTE='origin'" in r.stderr
     assert r.stdout == ""
+
+
+def test_explicit_ocr_remote_git_missing_exits_2(tmp_path):
+    """M5: a subprocess failure (git not on PATH → FileNotFoundError) with an
+    explicit OCR_REMOTE is the same config error as a failing git — it used to
+    return '' silently, mis-detect the platform, and skip the auth probe."""
+    repo = make_repo(tmp_path, FORK_REMOTES)
+    env, _ = gitlab_env(tmp_path)
+    nogit = tmp_path / "nogit-bin"
+    nogit.mkdir()
+    for name in ("python3", "bash", "sh"):
+        src = shutil.which(name)
+        if src:
+            (nogit / name).symlink_to(src)
+    env["PATH"] = str(nogit)
+    r = run_cli(repo, "ocr-pull-discussions.py", env, "1")
+    assert r.returncode == 2, r.stderr
+    assert "OCR_REMOTE='review'" in r.stderr
 
 
 # ── auth probe failure paths (exit 2 before first business API call) ─────

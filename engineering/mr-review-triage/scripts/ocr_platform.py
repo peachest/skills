@@ -47,7 +47,14 @@ def _git_remote_url():
                   file=sys.stderr)
             sys.exit(2)
         return ""
-    except Exception:
+    except Exception as exc:
+        # M5: an explicit remote that cannot even be probed (git missing,
+        # lookup timed out) is the same config error as a failing git — a
+        # silent '' fallback would mis-detect the platform and skip the probe.
+        if explicit:
+            print(f"ERROR: OCR_REMOTE='{remote}' lookup failed "
+                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
+            sys.exit(2)
         return ""
 
 
