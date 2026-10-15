@@ -26,6 +26,22 @@ but they ARE resolvable threads on the platform, so they are caught by the
 **closure gate** — run ocr-verify-resolved.py after post-labels; it fails
 until every resolvable thread (including summaries) is resolved. Do NOT
 widen this filter to pull summaries back in.
+
+Each finding carries a `no` field — its 1..N position in this pull's
+deduplicated API first-seen order. `no` is a single-round chat pointer for
+verdict entry; discussion_id stays the only cross-round identity.
+
+New-round detection (--digest, ticket #60): re-pull and reconcile against a
+prior round's classified file by exact discussion_id byte match; stdout
+carries only the new findings (with their original `no`), the human summary
+goes to stderr with zero truncated-ID shapes.
+
+    python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_OR_PR_ID> --digest --against .triage/<MR_OR_PR_ID>/classified.json > /tmp/new.json 2>/tmp/digest.log
+
+A missing --against file is the first round: everything is new, not an
+error. The --against file may be the schema-2 classified.json
+({"entries": [...]}) or the flat finding array — both reduce to their
+discussion_id set.
 """
 
 import json
@@ -332,6 +348,46 @@ def deduplicate(issues):
     return unique
 
 
+def _load_against_ids(path):
+    """Known discussion_ids from a prior round's classified file.
+
+    Returns None when the file does not exist (= first round: everything is
+    new, not an error). Accepts both classified.json shapes: the schema-2
+    dict {"entries": [...]} and the flat finding array. A file that exists
+    but cannot be parsed hard-fails — it must never silently read as
+    "first round" and swallow a new review round.
+    """
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: --against file {path} is not valid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    if isinstance(data, dict):
+        items = data.get("entries")
+        if items is None:
+            print(f"ERROR: --against file {path} is a JSON object without 'entries' "
+                  f"(expected schema-2 classified.json or a flat finding array)",
+                  file=sys.stderr)
+            sys.exit(1)
+    else:
+        items = data
+    if not isinstance(items, list):
+        print(f"ERROR: --against file {path} has unexpected shape "
+              f"(expected schema-2 classified.json or a flat finding array)",
+              file=sys.stderr)
+        sys.exit(1)
+    ids = {it["discussion_id"] for it in items
+           if isinstance(it, dict) and "discussion_id" in it}
+    if items and not ids:
+        print(f"ERROR: --against file {path} has entries but no discussion_id fields",
+              file=sys.stderr)
+        sys.exit(1)
+    return ids
+
+
 # ── Main ──
 
 
@@ -372,11 +428,28 @@ def _print_source_info(platform, mr_or_pr_id):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 ocr-pull-discussions.py <MR_OR_PR_ID> [--all]", file=sys.stderr)
+        print("Usage: python3 ocr-pull-discussions.py <MR_OR_PR_ID> [--all] "
+              "[--digest --against <classified.json>]", file=sys.stderr)
         sys.exit(1)
 
-    mr_or_pr_id = sys.argv[1]
-    skip_resolved = "--all" not in sys.argv
+    args = sys.argv[1:]
+    mr_or_pr_id = args[0]
+    skip_resolved = "--all" not in args
+
+    digest = "--digest" in args
+    against = None
+    if "--against" in args:
+        i = args.index("--against")
+        if i + 1 >= len(args):
+            print("ERROR: --against requires a file path argument", file=sys.stderr)
+            sys.exit(1)
+        against = args[i + 1]
+    if digest and against is None:
+        print("ERROR: --digest requires --against <classified.json>", file=sys.stderr)
+        sys.exit(1)
+    if not digest and against is not None:
+        print("ERROR: --against requires --digest", file=sys.stderr)
+        sys.exit(1)
 
     platform = detect_platform()
     print(f"Detected platform: {platform}", file=sys.stderr)
@@ -392,6 +465,31 @@ def main():
 
     unique = deduplicate(issues)
     print(f"Deduplicated to {len(unique)} unique issues", file=sys.stderr)
+
+    # Single-round chat pointer: deduped API first-seen order, consumed by
+    # verdict at classification time; discussion_id stays the cross-round id.
+    for i, issue in enumerate(unique, 1):
+        issue["no"] = i
+
+    if digest:
+        known_ids = _load_against_ids(against)
+        if known_ids is None:
+            print(f"Digest: --against file not found: {against} — "
+                  f"treating as first round, all findings are new", file=sys.stderr)
+            already = 0
+            new = unique
+        else:
+            new = [d for d in unique if d["discussion_id"] not in known_ids]
+            already = len(unique) - len(new)
+        # Human summary: counts + ordinals only, never id shapes (full or
+        # truncated) — ids flow through the JSON stdout for script chains.
+        print(f"Digest: {len(unique)} pulled, {already} already classified, "
+              f"{len(new)} new", file=sys.stderr)
+        if new:
+            print("Digest: new findings no "
+                  + ", ".join(str(d["no"]) for d in new), file=sys.stderr)
+        json.dump(new, sys.stdout, indent=2, ensure_ascii=False)
+        return
 
     json.dump(unique, sys.stdout, indent=2, ensure_ascii=False)
 
