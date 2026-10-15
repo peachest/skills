@@ -1,0 +1,22 @@
+[project]
+name = "mr-review-triage"
+version = "0.1.0"
+description = "OCR review pipeline scripts — platform detection, GitLab/GitHub API clients, pull/post/verify CLIs for /skill:triage-mr"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["scripts", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

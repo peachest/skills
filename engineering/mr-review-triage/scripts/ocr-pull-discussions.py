@@ -34,7 +34,7 @@ import re
 import subprocess
 import sys
 
-from ocr_platform import detect_platform
+from ocr_platform import detect_platform, run_auth_probe
 
 # ── Junk filters (platform-agnostic) ──
 
@@ -335,6 +335,15 @@ def deduplicate(issues):
 # ── Main ──
 
 
+def _derived_target(platform):
+    """One-line description of where this run is pointed (platform + host)."""
+    if platform == "github":
+        return "platform=github host=github.com"
+    from ocr_gitlab import resolve_gitlab_context
+    host = resolve_gitlab_context()[1]
+    return f"platform=gitlab host={host}"
+
+
 def _print_source_info(platform, mr_or_pr_id):
     """Fetch and print MR/PR identity to stderr for source verification.
 
@@ -381,6 +390,8 @@ def main():
     platform = detect_platform()
     print(f"Detected platform: {platform}", file=sys.stderr)
 
+    run_auth_probe(platform)
+
     _print_source_info(platform, mr_or_pr_id)
 
     if platform == "github":
@@ -392,6 +403,13 @@ def main():
 
     unique = deduplicate(issues)
     print(f"Deduplicated to {len(unique)} unique issues", file=sys.stderr)
+
+    if not unique:
+        remote_name = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+        print(f"0 findings — derived target: {_derived_target(platform)}. "
+              f"Fork repo with a wrong-derivation remote? Point OCR_REMOTE at the "
+              f"remote hosting the review instance (current: '{remote_name}').",
+              file=sys.stderr)
 
     json.dump(unique, sys.stdout, indent=2, ensure_ascii=False)
 

@@ -28,7 +28,16 @@ git remote -v | awk '!seen[$2]++ {print $1, $2}'
 if [ "$(git remote | wc -l)" -gt 1 ]; then
   echo "MULTI_REMOTE=true —— 必须 ask 用户选择，上下文再明确也不自判"
 fi
-primary=$(git remote | head -1)   # 多 remote 时仅作信息块基准，最终由用户定
+primary=${OCR_REMOTE:-}   # OCR_REMOTE 覆盖 remote 推导（fork 仓防呆）；显式 ask 选择仍优先于它
+if [ -n "$primary" ]; then
+  if ! git remote get-url "$primary" >/dev/null 2>&1; then
+    echo "OCR_REMOTE='$primary' 不是本仓的 git remote —— 可用 remote:" >&2
+    git remote >&2
+    exit 2
+  fi
+else
+  primary=$(git remote | head -1)   # 多 remote 时仅作信息块基准，最终由用户定
+fi
 url=$(git remote get-url "$primary")
 web=$(norm_url "$url")
 case "$url" in *github.com*) platform=gh ;; *) platform=glab ;; esac
