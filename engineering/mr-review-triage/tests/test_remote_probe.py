@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
 FORKEE_HOST = "gitlab.blue.example"
@@ -46,6 +48,8 @@ args = sys.argv[1:]
 if args[:2] == ["api", "user"]:
     print(json.dumps({"login": "tester"})); sys.exit(0)
 if args[0] == "pr":
+    with open(os.environ["FAKE_API_LOG"], "a") as f:
+        f.write(f"gh pr {' '.join(args)}\\n")
     print("[]"); sys.exit(0)
 url = args[-1]
 log, routes = os.environ["FAKE_API_LOG"], json.load(open(os.environ["FAKE_ROUTES"]))
@@ -433,3 +437,27 @@ def test_preflight_ocr_remote_nonexistent(tmp_path):
     r = run_preflight(tmp_path, FORK_REMOTES, {"OCR_REMOTE": "nope"})
     assert r.returncode == 2
     assert "OCR_REMOTE" in r.stderr
+
+
+# ── preflight gh pr list targets the selected remote (ocr r1 F2) ─────────
+
+GH_FORK_REMOTES = {
+    "origin": "git@github.com:fork-owner/app.git",
+    "review": "git@github.com:team/app.git",  # both GitHub hosts — gh must follow OCR_REMOTE
+}
+
+
+@pytest.mark.parametrize("review_url", [
+    "git@github.com:team/app.git",
+    "https://github.com/team/app.git",
+    "ssh://git@github.com/team/app.git",
+])
+def test_preflight_gh_pr_list_targets_selected_remote(tmp_path, review_url):
+    remotes = {"origin": GH_FORK_REMOTES["origin"], "review": review_url}
+    r = run_preflight(tmp_path, remotes, {"OCR_REMOTE": "review"})
+    assert r.returncode == 0, r.stderr
+    assert "primary=review  platform=gh" in r.stdout
+    pr_calls = [ln for ln in (tmp_path / "api.log").read_text().splitlines()
+                if "pr list" in ln]
+    assert pr_calls, "gh pr list should have been invoked"
+    assert any("--repo team/app" in ln for ln in pr_calls), pr_calls
