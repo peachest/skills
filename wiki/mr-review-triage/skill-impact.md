@@ -50,3 +50,28 @@ internal hosts/projects/credentials; tickets reference public GitHub issues.
   resolved at 93fe838 — pull 0-findings hint composes with #60's
   no/digest block, probe skips under OCR_PLATFORM)
 - Verification: 26 pytest cases green after merge (15 #63 + 11 #60).
+## 2026-10-15 — spec #57 / ticket #58: post state-file foundation
+
+- Proposal: spec #57 (triage-mr scripted redesign), ticket #58 — post gets
+  the schema 2 state-file contract; absorbs peer proposal S4 (P-002
+  方案追加: `--classified <path>` file transport kills the heredoc
+  double-write).
+- Landing: `scripts/ocr-post-labels.py` — `--classified <path>` plus stdin
+  as transport only (identical validation); versionless/schema-1 input
+  hard-fails with filename + missing-field list + rebuild hint before any
+  platform call; classification vocabulary pinned — `Q` normalized to
+  `Question` before label/resolved lookups, unknown/missing classification
+  hard-fails with zero platform calls (silent FP downgrade removed);
+  priority is the high|medium|low string enum, present-but-invalid values
+  hard-fail (int coercion removed); `triage_state_dir()` exported from
+  `ocr_platform.py` (cwd/realpath, never $HOME — verdict.py #59 reuses).
+  fix SKILL.md/CLASSIFICATION.md synced to schema 2 + dual-mode contract
+  (triage mode = semantics only via verdict.py; standalone = direct write).
+  Shared harness: env-gated `FAKE_API_LOG` request journal added to
+  fake_api.py (off by default, pull tests untouched).
+- Commit: 549c95b (branch feat/triage-t58-post-foundation)
+- Verification: 37 pytest cases green (uv run pytest, incl. #60's 11 pull
+  cases) covering both transports × valid/versionless/schema-1, Q/Question
+  alias + unknown/missing hard-fail with empty API journal, priority enum
+  accept/reject, triage-mode resolve semantics, verdict-shaped entry
+  digest, cwd/realpath state-dir vs $HOME, unreadable path.
