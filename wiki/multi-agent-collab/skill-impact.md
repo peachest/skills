@@ -30,3 +30,10 @@
 - 落点: pitfalls.md #31（Addressing 组）+ 头部计数 30→31 + SKILL.md 触发清单补 "addresses stopped working after a herdr daemon restart" 与计数
 - commit: 97355fe
 - 验证: uv run pytest 4 passed 4 skipped；sanitize-check CLEAN
+
+## 2026-09-24 bootstrap /skill: 头部注入失效根因（pitfall #33）
+- 现象: dflash-obs（01a13e66）与 hami-fix（01a12513）两个 to-peer peer 的 bootstrap 首行 /skill:multi-agent-collab 均未展开（session 零 <skill> 标记），peer 靠手动 read SKILL.md 补救；dflash 还因此读到被删的 ~/.pi 陈旧副本
+- 根因: pi _expandSkillCommand（agent-session.js:1666）用全文第一个空格切分 skill 名——"/skill:multi-agent-collab\n[caller..." 的首个空格在第二行，名字被解析成 "multi-agent-collab\n[caller" 不匹配 → 原文透传，静默不报错
+- 方案: pitfalls.md #33 + SKILL.md 五段模板注释（首行 skill 名后必须留空格）；to-peer bootstrap 构造同步受益
+- 验证: 实测复现——带空格的 "/skill:to-peer reply..." 正常展开（<skill name="to-peer"> 注入 ~/.agents 路径），不带空格的原样透传
+- 状态: accepted
