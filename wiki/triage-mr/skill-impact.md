@@ -10,3 +10,6 @@
 | S3 ocr-post-labels.py：线程 resolve 成功后 `_sweep_notes_gitlab` 扫尾剩余 resolvable note；失败降级 WARN（head 已 resolve，gate 兜底） | mr-review-triage/scripts | 0ec0950 | mock ✓：POST 回帖→PUT resolve→GET→扫 stale reply note；验证时序含新回帖 note |
 | R1 拒绝：triage-mr frontmatter description 改一行摘要（user-invoked 规范建议） | frontmatter | — | 拒绝理由：流程式描述对人类记忆该 skill 的编排角色有正收益，且 user-invoked 下零 context load，无违规成本 |
 | R2 拒绝：post-labels.py 补"独立处理 note 扫尾"子命令（与 S3 二选一） | mr-review-triage/scripts | — | 拒绝理由：S3 顺路扫尾更小 diff，独立子命令引入第二入口徒增维护面 |
+| F1 SKILL.md 写明 scripts/reference 路径解析规则（相对本 SKILL.md 目录）；gitlab.md 增平台 resolve quirk 条目（discussion PUT 500 / notes POST 404 / note 级 PUT 配方）；ocr-post-labels.py `_sweep_notes_gitlab` 返回成功并兼作 discussion-PUT 失败时的 fallback resolve | mr-review-triage + triage-mr | bf6282b | mock ✓（500 场景 fallback 判 False、note PUT 成功场景判 True 且请求路径正确）；真实实例回归待下轮 triage 验证（对应 P-005/P-006） |
+| S4 提案（待实现）：post-labels 加 `--classified <path>` 文件直读写模式，物理消灭 heredoc 双写 | mr-review-triage/scripts | — | 对应 P-002 refuted 复发（01a12f97#709/#805/#843/#909/#835） |
+| S5 提案（待实现）：pull 脚本加 `--digest [--against classified.json]` | mr-review-triage/scripts | — | 对应 P-007（01a12f97#444,#470,#679,#819,#833,#931，6 次/3 形状） |
