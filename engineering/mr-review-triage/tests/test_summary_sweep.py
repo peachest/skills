@@ -193,6 +193,36 @@ def test_end_thread_stats_match_classified_and_resolves(workdir, api_log, tmp_pa
     assert len(puts) == 1 and END_DISC in puts[0]["url"]  # replied, then resolved
 
 
+def test_fallback_discussion_multi_sub_issues_all_validate_and_post(workdir, api_log, tmp_path):
+    """H5: a fallback discussion carries several findings under ONE id with
+    distinct bodies (pull's _parse_fallback_issues emits one entry per
+    sub-issue, verdict.py records per-body anchors). The by_id index used to
+    keep only the LAST sub-issue, so every verdict was checked against that
+    body and a legitimate multi-finding fallback was rejected wholesale.
+    Each entry must validate against ANY candidate body — and the TP
+    修复涉及文件 lookup follows the same anchor→candidate distinction."""
+    findings = [finding(1, FALLBACK_DISC, "first sub-issue body", file="src/a.py"),
+                finding(2, FALLBACK_DISC, "second sub-issue body", file="src/b.py")]
+    write_pull(workdir, findings)
+    entries = [
+        {"discussion_id": FALLBACK_DISC, "no": 1, "anchor": anchor_of("first sub-issue body"),
+         "classification": "TP", "reason": "r1", "fix_plan": "f1", "priority": "high",
+         "resolved": True},
+        {"discussion_id": FALLBACK_DISC, "no": 2, "anchor": anchor_of("second sub-issue body"),
+         "classification": "TP", "reason": "r2", "fix_plan": "f2", "priority": "low",
+         "resolved": True},
+    ]
+    path = write_classified(workdir, entries)
+    listing = [summary_thread(END_DISC, END_BODY)]
+    proc = run_post(MR, "--classified", str(path), api_log=api_log,
+                    routes_file=sweep_routes(tmp_path, listing))
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    assert len(reply_bodies(calls, FALLBACK_DISC)) == 2  # both sub-issue verdicts posted
+    body = reply_bodies(calls, END_DISC)[0]
+    assert "- src/a.py" in body and "- src/b.py" in body  # each TP's own candidate file
+
+
 def test_error_thread_escalates_without_resolve_and_fails_run(workdir, api_log, tmp_path):
     listing = [summary_thread(ERR_DISC, ERROR_BODY)]
     proc = run_post(MR, stdin_text=classified(), api_log=api_log,
