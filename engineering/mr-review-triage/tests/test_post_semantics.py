@@ -80,11 +80,14 @@ def serve(tmp_path, routes, name="routes.json"):
 
 
 def marked_thread_routes(tmp_path, anchor, disc_id=DISC_A):
-    """A thread whose wall already carries the verdict marker for `anchor`."""
+    """A thread whose wall already carries the verdict marker for `anchor`.
+    The sweep's listing GET needs its own (empty) route — "discussions?per_page"
+    wins before "/discussions" because fake_api is first-pattern-wins."""
     thread = {"id": disc_id, "notes": [
         {"id": 201, "resolvable": True, "resolved": False,
          "body": f"### 🟡 边缘\n\n**原因**: earlier verdict\n\n<!-- triage-anchor: {anchor} -->"}]}
-    return serve(tmp_path, {"/discussions": {"file": "thread.json", "content": thread}})
+    return serve(tmp_path, {"discussions?per_page": {"file": "listing.json", "content": []},
+                            "/discussions": {"file": "thread.json", "content": thread}})
 
 
 def replyfail_routes():
@@ -334,6 +337,10 @@ def test_github_dedup_skips_reply(workdir, tmp_path, api_log):
         "/replies": {"file": "replies_other.json", "content": []},
         "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
         "/comments": {"file": "comments.json", "content": []},
+        # summary sweep: PR fetch + an empty reviewThreads listing (no summaries)
+        "/pulls/1": {"file": "pr.json", "content": {"number": 1, "node_id": "PR_node_1"}},
+        "reviewThreads": {"file": "threads.json",
+                          "content": {"data": {"node": {"reviewThreads": {"nodes": []}}}}},
     })
     entries = [{"discussion_id": GH_DISC, "no": 1, "anchor": anchor,
                 "classification": "Edge", "reason": "r", "resolved": True}]
@@ -365,13 +372,21 @@ def test_github_reply_failure_blocks_resolve(workdir, tmp_path, api_log):
     assert "resolve failed" not in proc.stderr  # resolve never attempted
 
 
-def test_github_edge_resolved_true_attempts_resolve(workdir, api_log):
+def test_github_edge_resolved_true_attempts_resolve(workdir, tmp_path, api_log):
     write_pull(workdir, [finding(1, GH_DISC, GH_BODY)], mr="1")
     entries = [{"discussion_id": GH_DISC, "no": 1, "anchor": anchor_of(GH_BODY),
                 "classification": "Edge", "reason": "r", "resolved": True}]
     path = write_classified(workdir, entries)
+    # PR fetch + an empty reviewThreads listing: the resolve mutation itself
+    # stays unrouteable offline → the warn proves the attempt happened
+    routes = serve(tmp_path, {
+        "/comments": {"file": "comments.json", "content": []},
+        "/pulls/1": {"file": "pr.json", "content": {"number": 1, "node_id": "PR_node_1"}},
+        "reviewThreads": {"file": "threads.json",
+                          "content": {"data": {"node": {"reviewThreads": {"nodes": []}}}}},
+    })
     proc = run_post("1", "--mode", "triage", "--classified", str(path),
-                    platform="github", api_log=api_log)
+                    platform="github", api_log=api_log, routes_file=routes)
     assert proc.returncode == 0, proc.stderr
     # graphql resolve is unserveable offline → the warn proves the attempt happened
     assert "resolve failed" in proc.stderr

@@ -29,6 +29,28 @@ A thread is never resolved when its reply failed — the verdict reason must be
 on the wall before a thread closes (--force overrides at the operator's risk);
 a reply-failed item counts as fail and exits non-zero.
 
+After the classified entries, post sweeps the remaining resolvable OCR
+summary threads itself (spec #57 Q6 AMEND, #62 — the last routine manual-API
+path dies). Three template classes off the thread's root-note body:
+  🔍 start — confirmation note ("本轮 triage 已启动…"), no statistics;
+    resolves only when a ✅ end/LGTM thread exists and completed this run
+    (replied/deduped + resolved) AND the classified phase had zero failed
+    items — otherwise left open for the closure gate;
+  ✅ end/LGTM — statistics template (TP/FP/Edge/OOS/Q counts from the
+    classified entries + the TP fix files joined from the pull file),
+    then resolve;
+  ⚠️ error — fixed escalation note, reply ONLY, never resolved, and its
+    presence fails the run (exit non-zero). The closure gate staying red on
+    an error round is INTENTIONAL human-in-loop design.
+Every sweep reply embeds the anchor marker of the summary thread itself, so
+a re-run on an already-swept MR posts nothing (content dedup, #61 ③).
+
+GitHub sweep note (#62 dual-ID-space fix): the REST reply target (comment
+databaseId) and the GraphQL resolve target (thread node id) both come from
+ONE reviewThreads listing inside this script — no node id ever enters a
+REST path, and ocr-verify-resolved.py --json ids (thread node ids) are
+never consumed.
+
 Platform is auto-detected from git remote:
   - github.com    → GitHub PR review comment replies + GraphQL resolve
   - anything else → GitLab discussion replies + PUT resolve
@@ -412,6 +434,152 @@ def _write_back_posted(classified_path, entries):
               file=sys.stderr)
 
 
+# ── OCR summary-thread sweep (spec #57 Q6 AMEND, #62) ──
+
+_SUMMARY_START = "start"
+_SUMMARY_END = "end"
+_SUMMARY_ERROR = "error"
+
+# Root-note prefixes that make a thread an OCR status notice. Keep in sync
+# with _OCR_SUMMARY_PREFIXES in ocr-verify-resolved.py — the sweep must
+# handle exactly the threads the closure gate flags.
+_SUMMARY_PREFIXES = (("🔍", _SUMMARY_START),
+                     ("✅ OpenCodeReview", _SUMMARY_END),
+                     ("⚠️ OpenCodeReview", _SUMMARY_ERROR))
+
+# Fallback notes carry findings (pull parses them into classified entries):
+# a lingering unresolved fallback thread needs verdicts, not a status reply.
+# Keep in sync with _is_fallback_body in ocr-pull-discussions.py.
+_FALLBACK_BODY_RE = re.compile(r"🔍 \*{0,2}OpenCodeReview\*{0,2} — issues")
+
+_SUMMARY_BODY_START = """### 🔍 Triage 已启动
+
+本轮 triage 已启动，结果将回帖于运行汇总处。
+"""
+
+_SUMMARY_BODY_END = """### ✅ Triage 汇总
+
+本轮分类裁决统计：TP {tp} / FP {fp} / Edge {edge} / OOS {oos} / Q {q}
+
+修复涉及文件：
+{files}
+"""
+
+_SUMMARY_BODY_ERROR = """### ⚠️ Triage 受阻
+
+本轮 OpenCodeReview 运行异常，未产出裁决，请人工检查 OCR 运行日志。
+"""
+
+
+def _classify_summary_body(body):
+    """Map a root-note body to its summary class (None = not a summary)."""
+    text = (body or "").strip()
+    if _FALLBACK_BODY_RE.match(text):
+        return None
+    for prefix, cls in _SUMMARY_PREFIXES:
+        if text.startswith(prefix):
+            return cls
+    return None
+
+
+def _summary_stats(entries):
+    """Verdict counts for the ✅ end template — straight from the classified
+    entries post just delivered (canonical classes; Q already normalized)."""
+    counts = {c: 0 for c in _VALID_CLASSIFICATIONS}
+    for e in entries:
+        cls = e.get("classification")
+        if cls in counts:
+            counts[cls] += 1
+    return counts
+
+
+def _summary_fix_files(entries, findings):
+    """TP files in pull-file order — the 修复涉及文件 list. Classified entries
+    carry no file field; the same pull file the anchor gate joined against
+    supplies it."""
+    file_by_id = {f.get("discussion_id"): f.get("file", "")
+                  for f in findings if isinstance(f, dict)}
+    files = []
+    for e in entries:
+        if e.get("classification") != "TP":
+            continue
+        path = file_by_id.get(e.get("discussion_id"), "")
+        if path and path not in files:
+            files.append(path)
+    return files
+
+
+def _summary_body(cls, stats, fix_files, anchor):
+    if cls == _SUMMARY_START:
+        text = _SUMMARY_BODY_START
+    elif cls == _SUMMARY_END:
+        files = "\n".join(f"- {f}" for f in fix_files) or "（无）"
+        text = _SUMMARY_BODY_END.format(
+            tp=stats["TP"], fp=stats["FP"], edge=stats["Edge"],
+            oos=stats["OOS"], q=stats["Question"], files=files)
+    else:
+        text = _SUMMARY_BODY_ERROR
+    return text.strip() + f"\n\n<!-- {_ANCHOR_MARKER.format(anchor=anchor)} -->"
+
+
+def _sweep_summary_threads(threads, classified_ok, stats, fix_files, reply, resolve):
+    """Reply-and-maybe-resolve the listed summary threads (platform mechanics
+    injected: reply(thread, body) -> bool, resolve(thread) -> bool; thread
+    dicts carry id/cls/anchor/note_bodies).
+
+    Q6 rules: end/LGTM threads always reply+resolve; error threads reply only
+    and fail the run; start threads resolve only when an ✅ end thread exists
+    AND ended resolved AND the classified phase had zero failed items.
+    Replies already on the wall (content dedup) are never repeated, but the
+    resolve still executes for non-error threads so a previously
+    replied-but-open thread closes on re-run.
+
+    Sweep logs carry no platform ids — summary threads are outside the pull
+    file, so there is no ordinal to label them with (display discipline).
+    """
+    ok = True
+    error_seen = False
+    end_ok = True
+    has_end = any(t["cls"] == _SUMMARY_END for t in threads)
+    # end + error first: the start-thread resolve decision needs their outcome
+    ordered = ([t for t in threads if t["cls"] != _SUMMARY_START]
+               + [t for t in threads if t["cls"] == _SUMMARY_START])
+    for t in ordered:
+        cls = t["cls"]
+        marker = _ANCHOR_MARKER.format(anchor=t["anchor"])
+        deduped = any(marker in body for body in t["note_bodies"])
+        if deduped:
+            print(f"[SKIP] summary {cls} thread: sweep note already on wall (content dedup)", file=sys.stderr)
+        elif not reply(t, _summary_body(cls, stats, fix_files, t["anchor"])):
+            print(f"[FAIL] summary {cls} thread: reply failed — left open", file=sys.stderr)
+            ok = False
+            if cls == _SUMMARY_ERROR:
+                error_seen = True
+            elif cls == _SUMMARY_END:
+                end_ok = False
+            continue
+        if cls == _SUMMARY_ERROR:
+            error_seen = True
+            print("[OK] summary error thread escalated — left open (human-in-loop by design)", file=sys.stderr)
+            continue
+        if cls == _SUMMARY_START and not (has_end and end_ok and classified_ok):
+            print("[OK] summary start thread confirmed — left open (no completed ✅ end thread to take over)", file=sys.stderr)
+            continue
+        if resolve(t):
+            print(f"[OK] summary {cls} thread {'resolved (content dedup)' if deduped else 'replied + resolved'}", file=sys.stderr)
+        else:
+            print(f"[FAIL] summary {cls} thread: resolve failed — left open for the closure gate", file=sys.stderr)
+            ok = False
+            if cls == _SUMMARY_END:
+                end_ok = False
+    if error_seen:
+        print("ERROR: ⚠️ OCR error thread on this MR — the review round produced no "
+              "verdicts; inspect the OCR run logs by hand. The closure gate stays red "
+              "by design (human-in-loop, spec #57 Q6).", file=sys.stderr)
+        ok = False
+    return ok
+
+
 # ── GitLab backend ──
 
 
@@ -469,6 +637,58 @@ def _resolve_gitlab_thread(base, disc_id, curl):
         return True
     print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}", file=sys.stderr)
     return False
+
+
+def _sweep_summaries_gitlab(mr_iid, classified_ok, stats, fix_files):
+    """List the MR's still-open OCR summary threads (same discussion listing
+    and filtering the closure gate applies) and hand them to the shared
+    sweep runner. Fails closed when the listing itself fails — a silently
+    empty sweep would look like a done MR."""
+    from ocr_gitlab import curl, get_project_id
+
+    project_id = get_project_id()
+    if not project_id:
+        print("ERROR: could not determine GitLab project ID", file=sys.stderr)
+        return False
+    base = f"/projects/{project_id}/merge_requests/{mr_iid}"
+
+    threads = []
+    for page in range(1, 6):
+        status, body, _ = curl(f"{base}/discussions?per_page=100&page={page}")
+        if page == 1 and not (200 <= status < 300 and isinstance(body, list)):
+            print(f"ERROR: summary sweep: discussions listing failed (HTTP {status}) "
+                  f"— summary threads left open", file=sys.stderr)
+            return False
+        if status == 0 or not isinstance(body, list) or not body:
+            break
+        for disc in body:
+            notes = [n for n in disc.get("notes", []) if isinstance(n, dict)]
+            if not notes:
+                continue
+            resolvable = [n for n in notes if n.get("resolvable", False)]
+            if not resolvable or not any(n.get("resolved", False) is False for n in resolvable):
+                continue
+            root_body = notes[0].get("body") or ""
+            cls = _classify_summary_body(root_body)
+            if not cls:
+                continue
+            threads.append({
+                "id": disc.get("id", ""),
+                "cls": cls,
+                "anchor": hashlib.sha256(root_body.encode("utf-8")).hexdigest()[:16],
+                "note_bodies": [n.get("body") or "" for n in notes],
+            })
+        if len(body) < 100:
+            break
+
+    def reply(t, body):
+        st, _, _ = curl(f"{base}/discussions/{t['id']}/notes",
+                        method="POST", data={"body": body})
+        return 200 <= st < 300
+
+    return _sweep_summary_threads(
+        threads, classified_ok, stats, fix_files, reply,
+        lambda t: _resolve_gitlab_thread(base, t["id"], curl))
 
 
 def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
@@ -623,16 +843,22 @@ def _resolve_github_thread(pr_number, comment_id):
 
     thread_node_id = None
     for thread in threads:
-        if thread.get("isResolved"):
-            continue
         comment_ids = [c.get("databaseId") for c in thread.get("comments", {}).get("nodes", [])]
         if comment_id_int in comment_ids:
+            if thread.get("isResolved"):
+                return True  # already resolved — genuinely done
             thread_node_id = thread.get("id")
             break
 
     if not thread_node_id:
-        # Thread not found or already resolved
-        return True  # treat as success (already resolved)
+        # #62: not-found is not "already resolved" — the old silent True hid
+        # id mismatches (the dual-ID-space family). Report failure; the
+        # closure gate catches any thread this leaves open. Note
+        # comments(first: 5): a comment buried deeper in a long thread also
+        # lands here.
+        print(f"ERROR: no open review thread contains comment {comment_id} — not resolving",
+              file=sys.stderr)
+        return False
 
     # 3. Resolve the thread
     mutation = """
@@ -652,6 +878,104 @@ def _resolve_github_thread(pr_number, comment_id):
         .get("thread", {})
         .get("isResolved", False)
     )
+
+
+def _resolve_github_thread_node(thread_node_id):
+    """resolveReviewThread on a thread node id already in hand from the
+    sweep's own GraphQL listing (#62) — no re-matching by comment id needed.
+    Returns True iff the thread reports resolved after the mutation."""
+    from ocr_github import graphql
+
+    mutation = """
+    mutation($threadId: ID!) {
+      resolveReviewThread(input: {threadId: $threadId}) {
+        thread { isResolved }
+      }
+    }
+    """
+    status, result, _ = graphql(mutation, {"threadId": thread_node_id})
+    if status == 0 or not result or "errors" in result:
+        return False
+    return (
+        result.get("data", {})
+        .get("resolveReviewThread", {})
+        .get("thread", {})
+        .get("isResolved", False)
+    )
+
+
+def _sweep_summaries_github(pr_number, classified_ok, stats, fix_files):
+    """Sweep the PR's open OCR summary review threads. The thread list, the
+    REST reply target (root comment databaseId) and the GraphQL resolve
+    target (thread node id) all come from ONE reviewThreads listing here —
+    the two id spaces never cross call paths, and verify --json ids (thread
+    node ids) are never consumed (#62). Fails closed on listing failure."""
+    from ocr_github import curl, graphql, get_project_id
+
+    owner_repo = get_project_id()
+    if not owner_repo:
+        print("ERROR: could not determine GitHub owner/repo", file=sys.stderr)
+        return False
+    owner, repo = owner_repo.split("/", 1)
+
+    status, pr_body, _ = curl(f"/repos/{owner}/{repo}/pulls/{pr_number}")
+    if status == 0 or not isinstance(pr_body, dict) or not pr_body.get("node_id"):
+        print(f"ERROR: summary sweep: could not fetch PR #{pr_number} — "
+              f"summary threads left open", file=sys.stderr)
+        return False
+
+    query = """
+    query($pr: ID!) {
+      node(id: $pr) {
+        ... on PullRequest {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 5) { nodes { body databaseId } }
+            }
+          }
+        }
+      }
+    }
+    """
+    status, result, _ = graphql(query, {"pr": pr_body["node_id"]})
+    threads_raw = (
+        result.get("data", {}).get("node", {}).get("reviewThreads", {}).get("nodes", [])
+        if status != 0 and result and "data" in result else None
+    )
+    if threads_raw is None:
+        print("ERROR: summary sweep: reviewThreads listing failed — summary threads left open",
+              file=sys.stderr)
+        return False
+
+    threads = []
+    for t in threads_raw:
+        if t.get("isResolved"):
+            continue
+        comments = [c for c in t.get("comments", {}).get("nodes", []) if isinstance(c, dict)]
+        if not comments:
+            continue
+        root = comments[0]
+        cls = _classify_summary_body(root.get("body", ""))
+        if not cls:
+            continue
+        threads.append({
+            "id": t.get("id", ""),
+            "cls": cls,
+            "anchor": hashlib.sha256((root.get("body") or "").encode("utf-8")).hexdigest()[:16],
+            "note_bodies": [c.get("body") or "" for c in comments],
+            "root_comment_id": root.get("databaseId"),
+        })
+
+    def reply(t, body):
+        st, _, _ = curl(
+            f"/repos/{owner_repo}/pulls/{pr_number}/comments/{t['root_comment_id']}/replies",
+            method="POST", data={"body": body})
+        return 200 <= st < 300
+
+    return _sweep_summary_threads(threads, classified_ok, stats, fix_files,
+                                  reply, lambda t: _resolve_github_thread_node(t["id"]))
 
 
 def _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
@@ -817,6 +1141,13 @@ def main():
     pull_path = pull_file or os.path.join(triage_state_dir(mr_or_pr_id), "issues.json")
     _validate_against_pull(entries, pull_path)
 
+    # summary-thread sweep inputs (Q6): verdict counts + TP fix files. The
+    # pull file is re-read here — the join gate above already hard-failed on
+    # a missing/unreadable one, so this cannot diverge.
+    findings = load_pull_findings(pull_path)
+    stats = _summary_stats(entries)
+    fix_files = _summary_fix_files(entries, findings)
+
     posted_before = sum(1 for e in entries if e.get("posted"))
     resolved_map = _TRIAGE_RESOLVED if mode == "triage" else _DEFAULT_RESOLVED
 
@@ -827,8 +1158,11 @@ def main():
 
     if platform == "github":
         success = _post_github(mr_or_pr_id, entries, resolved_map, force)
+        summary_ok = _sweep_summaries_github(mr_or_pr_id, success, stats, fix_files)
     else:
         success = _post_gitlab(mr_or_pr_id, entries, resolved_map, force)
+        summary_ok = _sweep_summaries_gitlab(mr_or_pr_id, success, stats, fix_files)
+    success = success and summary_ok
 
     if classified_path is not None and sum(1 for e in entries if e.get("posted")) > posted_before:
         _write_back_posted(classified_path, entries)
