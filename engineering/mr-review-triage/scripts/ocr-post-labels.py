@@ -17,7 +17,12 @@ Join + anchor validation (hard-fail BEFORE any platform call):
   - every entry's discussion_id must byte-match an id in the pull state
     file (.triage/<MR>/issues.json, or --pull-file <path>); a mismatch
     exits naming the offending entry's no and the closest real id —
-    truncated or forged ids never reach the platform
+    truncated or forged ids never reach the platform. Entries already
+    marked posted:true are historical (next-round contract, ocr-r2 H4):
+    they were validated when posted and skip this join — everything
+    unposted validates against the current pull, so a stale round or a
+    body that changed between pulls keeps the hard-fail (fix: re-run
+    verdict.py for that finding)
   - the entry anchor must equal sha256(pull body)[:16] recomputed from the
     SAME pull file; a reviewer editing the live comment mid-run does not
     false-reject, because verdict and post read the same stale snapshot
@@ -408,7 +413,17 @@ def _validate_against_pull(entries, pull_path):
     (spec #57 Q4, #61 ①②). A discussion_id that is not byte-present in the
     pull file, or an anchor that the pull body does not reproduce, exits 1
     naming the entry's no and (for ids) the closest real id. The offending id
-    itself is never echoed — its shape must not seed a hand-typed retry."""
+    itself is never echoed — its shape must not seed a hand-typed retry.
+
+    Next-round contract (ocr-r2 H4): entries already marked posted:true are
+    HISTORICAL — they were validated against their round's pull when posted
+    and skip join/anchor validation here (the refreshed default pull excludes
+    resolved findings, so round-2 would otherwise reject round-1 ids before
+    any new reply). Everything unposted validates against the CURRENT pull:
+    an id that dropped out is a stale round (hard-fail stands), and a body
+    that changed between pulls (anchor mismatch) keeps the hard-fail too —
+    verdict and post read the same pull file, so a reviewer mid-edit cannot
+    false-reject; the fix is re-running verdict.py for that finding."""
     findings = load_pull_findings(pull_path)
     by_id = {}
     for f in findings:
@@ -416,6 +431,8 @@ def _validate_against_pull(entries, pull_path):
             by_id[f["discussion_id"]] = f
     ids = list(by_id)
     for i, entry in enumerate(entries):
+        if entry.get("posted") is True:
+            continue  # historical — validated when posted (next-round contract, H4)
         label = f"entry no={entry['no']}" if isinstance(entry.get("no"), int) else f"entry {i}"
         disc_id = entry.get("discussion_id")
         if not isinstance(disc_id, str) or disc_id not in by_id:

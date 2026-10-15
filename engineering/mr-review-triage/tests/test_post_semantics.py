@@ -173,6 +173,56 @@ def test_anchor_mismatch_hard_fails(workdir, api_log):
     assert_no_platform_calls(proc, api_log)
 
 
+# ── ①b next-round contract (H4): posted:true entries are historical ──
+
+
+def test_round2_mixed_posted_history_and_new_findings_pass(workdir, tmp_path, api_log):
+    """H4: the next round's refreshed pull (the default pull excludes resolved
+    findings, and verdict.py appends while retaining old entries) must not
+    reject round-1 posted:true ids before any new reply. Posted entries were
+    validated when posted — they skip join/anchor validation here."""
+    # refreshed pull: round-1 finding DISC_A resolved and dropped by the re-pull
+    write_pull(workdir, [finding(2, DISC_B, BODY_B)])
+    entries = [
+        {"discussion_id": DISC_A, "no": 1, "anchor": anchor_of(BODY_A),
+         "classification": "FP", "reason": "round-1 verdict", "resolved": True,
+         "posted": True},  # historical: id absent from the refreshed pull
+        {"discussion_id": DISC_B, "no": 2, "anchor": anchor_of(BODY_B),
+         "classification": "Edge", "reason": "round-2 verdict", "resolved": True},
+    ]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log)
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    assert reply_bodies(calls, DISC_B)  # the new finding reaches the wall
+
+
+def test_stale_unposted_entry_still_hard_fails(workdir, tmp_path, api_log):
+    """H4: the escape is for posted history only — an UNPOSTED entry whose id
+    dropped out of the refreshed pull is a genuinely stale round and keeps
+    the hard-fail."""
+    write_pull(workdir, [finding(2, DISC_B, BODY_B)])
+    entries = [{"discussion_id": DISC_A, "no": 1, "anchor": anchor_of(BODY_A),
+                "classification": "FP", "reason": "r", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log)
+    assert proc.returncode == 1
+    assert "not byte-present" in proc.stderr
+    assert_no_platform_calls(proc, api_log)
+
+
+def test_anchor_mismatch_on_unposted_entry_hard_fails_with_rerun_hint(workdir, tmp_path, api_log):
+    """H4: a body changed between pulls is a genuinely stale entry — keep the
+    hard-fail (both sides read the same pull file, so a reviewer mid-edit
+    cannot false-reject); the message must say re-run verdict.py."""
+    entries = [{"discussion_id": DISC_A, "no": 1, "anchor": "0123456789abcdef",
+                "classification": "FP", "reason": "r", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log)
+    assert proc.returncode == 1
+    assert "re-run verdict.py" in proc.stderr
+
+
 def test_valid_anchor_recomputed_from_same_pull_passes(workdir, api_log):
     """Verdict-shaped entries whose anchors match the pull file digest end to
     end — a reviewer editing the live comment later cannot false-reject here,
