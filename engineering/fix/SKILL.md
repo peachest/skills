@@ -125,27 +125,33 @@ Generate `fix-plan-<ID>.md` with a summary table + per-finding detail. Template:
 
 The skill produces two artifacts:
 
-1. **`.triage/classified.json`** — the input findings enriched with verdicts, reasons, fix plans, and resolved flags. Consumers (like `/skill:triage-mr`) read this to post labels and resolve threads. The `.triage/` directory is a working area — add it to `.gitignore`.
+1. **`.triage/classified.json`** — the input findings enriched with verdicts, reasons, fix plans, and resolved flags. The `.triage/` directory is a working area — add it to `.gitignore`. Write authority is dual-mode:
+
+   - **Triage mode** — running under `/skill:triage-mr` with an MR/PR and a pull state file: do not write the file yourself. Emit the verdict semantics (ordinal, classification, reason, fix plan, priority) and record each verdict immediately via `verdict.py`, the sole writer; state lives at `.triage/<MR>/classified.json`. Batch-assembly at the end of the run is a process violation.
+   - **Standalone mode** — called from `/skill:code-review`, `/skill:diagnosing-bugs`, or any source without a pull state file (no ordinals to redeem): write `.triage/classified.json` directly in the schema 2 format below.
 
 2. **`fix-plan-<ID>.md`** — human-readable report, also written to `.triage/`.
 
-### `.triage/classified.json` format
+### `.triage/classified.json` format (schema 2)
 
 ```json
-[
-  {
-    "discussion_id": "...",
-    "classification": "TP|FP|Edge|OOS|Question",
-    "reason": "why this verdict",
-    "fix_plan": "what to change",
-    "priority": "high|medium|low",
-    "adr": "docs/adr/NNN-xxx.md",
-    "resolved": true
-  }
-]
+{
+  "schema": 2,
+  "entries": [
+    {
+      "discussion_id": "...",
+      "classification": "TP|FP|Edge|OOS|Q",
+      "reason": "why this verdict",
+      "fix_plan": "what to change",
+      "priority": "high|medium|low",
+      "adr": "docs/adr/NNN-xxx.md",
+      "resolved": true
+    }
+  ]
+}
 ```
 
-Field requirements and `resolved` defaults per verdict are defined in [CLASSIFICATION.md](CLASSIFICATION.md). After Step 5, processed TP and Edge are set to `resolved: true`.
+`Q` is the stored form of the Question verdict; the post script accepts `Question` as an alias. The `schema` envelope is mandatory — post hard-fails on versionless or schema-1 files, so never strip the envelope when editing. Field requirements and `resolved` defaults per verdict are defined in [CLASSIFICATION.md](CLASSIFICATION.md). After Step 5, processed TP and Edge are set to `resolved: true`.
 
 ## Reflect
 
