@@ -991,15 +991,28 @@ def _sweep_summaries_github(pr_number, classified_ok, stats, fix_files):
 
 def _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
     """True when the parent comment or any of its replies already carries the
-    entry's anchor marker — the GitHub content-dedup probe (#61 ③)."""
+    entry's anchor marker — the GitHub content-dedup probe (#61 ③).
+
+    H1: GitHub does not serve GET on a comment's /replies endpoint (POST-only,
+    no listing there) — the old probe always 404'd and the offline fixture
+    masked it, so every retry re-posted the verdict. Replies are listed via
+    the PR review-comments listing filtered by in_reply_to, paginated."""
     marker = _ANCHOR_MARKER.format(anchor=anchor)
     status, parent, _ = curl(f"/repos/{owner_repo}/pulls/comments/{comment_id}")
     if status == 200 and isinstance(parent, dict) and marker in (parent.get("body") or ""):
         return True
-    status, replies, _ = curl(f"/repos/{owner_repo}/pulls/{pr_number}/comments/{comment_id}/replies")
-    if status == 200 and isinstance(replies, list):
-        return any(marker in (r.get("body") or "") for r in replies if isinstance(r, dict))
-    return False
+    page = 1
+    while True:
+        status, replies, _ = curl(
+            f"/repos/{owner_repo}/pulls/{pr_number}/comments"
+            f"?in_reply_to={comment_id}&per_page=100&page={page}")
+        if status != 200 or not isinstance(replies, list):
+            return False
+        if any(marker in (r.get("body") or "") for r in replies if isinstance(r, dict)):
+            return True
+        if len(replies) < 100 or page >= 10:  # shortcut: 1000-reply cap, revisit if a thread ever exceeds it
+            return False
+        page += 1
 
 
 def _post_github(pr_number, items, resolved_map=None, force=False):
