@@ -1,20 +1,45 @@
-"""Post classification labels + resolve OCR review discussions.
+"""Post classification verdicts to review threads + resolve them.
 
 Reads a schema 2 classified state file (--classified <path>, or stdin as a
 bare transport — validation is identical for both) and for each entry:
-  1. Posts a reply note with classification label + reason/fix-plan
-  2. Resolves the discussion based on classification type (if platform supports)
+  1. Joins it against the pull state file (see below) — hard-fails the whole
+     run before any platform call on a mismatch
+  2. Posts a reply note with classification label + reason/fix-plan — unless
+     the thread already carries this entry's anchor marker (content dedup,
+     which also covers manual-curl bypass where the posted flag is absent)
+  3. Resolves the thread iff the entry's per-item `resolved` field says so —
+     post executes the verdict-time decision, it never re-judges
+
+Join + anchor validation (hard-fail BEFORE any platform call):
+  - every entry's discussion_id must byte-match an id in the pull state
+    file (.triage/<MR>/issues.json, or --pull-file <path>); a mismatch
+    exits naming the offending entry's no and the closest real id —
+    truncated or forged ids never reach the platform
+  - the entry anchor must equal sha256(pull body)[:16] recomputed from the
+    SAME pull file; a reviewer editing the live comment mid-run does not
+    false-reject, because verdict and post read the same stale snapshot
+    (spec #57 Q4)
+
+Resolve semantics (spec #57 Amendment R2 修订 A): the per-item `resolved`
+field is authoritative — verdict.py writes it on every entry (Edge defaults
+resolved:true, Q defaults open and closes only on an explicit --resolved
+true; the close-after-verification judgment happens at verdict time). Entries
+without the field (legacy dual-mode) fall back to the mode maps below.
+A thread is never resolved when its reply failed — the verdict reason must be
+on the wall before a thread closes (--force overrides at the operator's risk);
+a reply-failed item counts as fail and exits non-zero.
 
 Platform is auto-detected from git remote:
   - github.com    → GitHub PR review comment replies + GraphQL resolve
   - anything else → GitLab discussion replies + PUT resolve
 
-Classifications (default mode — standalone /fix use):
-    ✅ TP  — label "真阳性" + fix plan, NOT resolved (stay open for tracking)
-    ❌ FP  — label "假阳性" + reason, resolved
-    🟡 Edge — label "边缘" + reason, NOT resolved by default
-    🔵 OOS  — label "非本 MR 范围" + reason, resolved
-    ⏸️ Q    — label "需讨论" + question, NOT resolved
+Classifications (mode maps apply only to legacy entries without a per-item
+resolved field):
+    ✅ TP  — label "真阳性" + fix plan
+    ❌ FP  — label "假阳性" + reason
+    🟡 Edge — label "边缘" + reason
+    🔵 OOS  — label "非本 MR 范围" + reason
+    ⏸️ Q    — label "需讨论" + question
 
 Classification vocabulary is pinned: state files store the Question verdict
 as `Q`; both `Q` and `Question` are accepted and normalized to `Question`
@@ -23,10 +48,10 @@ missing classification values hard-fail the whole run before any platform
 call — no silent FP downgrade.
 
 In triage mode (--mode triage), a TP has already been fixed and build-verified
-by the time it reaches post-labels, so it is resolved like FP/OOS. The
-"stay open for tracking" default serves standalone /fix runs where the fix
-may not have landed yet; in /skill:triage-mr the fix is part of the same run.
-Edge and Question stay open in both modes (genuinely unresolved).
+by the time it reaches post-labels, so the triage map resolves it like FP/OOS;
+the default map (standalone /fix) leaves it open for tracking. Whether Edge
+or Q closes is decided at verdict time via the per-item resolved field —
+post only executes it.
 
 Input format (schema 2 — versionless or schema-1 files are rejected loudly
 with the filename, the missing-field list, and a rebuild hint):
@@ -34,29 +59,41 @@ with the filename, the missing-field list, and a rebuild hint):
       "schema": 2,
       "entries": [
         {
-          "discussion_id": "...",
+          "discussion_id": "...",         # byte-exact copy from the pull file
+          "no": 3,                        # finding ordinal in the pull file
+          "anchor": "<sha256(body)[:16]>",  # recompute-verified at post time
           "classification": "TP|FP|Edge|OOS|Q",
           "reason": "...",
           "fix_plan": "...",              # TP only
           "priority": "high|medium|low",  # TP only, string enum
-          "resolved": true/false          # override default resolve behavior
-        },
-        ...
+          "resolved": true/false,         # verdict-time decision; post executes it
+          "posted": false                 # delivery status; this script is the
+        },                                # declared exception writer — flips it
+        ...                               # to true on a successful reply
       ]
     }
 
+The posted:true flags are written back to the --classified file (atomic
+tmp+replace, verdict.py's pattern); the stdin transport has no file to
+write back — content dedup is the idempotency net there.
+
 Usage:
-    python3 ocr-post-labels.py <MR_OR_PR_ID> --classified .triage/<MR>/classified.json
-    cat classified.json | python3 ocr-post-labels.py <MR_OR_PR_ID>
-    python3 ocr-post-labels.py <MR_OR_PR_ID> --mode triage --classified .triage/<MR>/classified.json
+    python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>]
+                               [--pull-file <path>] [--force]  [< state.json]
+
+    --pull-file <path>  pull state file to join against (default:
+                        .triage/<MR>/issues.json)
+    --force             resolve even when the reply failed
 """
 
+import difflib
+import hashlib
 import json
 import os
 import re
 import sys
 
-from ocr_platform import detect_platform, run_auth_probe
+from ocr_platform import detect_platform, load_pull_findings, run_auth_probe, triage_state_dir
 
 # ── Templates (platform-agnostic) ──
 
@@ -100,7 +137,8 @@ _BODY_QUESTION = """### ⏸️ 需讨论
 {reason}
 """
 
-# Per-classification default resolved state.
+# Per-classification resolved fallback — used ONLY by legacy entries without
+# a per-item `resolved` field (verdict.py always writes the field).
 # `triage` mode (used by /skill:triage-mr): TP is fixed+verified in-run, so it
 # resolves. `default` mode (standalone /fix): TP stays open for tracking.
 _DEFAULT_RESOLVED = {
@@ -120,6 +158,11 @@ _TRIAGE_RESOLVED = {
 }
 
 _VALID_CLASSIFICATIONS = set(_CLASSIFICATION_LABELS.keys())
+
+# Machine marker embedded in every reply body (invisible HTML comment on both
+# platforms). Content dedup (#61 ③) searches threads for it — this is what
+# makes a manual-curl bypass (no posted flag) idempotent.
+_ANCHOR_MARKER = "triage-anchor: {anchor}"
 
 
 # ── Input parsing (platform-agnostic) ──
@@ -270,28 +313,98 @@ def _build_body(cleaned):
 
     if cls == "TP":
         pri = _PRIORITY_LABELS.get(cleaned["priority"], "⚠️ 中")
-        return _BODY_TP.format(
+        text = _BODY_TP.format(
             label=_CLASSIFICATION_LABELS[cls],
             priority=pri,
             fix_plan=cleaned["fix_plan"],
         ).strip()
-
-    if cls == "FP":
+    elif cls == "FP":
         adr_row = ""
         if cleaned.get("adr"):
             adr_row = f"\n**ADR**: {cleaned['adr']}"
-        return _BODY_FP.format(
+        text = _BODY_FP.format(
             reason=cleaned["reason"],
             adr_row=adr_row,
         ).strip()
+    elif cls == "Question":
+        text = _BODY_QUESTION.format(reason=cleaned["reason"]).strip()
+    else:
+        text = _BODY_SIMPLE.format(
+            label=_CLASSIFICATION_LABELS[cls],
+            reason=cleaned["reason"],
+        ).strip()
 
-    if cls == "Question":
-        return _BODY_QUESTION.format(reason=cleaned["reason"]).strip()
+    anchor = cleaned.get("anchor")
+    if anchor:
+        text += f"\n\n<!-- {_ANCHOR_MARKER.format(anchor=anchor)} -->"
+    return text
 
-    return _BODY_SIMPLE.format(
-        label=_CLASSIFICATION_LABELS[cls],
-        reason=cleaned["reason"],
-    ).strip()
+
+# ── Pull-file join + anchor validation (platform-agnostic, pre-call) ──
+
+
+def _closest_id(bad_id, ids):
+    """The real id closest to a rejected one, for the error message.
+    Prefix relation first — the canonical failure is a truncated id (the
+    8-char id quirk that motivated the byte-match gate) — then fuzzy match."""
+    if bad_id:
+        for real in ids:
+            if real.startswith(bad_id) or bad_id.startswith(real):
+                return real
+    match = difflib.get_close_matches(bad_id or "", ids, n=1, cutoff=0.5)
+    return match[0] if match else None
+
+
+def _validate_against_pull(entries, pull_path):
+    """Join every entry against the pull state file before any platform call
+    (spec #57 Q4, #61 ①②). A discussion_id that is not byte-present in the
+    pull file, or an anchor that the pull body does not reproduce, exits 1
+    naming the entry's no and (for ids) the closest real id. The offending id
+    itself is never echoed — its shape must not seed a hand-typed retry."""
+    findings = load_pull_findings(pull_path)
+    by_id = {}
+    for f in findings:
+        if isinstance(f, dict) and isinstance(f.get("discussion_id"), str):
+            by_id[f["discussion_id"]] = f
+    ids = list(by_id)
+    for i, entry in enumerate(entries):
+        label = f"entry no={entry['no']}" if isinstance(entry.get("no"), int) else f"entry {i}"
+        disc_id = entry.get("discussion_id")
+        if not isinstance(disc_id, str) or disc_id not in by_id:
+            closest = _closest_id(disc_id if isinstance(disc_id, str) else "", ids)
+            hint = f"closest real id: {closest}" if closest else "no similar id in pull file"
+            print(f"ERROR: {label}: discussion_id not byte-present in {pull_path} "
+                  f"({hint}) — ids are copied byte-exact by verdict.py, never hand-typed "
+                  f"or truncated; re-run ocr-pull-discussions.py + verdict.py",
+                  file=sys.stderr)
+            sys.exit(1)
+        anchor = entry.get("anchor")
+        if isinstance(anchor, str) and anchor:
+            body = by_id[disc_id].get("body") or ""
+            actual = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+            if actual != anchor:
+                print(f"ERROR: {label}: anchor mismatch — pull file body hashes to "
+                      f"{actual}, entry carries {anchor}; the classified entry does not "
+                      f"match the pulled comment (stale round or hand-edited state?) — "
+                      f"re-run verdict.py against the current pull file",
+                      file=sys.stderr)
+                sys.exit(1)
+
+
+def _write_back_posted(classified_path, entries):
+    """Persist posted:true delivery flags to the --classified file (atomic,
+    verdict.py's tmp+replace pattern). A write-back failure must not fail the
+    run — the replies are already on the wall and content dedup is the net."""
+    tmp_path = classified_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump({"schema": _SCHEMA_VERSION, "entries": entries},
+                      fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp_path, classified_path)
+    except OSError as exc:
+        print(f"[WARN] could not write posted flags back to {classified_path}: {exc}",
+              file=sys.stderr)
 
 
 # ── GitLab backend ──
@@ -333,7 +446,27 @@ def _sweep_notes_gitlab(base, disc_id, curl):
     return remaining == 0
 
 
-def _post_gitlab(mr_iid, items, resolved_map=None):
+def _resolve_gitlab_thread(base, disc_id, curl):
+    """Resolve one GitLab thread: discussion-level PUT first; when that fails
+    structurally (some instances 500 on it), the note sweep is the working
+    fallback resolve path. Returns True iff the thread ends up resolved."""
+    status, _, _ = curl(
+        f"{base}/discussions/{disc_id}",
+        method="PUT",
+        data={"resolved": True},
+    )
+    if 200 <= status < 300:
+        _sweep_notes_gitlab(base, disc_id, curl)
+        return True
+    if _sweep_notes_gitlab(base, disc_id, curl):
+        print(f"[WARN] discussion PUT {disc_id[:12]}: HTTP {status} — "
+              f"resolved via note-level fallback", file=sys.stderr)
+        return True
+    print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}", file=sys.stderr)
+    return False
+
+
+def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
     from ocr_gitlab import curl, get_project_id
 
     resolved_map = resolved_map or _DEFAULT_RESOLVED
@@ -355,46 +488,65 @@ def _post_gitlab(mr_iid, items, resolved_map=None):
         disc_id = cleaned["discussion_id"]
         cls = cleaned["classification"]
         do_resolve = cleaned["resolved"]
-        body = _build_body(cleaned)
+        label = _CLASSIFICATION_LABELS.get(cls, cls)
 
-        # 1) Post reply
-        status, resp, _ = curl(
-            f"{base}/discussions/{disc_id}/notes",
-            method="POST",
-            data={"body": body},
-        )
-        reply_ok = 200 <= status < 300
-        if not reply_ok:
-            print(f"[WARN] reply {disc_id[:12]}: HTTP {status} — trying resolve anyway", file=sys.stderr)
-
-        # 2) Resolve
-        if do_resolve:
-            status, _, _ = curl(
-                f"{base}/discussions/{disc_id}",
-                method="PUT",
-                data={"resolved": True},
-            )
-            if 200 <= status < 300:
-                _sweep_notes_gitlab(base, disc_id, curl)
-                ok += 1
-                label = _CLASSIFICATION_LABELS.get(cls, cls)
-                print(f"[OK] {label} resolved {disc_id[:12]}" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
-            elif _sweep_notes_gitlab(base, disc_id, curl):
-                # discussion-level PUT failed structurally (e.g. <git-host> 500s)
-                # — note-level PUT is the working resolve path there
-                ok += 1
-                label = _CLASSIFICATION_LABELS.get(cls, cls)
-                print(f"[OK] {label} resolved {disc_id[:12]} via note-level fallback" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
+        # content dedup (#61 ③): same GET the note sweep uses — a thread whose
+        # wall already carries this entry's anchor marker gets no second reply
+        anchor = cleaned.get("anchor")
+        deduped = False
+        if anchor:
+            st, disc, _ = curl(f"{base}/discussions/{disc_id}")
+            if st == 200 and isinstance(disc, dict):
+                marker = _ANCHOR_MARKER.format(anchor=anchor)
+                deduped = any(marker in (n.get("body") or "")
+                              for n in disc.get("notes", []) if isinstance(n, dict))
             else:
-                print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}" + ("" if reply_ok else " (reply also failed)"), file=sys.stderr)
-                fail += 1
-        elif reply_ok:
+                print(f"[WARN] dedup probe {disc_id[:12]}: HTTP {st} — posting anyway", file=sys.stderr)
+        if deduped:
+            print(f"[SKIP] {label} {disc_id[:12]}: verdict note already on wall (content dedup)", file=sys.stderr)
+
+        # 1) reply (#61 ④: a failed reply must never lead to a resolve)
+        reply_status = None
+        posted_now = False
+        if not deduped:
+            reply_status, _, _ = curl(
+                f"{base}/discussions/{disc_id}/notes",
+                method="POST",
+                data={"body": _build_body(cleaned)},
+            )
+            posted_now = 200 <= reply_status < 300
+            if posted_now:
+                item["posted"] = True  # declared exception writer of the delivery-status field
+
+        # 2) resolve per-item (#61 ⑤: execute the verdict-time decision)
+        resolved_ok = False
+        if do_resolve and (posted_now or deduped):
+            resolved_ok = _resolve_gitlab_thread(base, disc_id, curl)
+        elif do_resolve and force:
+            resolved_ok = _resolve_gitlab_thread(base, disc_id, curl)
+            print(f"[WARN] reply {disc_id[:12]}: HTTP {reply_status} — resolving anyway (--force)", file=sys.stderr)
+        elif do_resolve:
+            print(f"[FAIL] reply {disc_id[:12]}: HTTP {reply_status} — NOT resolving "
+                  f"(verdict reason not on wall; --force to override)", file=sys.stderr)
+
+        # 3) count + report
+        if not posted_now and not deduped:
+            fail += 1  # reply failed: the verdict reason never reached the wall
+        elif deduped and not do_resolve:
+            skip += 1  # dedup line already printed
+        elif deduped and not resolved_ok:
+            fail += 1  # resolve failed on an already-labeled thread
+        elif deduped:
             ok += 1
-            label = _CLASSIFICATION_LABELS.get(cls, cls)
-            print(f"[OK] {label} labeled {disc_id[:12]} (open)", file=sys.stderr)
-        else:
+            print(f"[OK] {label} {disc_id[:12]}: already labeled — resolved (content dedup)", file=sys.stderr)
+        elif do_resolve and not resolved_ok:
             fail += 1
-            print(f"[FAIL] {disc_id[:12]}: both reply and resolve skipped", file=sys.stderr)
+        elif do_resolve:
+            ok += 1
+            print(f"[OK] {label} resolved {disc_id[:12]}", file=sys.stderr)
+        else:
+            ok += 1
+            print(f"[OK] {label} labeled {disc_id[:12]} (open)", file=sys.stderr)
 
     total = ok + fail
     print(f"Done: {ok} ok, {fail} failed, {skip} skipped ({total}/{len(items)} processed)", file=sys.stderr)
@@ -497,7 +649,20 @@ def _resolve_github_thread(pr_number, comment_id):
     )
 
 
-def _post_github(pr_number, items, resolved_map=None):
+def _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
+    """True when the parent comment or any of its replies already carries the
+    entry's anchor marker — the GitHub content-dedup probe (#61 ③)."""
+    marker = _ANCHOR_MARKER.format(anchor=anchor)
+    status, parent, _ = curl(f"/repos/{owner_repo}/pulls/comments/{comment_id}")
+    if status == 200 and isinstance(parent, dict) and marker in (parent.get("body") or ""):
+        return True
+    status, replies, _ = curl(f"/repos/{owner_repo}/pulls/{pr_number}/comments/{comment_id}/replies")
+    if status == 200 and isinstance(replies, list):
+        return any(marker in (r.get("body") or "") for r in replies if isinstance(r, dict))
+    return False
+
+
+def _post_github(pr_number, items, resolved_map=None, force=False):
     from ocr_github import curl, get_project_id
 
     resolved_map = resolved_map or _DEFAULT_RESOLVED
@@ -518,36 +683,59 @@ def _post_github(pr_number, items, resolved_map=None):
         comment_id = cleaned["discussion_id"]
         cls = cleaned["classification"]
         do_resolve = cleaned["resolved"]
-        body = _build_body(cleaned)
+        label = _CLASSIFICATION_LABELS.get(cls, cls)
 
-        # 1) Post reply to the review comment thread
-        endpoint = f"/repos/{owner_repo}/pulls/{pr_number}/comments/{comment_id}/replies"
-        status, resp, _ = curl(endpoint, method="POST", data={"body": body})
-        if not (200 <= status < 300):
-            # Fallback: post as a regular PR comment
-            status2, _, _ = curl(
-                f"/repos/{owner_repo}/issues/{pr_number}/comments",
-                method="POST",
-                data={"body": body},
-            )
-            if not (200 <= status2 < 300):
-                print(f"[FAIL] reply {comment_id}: HTTP {status}, fallback HTTP {status2}", file=sys.stderr)
-                fail += 1
-                continue
+        # content dedup (#61 ③): parent comment or replies already carry the marker
+        anchor = cleaned.get("anchor")
+        deduped = False
+        if anchor and _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
+            deduped = True
+            print(f"[SKIP] {label} {comment_id[:12]}: verdict note already on wall (content dedup)", file=sys.stderr)
 
-        # 2) Resolve thread (if requested)
-        if do_resolve:
+        # 1) reply (#61 ④: a failed reply must never lead to a resolve)
+        posted_now = False
+        if not deduped:
+            body = _build_body(cleaned)
+            endpoint = f"/repos/{owner_repo}/pulls/{pr_number}/comments/{comment_id}/replies"
+            status, resp, _ = curl(endpoint, method="POST", data={"body": body})
+            if not (200 <= status < 300):
+                # Fallback: post as a regular PR comment
+                status2, _, _ = curl(
+                    f"/repos/{owner_repo}/issues/{pr_number}/comments",
+                    method="POST",
+                    data={"body": body},
+                )
+                posted_now = 200 <= status2 < 300
+                if not posted_now:
+                    print(f"[FAIL] reply {comment_id}: HTTP {status}, fallback HTTP {status2} — "
+                          f"NOT resolving (verdict reason not on wall; --force to override)", file=sys.stderr)
+                    if do_resolve and force:
+                        if _resolve_github_thread(pr_number, comment_id):
+                            print(f"[WARN] {comment_id[:12]}: resolved anyway (--force)", file=sys.stderr)
+                        else:
+                            print(f"[WARN] {comment_id[:12]}: resolve also failed (--force)", file=sys.stderr)
+                    fail += 1
+                    continue
+            else:
+                posted_now = True
+            if posted_now:
+                item["posted"] = True  # declared exception writer of the delivery-status field
+
+        # 2) resolve per-item (#61 ⑤: execute the verdict-time decision)
+        if do_resolve and (posted_now or deduped):
             resolved = _resolve_github_thread(pr_number, comment_id)
             if resolved:
                 ok += 1
-                label = _CLASSIFICATION_LABELS.get(cls, cls)
-                print(f"[OK] {label} resolved {comment_id[:12]}", file=sys.stderr)
+                suffix = " (content dedup)" if deduped else ""
+                print(f"[OK] {label} resolved {comment_id[:12]}{suffix}", file=sys.stderr)
             else:
                 print(f"[WARN] reply ok but resolve failed for {comment_id[:12]}", file=sys.stderr)
-                ok += 1  # reply succeeded, just couldn't resolve
+                ok += 1  # reply succeeded, just couldn't resolve — verify gate catches open threads
+        elif deduped:
+            skip += 1
+            print(f"[SKIP] {label} {comment_id[:12]}: already labeled, left open (content dedup)", file=sys.stderr)
         else:
             ok += 1
-            label = _CLASSIFICATION_LABELS.get(cls, cls)
             print(f"[OK] {label} labeled {comment_id[:12]} (open)", file=sys.stderr)
 
     total = ok + fail
@@ -559,12 +747,14 @@ def _post_github(pr_number, items, resolved_map=None):
 
 
 def _parse_args(argv):
-    """Return (mr_or_pr_id, mode, classified_path) from the CLI tail."""
+    """Return (mr_or_pr_id, mode, classified_path, pull_file, force) from the CLI tail."""
     if not argv or argv[0].startswith("-"):
-        return None, None, None
+        return None, None, None, None, False
     mr_or_pr_id = argv[0]
     mode = "default"
     classified_path = None
+    pull_file = None
+    force = False
     rest = argv[1:]
     i = 0
     while i < len(rest):
@@ -575,22 +765,32 @@ def _parse_args(argv):
         elif arg == "--classified" and i + 1 < len(rest):
             classified_path = rest[i + 1]
             i += 2
-        elif arg in ("--mode", "--classified"):
+        elif arg == "--pull-file" and i + 1 < len(rest):
+            pull_file = rest[i + 1]
+            i += 2
+        elif arg == "--force":
+            force = True
+            i += 1
+        elif arg in ("--mode", "--classified", "--pull-file"):
             print(f"ERROR: {arg} requires a value", file=sys.stderr)
             sys.exit(1)
         else:
             i += 1
-    return mr_or_pr_id, mode, classified_path
+    return mr_or_pr_id, mode, classified_path, pull_file, force
+
+
+USAGE = ("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>] "
+         "[--pull-file <path>] [--force]  [< state.json]")
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>]  [< state.json]", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
-    mr_or_pr_id, mode, classified_path = _parse_args(sys.argv[1:])
+    mr_or_pr_id, mode, classified_path, pull_file, force = _parse_args(sys.argv[1:])
     if mr_or_pr_id is None:
-        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>]  [< state.json]", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
     if classified_path is not None:
@@ -607,6 +807,12 @@ def main():
         raw = sys.stdin.read()
 
     entries = _preflight(_parse_state_entries(raw, filename), filename)
+
+    # join + anchor validation gates ALL platform traffic (#61 ①②)
+    pull_path = pull_file or os.path.join(triage_state_dir(mr_or_pr_id), "issues.json")
+    _validate_against_pull(entries, pull_path)
+
+    posted_before = sum(1 for e in entries if e.get("posted"))
     resolved_map = _TRIAGE_RESOLVED if mode == "triage" else _DEFAULT_RESOLVED
 
     platform = detect_platform()
@@ -615,9 +821,12 @@ def main():
     run_auth_probe(platform)
 
     if platform == "github":
-        success = _post_github(mr_or_pr_id, entries, resolved_map)
+        success = _post_github(mr_or_pr_id, entries, resolved_map, force)
     else:
-        success = _post_gitlab(mr_or_pr_id, entries, resolved_map)
+        success = _post_gitlab(mr_or_pr_id, entries, resolved_map, force)
+
+    if classified_path is not None and sum(1 for e in entries if e.get("posted")) > posted_before:
+        _write_back_posted(classified_path, entries)
 
     sys.exit(0 if success else 1)
 

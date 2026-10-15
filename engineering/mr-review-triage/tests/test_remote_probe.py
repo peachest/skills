@@ -212,6 +212,11 @@ def test_ocr_remote_override_pull(tmp_path):
 
 def test_ocr_remote_override_post(tmp_path):
     repo = make_repo(tmp_path, FORK_REMOTES)
+    state = repo / ".triage" / "1"
+    state.mkdir(parents=True)  # post joins entries against the pull state file (#61)
+    (state / "issues.json").write_text(json.dumps([
+        {"no": 1, "discussion_id": "abc123def", "file": "a.go", "line": 3,
+         "body": "use fmt.Errorf instead of errors.New", "author": "ocr-bot"}]))
     extra = [
         {"match": "discussions/abc123def/notes/1", "method": "PUT", "status": 200, "body": {}},
         {"match": "discussions/abc123def/notes", "method": "POST", "status": 201, "body": {"id": 9}},
@@ -286,6 +291,11 @@ def test_probe_failure_verify_path_mismatch(tmp_path):
 
 def test_probe_failure_post_404(tmp_path):
     repo = make_repo(tmp_path, FORK_REMOTES)
+    state = repo / ".triage" / "1"
+    state.mkdir(parents=True)  # join validation runs before the probe; provide the pull file
+    (state / "issues.json").write_text(json.dumps([
+        {"no": 1, "discussion_id": "abc123def", "file": "a.go", "line": 3,
+         "body": "use fmt.Errorf instead of errors.New", "author": "ocr-bot"}]))
     routes = [{"match": "projects/team%2Fapp", "status": 404,
                "body": {"message": "404 Project Not Found"}}]
     bin_dir, log = fake_bin(tmp_path, routes)
