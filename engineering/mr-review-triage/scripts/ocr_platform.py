@@ -19,11 +19,15 @@ import sys
 def _git_remote_url():
     """Return the configured remote's URL, or '' on failure.
 
-    Remote name: OCR_REMOTE env (default origin). An explicit OCR_REMOTE that
-    git cannot resolve is a config error → exit 2; a plain origin failure
+    Remote name: OCR_REMOTE env (default origin). An explicitly-set OCR_REMOTE
+    that git cannot resolve is a config error → exit 2 — including the literal
+    value "origin" (ocr r1 F5: a silent '' fallback would mis-detect the
+    platform and skip the auth probe). A plain default-origin failure
     (bare/odd checkout) stays silent and yields '' as before.
     """
-    remote = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+    raw = os.environ.get("OCR_REMOTE", "").strip()
+    explicit = bool(raw)
+    remote = raw or "origin"
     try:
         r = subprocess.run(
             ["git", "remote", "get-url", remote],
@@ -31,7 +35,7 @@ def _git_remote_url():
         )
         if r.returncode == 0:
             return r.stdout.strip()
-        if remote != "origin":
+        if explicit:
             print(f"ERROR: OCR_REMOTE='{remote}' is not a git remote "
                   f"({r.stderr.strip().splitlines()[-1] if r.stderr.strip() else 'git failed'})",
                   file=sys.stderr)
