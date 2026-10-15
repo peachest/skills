@@ -425,10 +425,13 @@ def _validate_against_pull(entries, pull_path):
     verdict and post read the same pull file, so a reviewer mid-edit cannot
     false-reject; the fix is re-running verdict.py for that finding."""
     findings = load_pull_findings(pull_path)
+    # H5: a fallback discussion carries multiple findings under ONE id with
+    # distinct bodies — index ALL candidates per id; an entry's anchor is
+    # valid when ANY candidate body reproduces it.
     by_id = {}
     for f in findings:
         if isinstance(f, dict) and isinstance(f.get("discussion_id"), str):
-            by_id[f["discussion_id"]] = f
+            by_id.setdefault(f["discussion_id"], []).append(f)
     ids = list(by_id)
     for i, entry in enumerate(entries):
         if entry.get("posted") is True:
@@ -445,13 +448,12 @@ def _validate_against_pull(entries, pull_path):
             sys.exit(1)
         anchor = entry.get("anchor")
         if isinstance(anchor, str) and anchor:
-            body = by_id[disc_id].get("body") or ""
-            actual = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
-            if actual != anchor:
-                print(f"ERROR: {label}: anchor mismatch — pull file body hashes to "
-                      f"{actual}, entry carries {anchor}; the classified entry does not "
-                      f"match the pulled comment (stale round or hand-edited state?) — "
-                      f"re-run verdict.py against the current pull file",
+            candidates = by_id[disc_id]
+            if not any(hashlib.sha256((f.get("body") or "").encode("utf-8")).hexdigest()[:16] == anchor
+                       for f in candidates):
+                print(f"ERROR: {label}: anchor mismatch — the classified entry does not "
+                      f"match any pulled body for this discussion (stale round or hand-edited "
+                      f"state?) — re-run verdict.py against the current pull file",
                       file=sys.stderr)
                 sys.exit(1)
 
@@ -534,14 +536,28 @@ def _summary_stats(entries):
 def _summary_fix_files(entries, findings):
     """TP files in pull-file order — the 修复涉及文件 list. Classified entries
     carry no file field; the same pull file the anchor gate joined against
-    supplies it."""
-    file_by_id = {f.get("discussion_id"): f.get("file", "")
-                  for f in findings if isinstance(f, dict)}
+    supplies it. H5: a fallback discussion id maps to MULTIPLE candidate
+    bodies — the file comes from the candidate the entry's anchor matches,
+    falling back to the first candidate only when the anchor is absent."""
+    by_id = {}
+    for f in findings:
+        if isinstance(f, dict) and isinstance(f.get("discussion_id"), str):
+            by_id.setdefault(f["discussion_id"], []).append(f)
     files = []
     for e in entries:
         if e.get("classification") != "TP":
             continue
-        path = file_by_id.get(e.get("discussion_id"), "")
+        candidates = by_id.get(e.get("discussion_id"), [])
+        anchor = e.get("anchor")
+        match = None
+        if isinstance(anchor, str) and anchor:
+            for f in candidates:
+                if hashlib.sha256((f.get("body") or "").encode("utf-8")).hexdigest()[:16] == anchor:
+                    match = f
+                    break
+        if match is None and candidates:
+            match = candidates[0]
+        path = (match or {}).get("file", "")
         if path and path not in files:
             files.append(path)
     return files
