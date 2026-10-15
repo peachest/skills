@@ -5,8 +5,11 @@ bare transport — validation is identical for both) and for each entry:
   1. Joins it against the pull state file (see below) — hard-fails the whole
      run before any platform call on a mismatch
   2. Posts a reply note with classification label + reason/fix-plan — unless
-     the thread already carries this entry's anchor marker (content dedup,
-     which also covers manual-curl bypass where the posted flag is absent)
+     the thread already carries this entry's anchor marker + verdict revision
+     fingerprint (content dedup, which also covers manual-curl bypass where
+     the posted flag is absent); a body-anchor match with a different
+     revision is a REVISED verdict (verdict.py --force) → re-post, the
+     superseded reply stays as history
   3. Resolves the thread iff the entry's per-item `resolved` field says so —
      post executes the verdict-time decision, it never re-judges
 
@@ -183,7 +186,10 @@ _VALID_CLASSIFICATIONS = set(_CLASSIFICATION_LABELS.keys())
 
 # Machine marker embedded in every reply body (invisible HTML comment on both
 # platforms). Content dedup (#61 ③) searches threads for it — this is what
-# makes a manual-curl bypass (no posted flag) idempotent.
+# makes a manual-curl bypass (no posted flag) idempotent. Classified replies
+# append a verdict revision fingerprint (`rev:`, H2): sha256 over the verdict
+# content, so a revised verdict re-posts while the body anchor holds. Sweep
+# replies carry the plain anchor form (no verdict content to fingerprint).
 _ANCHOR_MARKER = "triage-anchor: {anchor}"
 
 
@@ -335,6 +341,20 @@ def _validate_item(item, idx, resolved_map=None):
     return (True, "", cleaned)
 
 
+def _verdict_rev(cleaned):
+    """Verdict revision fingerprint (ocr-r2 H2): sha256 over the verdict
+    content — classification|reason|fix_plan — so a `verdict.py --force`
+    revision (Q→FP, new reason) changes the marker while the body anchor
+    holds. Computed here in post, never in verdict.py: the producer has no
+    business knowing the marker's dedup role."""
+    payload = "|".join([
+        cleaned.get("classification", ""),
+        cleaned.get("reason", ""),
+        cleaned.get("fix_plan", ""),
+    ])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
 def _build_body(cleaned):
     cls = cleaned["classification"]
 
@@ -363,7 +383,8 @@ def _build_body(cleaned):
 
     anchor = cleaned.get("anchor")
     if anchor:
-        text += f"\n\n<!-- {_ANCHOR_MARKER.format(anchor=anchor)} -->"
+        text += (f"\n\n<!-- {_ANCHOR_MARKER.format(anchor=anchor)} "
+                 f"rev:{_verdict_rev(cleaned)} -->")
     return text
 
 
@@ -726,14 +747,17 @@ def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
         do_resolve = cleaned["resolved"]
         label = _CLASSIFICATION_LABELS.get(cls, cls)
 
-        # content dedup (#61 ③): same GET the note sweep uses — a thread whose
-        # wall already carries this entry's anchor marker gets no second reply
+        # content dedup (#61 ③, H2): same GET the note sweep uses — a thread
+        # whose wall already carries this entry's anchor marker + verdict rev
+        # gets no second reply; an anchor-only match is a revised verdict →
+        # re-post (the superseded reply stays as history)
         anchor = cleaned.get("anchor")
         deduped = False
         if anchor:
             st, disc, _ = curl(f"{base}/discussions/{disc_id}")
             if st == 200 and isinstance(disc, dict):
-                marker = _ANCHOR_MARKER.format(anchor=anchor)
+                marker = (f"{_ANCHOR_MARKER.format(anchor=anchor)} "
+                          f"rev:{_verdict_rev(cleaned)}")
                 deduped = any(marker in (n.get("body") or "")
                               for n in disc.get("notes", []) if isinstance(n, dict))
             else:
@@ -989,15 +1013,16 @@ def _sweep_summaries_github(pr_number, classified_ok, stats, fix_files):
                                   reply, lambda t: _resolve_github_thread_node(t["id"]))
 
 
-def _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
+def _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, rev, curl):
     """True when the parent comment or any of its replies already carries the
-    entry's anchor marker — the GitHub content-dedup probe (#61 ③).
+    entry's anchor marker + verdict rev (H2) — the GitHub content-dedup probe
+    (#61 ③). An anchor-only match is a revised verdict → re-post.
 
     H1: GitHub does not serve GET on a comment's /replies endpoint (POST-only,
     no listing there) — the old probe always 404'd and the offline fixture
     masked it, so every retry re-posted the verdict. Replies are listed via
     the PR review-comments listing filtered by in_reply_to, paginated."""
-    marker = _ANCHOR_MARKER.format(anchor=anchor)
+    marker = f"{_ANCHOR_MARKER.format(anchor=anchor)} rev:{rev}"
     status, parent, _ = curl(f"/repos/{owner_repo}/pulls/comments/{comment_id}")
     if status == 200 and isinstance(parent, dict) and marker in (parent.get("body") or ""):
         return True
@@ -1038,10 +1063,12 @@ def _post_github(pr_number, items, resolved_map=None, force=False):
         do_resolve = cleaned["resolved"]
         label = _CLASSIFICATION_LABELS.get(cls, cls)
 
-        # content dedup (#61 ③): parent comment or replies already carry the marker
+        # content dedup (#61 ③, H2): parent comment or replies already carry
+        # the anchor+rev marker
         anchor = cleaned.get("anchor")
         deduped = False
-        if anchor and _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
+        if anchor and _github_thread_has_marker(owner_repo, pr_number, comment_id,
+                                                anchor, _verdict_rev(cleaned), curl):
             deduped = True
             print(f"[SKIP] {label} {_tid(comment_id)}: verdict note already on wall (content dedup)", file=sys.stderr)
 
