@@ -25,11 +25,15 @@ import sys
 def _git_remote_url():
     """Return the configured remote's URL, or '' on failure.
 
-    Remote name: OCR_REMOTE env (default origin). An explicit OCR_REMOTE that
-    git cannot resolve is a config error → exit 2; a plain origin failure
+    Remote name: OCR_REMOTE env (default origin). An explicitly-set OCR_REMOTE
+    that git cannot resolve is a config error → exit 2 — including the literal
+    value "origin" (ocr r1 F5: a silent '' fallback would mis-detect the
+    platform and skip the auth probe). A plain default-origin failure
     (bare/odd checkout) stays silent and yields '' as before.
     """
-    remote = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+    raw = os.environ.get("OCR_REMOTE", "").strip()
+    explicit = bool(raw)
+    remote = raw or "origin"
     try:
         r = subprocess.run(
             ["git", "remote", "get-url", remote],
@@ -37,7 +41,7 @@ def _git_remote_url():
         )
         if r.returncode == 0:
             return r.stdout.strip()
-        if remote != "origin":
+        if explicit:
             print(f"ERROR: OCR_REMOTE='{remote}' is not a git remote "
                   f"({r.stderr.strip().splitlines()[-1] if r.stderr.strip() else 'git failed'})",
                   file=sys.stderr)
@@ -113,6 +117,53 @@ def load_pull_findings(pull_path):
               f"array ocr-pull-discussions.py writes to stdout", file=sys.stderr)
         sys.exit(1)
     return findings
+
+
+# CI statuses meaning "still in flight" — union of GitLab pipeline and
+# GitHub check-run states. Terminal states (success, failed, skipped,
+# canceled, completed, ...) and unknown values let the gate proceed.
+_IN_FLIGHT_STATUSES = {
+    "created", "waiting_for_resource", "preparing", "pending",
+    "running", "queued", "in_progress",
+}
+
+
+def pipeline_in_flight(status):
+    """True while a CI pipeline / check-run status is still in flight."""
+    return str(status).strip().lower() in _IN_FLIGHT_STATUSES
+
+
+def run_pipeline_gate(platform, mr_or_pr_id, skip=False):
+    """Re-pull timing gate (spec #57 Amendment R2, 修订 B), script-executed.
+
+    pull/verify query the head-ref CI status (GitLab head_pipeline /
+    GitHub check runs) and exit 2 while it is in flight — the completion
+    gate becomes "gate exit 0 AND last re-pull happened after CI completed",
+    with --skip-pipeline-check as the explicit escape hatch. No CI on the
+    head ref (or an undeterminable status) is a stderr note, not an error —
+    the thread-state check downstream still fails closed on real problems.
+    """
+    if skip:
+        return
+    if platform == "github":
+        from ocr_github import check_runs_status
+        status = check_runs_status(mr_or_pr_id)
+        kind = "check runs"
+    else:
+        from ocr_gitlab import head_pipeline_status
+        status = head_pipeline_status(mr_or_pr_id)
+        kind = "pipeline"
+    if not status:
+        print(f"note: no CI {kind} status found on head (no CI configured, or "
+              f"status fetch failed) — proceeding without the timing gate",
+              file=sys.stderr)
+        return
+    if pipeline_in_flight(status):
+        print(f"ERROR: CI {kind} on head not finished (status: {status}) — "
+              f"acting now would read a stale review state; re-run after it "
+              f"completes or pass --skip-pipeline-check to override",
+              file=sys.stderr)
+        sys.exit(2)
 
 
 def triage_state_dir(mr_id=None):

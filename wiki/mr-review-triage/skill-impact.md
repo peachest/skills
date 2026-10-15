@@ -141,3 +141,57 @@ internal hosts/projects/credentials; tickets reference public GitHub issues.
   no-resolve-Q variants, Edge-resolves/Q-open per-item, legacy mode-map
   fallback, posted write-back, GitHub dedup/reply-fail/resolve-attempt,
   docstring residue gate).
+
+## 2026-10-15 — spec #57 / ticket #64: verify display de-truncation + pipeline timing gate
+
+- Proposal: spec #57 Amendment R2 修订 B + 展示层纪律 — verify human output
+  drops the `discussion_id[:12]` truncation (P-005 script-side self-bite);
+  pipeline completion check moves into the scripts (P-002: no agent
+  ritual checks).
+- Landing: `scripts/ocr-verify-resolved.py` — human thread labels are
+  `no=<ordinal>` (mapped from the pull state file, default
+  `.triage/<MR>/issues.json`, override `--pull-file`) or `anchor=<sha256(body)[:8]>`
+  for threads outside the pull file (OCR summaries / no pull run); corrupt
+  pull file = WARN + anchor degradation, never blocks the gate; `[N/M notes
+  open]` annotation kept; `--json` keeps full ids (internal `_body` field
+  projected out). `run_pipeline_gate()` in `ocr_platform.py` +
+  `head_pipeline_status()` (ocr_gitlab.py) / `check_runs_status()`
+  (ocr_github.py): in-flight CI → exit 2 on pull AND verify,
+  `--skip-pipeline-check` escape hatch; terminal/unknown/no-CI → stderr
+  note + proceed (thread check still fails closed). SKILL.md gate wording
+  itself is ticket #65 scope.
+- Commit: de91927 (branch feat/triage-t64-verify-gate)
+- Verification: 102 pytest cases green (80 pre-existing + 22 new
+  CLI-level: ordinal/anchor display, annotation, corrupt/missing pull
+  file, --json ids, gate running/skip/terminal/no-CI × gitlab+github ×
+  pull+verify).
+
+## 2026-10-15 — spec #57 / ocr review round 1: 6 verified findings fixed (F1/F3/F4/F5/F6)
+
+- Proposal: ocr high-effort review (session 514e1aab) of the spec #57
+  integration branch; all 6 findings verified then fixed on
+  feat/triage-t59-verdict. No behavior re-litigated.
+- Landing: **F1** verdict.py dedup keys on (discussion_id, anchor) only —
+  `no` is stored as display metadata, never matched (re-pull reshuffles
+  ordinals; ordinal-first matching made --force overwrite the wrong entry).
+  Two-round regression test (new no=1 appends; original finding at no=3
+  refused as duplicate; --force replaces the right entry). **F3**
+  ocr-post-labels.py `_preflight`: a *supplied* TP priority must be
+  isinstance(str) AND in the enum — explicit null (which bypassed the
+  `is not None` gate) and collections (uncaught TypeError at the `in`
+  check) hard-fail exit 1 before platform calls; omitted key still defaults
+  medium. **F4** tests/conftest.py pins OCR_BOT_LOGIN=github-actions[bot]
+  (fixture's bot) so caller env cannot flip reviewer filtering; regression
+  test runs with a hostile caller-env value. **F5** ocr_platform.py
+  `_git_remote_url`: an explicitly-set OCR_REMOTE (any value, incl.
+  "origin") that git cannot resolve exits 2 — silent '' fallback previously
+  mis-detected the platform and skipped the auth probe; implicit
+  default-origin silent fallback unchanged. **F6** reference/templates.md
+  post-labels input example rewritten to schema 2 (bare array now hard-fails)
+  + verdict.py-produced pointer; triage-mr SKILL.md Step 1 notes scripted-flow
+  pull output stages at .triage/<MR>/issues.json.
+- Commits: 3aff8f1 (F1), 6dc99c3 (F3), 431326a (F4), 2f0ed67 (F5),
+  155e956 (F6) + merge 08695e0 (integration tip #64; conftest resolved
+  keeping _stub_env refactor, F4 pin re-applied inside it).
+- Verification: pytest 111 green post-merge (80 pre-existing + 6 new F1/F3/F5
+  cases + 3 param'd F2 + F4 + #64's 22); TDD red→green per fix.

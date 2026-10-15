@@ -42,6 +42,13 @@ A missing --against file is the first round: everything is new, not an
 error. The --against file may be the schema-2 classified.json
 ({"entries": [...]}) or the flat finding array — both reduce to their
 discussion_id set.
+
+Timing gate (spec #57 Amendment R2 修订 B): head-CI status (GitLab
+head_pipeline / GitHub check runs) is queried before any finding is
+fetched; while it is in flight the script exits 2 and stdout stays empty —
+pass --skip-pipeline-check to override. No CI on the head ref: stderr note
+and the pull proceeds. This is what makes the completion gate "last re-pull
+happened after CI completed" true by construction.
 """
 
 import json
@@ -50,7 +57,7 @@ import re
 import subprocess
 import sys
 
-from ocr_platform import detect_platform, run_auth_probe
+from ocr_platform import detect_platform, run_auth_probe, run_pipeline_gate
 
 # ── Junk filters (platform-agnostic) ──
 
@@ -438,7 +445,8 @@ def _print_source_info(platform, mr_or_pr_id):
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 ocr-pull-discussions.py <MR_OR_PR_ID> [--all] "
-              "[--digest --against <classified.json>]", file=sys.stderr)
+              "[--digest --against <classified.json>] [--skip-pipeline-check]",
+              file=sys.stderr)
         sys.exit(1)
 
     args = sys.argv[1:]
@@ -464,6 +472,8 @@ def main():
     print(f"Detected platform: {platform}", file=sys.stderr)
 
     run_auth_probe(platform)
+    run_pipeline_gate(platform, mr_or_pr_id,
+                      skip="--skip-pipeline-check" in args)
 
     _print_source_info(platform, mr_or_pr_id)
 

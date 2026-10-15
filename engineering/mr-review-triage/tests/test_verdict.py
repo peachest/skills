@@ -259,6 +259,47 @@ def test_same_thread_new_subissue_appends(state_dir):
     assert [e["no"] for e in entries] == [1, 2]
 
 
+def test_ordinal_reshuffle_never_crossmatches_findings(state_dir):
+    """ocr r1 F1: dedup matches (discussion_id, anchor) only — `no` is display
+    metadata, never a match key. A different finding taking no=1 after a
+    re-pull must append; the original finding under its new ordinal is a
+    duplicate by thread+anchor (refused, --force replaces the right entry)."""
+    run_verdict(MR, "1", "--class", "TP", "--reason", "real defect",
+                "--fix-plan", "guard the retry", "--priority", "high")
+    assert [e["no"] for e in read_classified(state_dir)["entries"]] == [1]
+
+    # Round 2 pull: a different finding now carries no=1; the round-1 finding
+    # (DISC_A, same body → same anchor) moved to no=3.
+    write_pull(state_dir.parent.parent, [
+        {"discussion_id": DISC_B, "file": "src/big.py", "line": 7,
+         "body": BODY_B, "author": AUTHOR_B, "no": 1},
+        {"discussion_id": DISC_A, "file": "src/app.py", "line": 42,
+         "body": BODY_A, "author": AUTHOR_A, "no": 3},
+    ])
+
+    # New thread at no=1 — must append, not collide with the round-1 verdict.
+    rec = run_verdict(MR, "1", "--class", "FP", "--reason", "not a defect")
+    assert rec.returncode == 0, rec.stderr
+    entries = read_classified(state_dir)["entries"]
+    assert len(entries) == 2
+    assert entries[1]["discussion_id"] == DISC_B
+    assert entries[1]["no"] == 1
+
+    # Original finding at its new ordinal: same thread+anchor → duplicate.
+    refused = run_verdict(MR, "3", "--class", "FP", "--reason", "re-verdict")
+    assert refused.returncode == 1
+    assert "--force" in refused.stderr
+    assert len(read_classified(state_dir)["entries"]) == 2
+
+    # --force replaces exactly that finding's entry — not the no=1 twin.
+    forced = run_verdict(MR, "3", "--class", "FP", "--reason", "changed verdict", "--force")
+    assert forced.returncode == 0, forced.stderr
+    by_disc = {e["discussion_id"]: e for e in read_classified(state_dir)["entries"]}
+    assert by_disc[DISC_A]["no"] == 3
+    assert by_disc[DISC_A]["reason"] == "changed verdict"
+    assert by_disc[DISC_B]["reason"] == "not a defect"  # untouched
+
+
 def test_reshuffled_same_finding_refused_then_force_replaces(state_dir):
     run_verdict(MR, "1", "--class", "Edge", "--reason", "policy call")
     # Same thread + same body re-pulled under a new ordinal — same finding.
