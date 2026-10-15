@@ -22,3 +22,4 @@ vendor/mattpocock/skills/productivity/teach/.venv/
 # transcriber run artifacts
 **/clean-failures.json
 **/dual-failures.json
+*.render-check.png
