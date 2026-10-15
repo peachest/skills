@@ -1,7 +1,7 @@
 ---
 name: to-peer
 description: "Create a peer agent session in a NEW herdr tab (never split pane). One command: tab create → agent start → optional bootstrap prompt. Use when the user asks to 创建 peer session / 开新 tab 派活 / to-peer / spawn a peer in a new tab. Message protocol (five-part dispatch, replies, closure) lives in multi-agent-collab — this skill owns creation only."
-argument-hint: "<name> <cwd> [--prompt-file F] [--label L] [--focus]"
+argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [--runtime R] [--label L] [--focus]"
 ---
 
 # to-peer — 在新 tab 创建 peer session
@@ -39,9 +39,10 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 - `--label L`：可选，tab 标签（默认用 name）
 - `--focus`：可选，创建后聚焦新 tab（默认不抢焦点）
 - `--runtime R`：可选。跨 herdr runtime 创建（`herdr --session R ...`），如从 default runtime 会话往 dev runtime 的目标项目 ws 派 peer；不带则打当前 runtime
+- `--machine M`：可选（herdr ≥ 0.9.5）。在**已保存的 SSH 机器**上创建 peer（`herdr --machine M ...`，与 `--runtime` 互斥——machine 条目自带 session）。cwd 按**远端机器的路径**解释；本机 HERDR_ENV 门对此放宽（SSH 转发不依赖本机 pane）。输出 JSON 带 `machine` 字段；canonical 地址相应为 `herdr:<machine>:<session>:<pane>`。实测案例（2026-10-15）：`--machine wsl --cwd /home/peachest` 在 WSL 侧建出真实 pi peer
 
 成功输出一行 JSON：`{"name","tab_id","pane_id","workspace_id","cwd","status","prompt"}`。`workspace_id` 是创建后的实际值；跨 ws 派发时把回执和后续 `herdr:` 地址都用这个 ws 前缀拼。prompt 未带文件时为 `none`——之后用 multi-agent-collab 的发送通道（herdr_send 工具或其 `herdr-send.py`，followUp 门）派活。
 
 ## 完成判据
 
-输出 JSON 中的 `pane_id` 存在、`herdr agent list` 能看到该 name 即创建完成。`agent start` 默认等 30s readiness；超时返回 `agent_not_ready` 时 name 仍保留，等 peer idle 后再发首条消息（见 multi-agent-collab）。
+输出 JSON 中的 `pane_id` 存在、`herdr agent list`（本机）或 `herdr --machine M agent list`（跨机）能看到该 name 即创建完成。跨机 peer 的后续通信用 `herdr --machine M ...`（pitfall #27：pane id 是 machine-local 的）。`agent start` 默认等 30s readiness；超时返回 `agent_not_ready` 时 name 仍保留，等 peer idle 后再发首条消息（见 multi-agent-collab）。

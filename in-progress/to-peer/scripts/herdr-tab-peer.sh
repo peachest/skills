@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
 # herdr-tab-peer — create a peer agent in a NEW herdr tab (no pane split).
-#   herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus] [--runtime R]
+#   herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus] [--runtime R] [--machine M]
 # repo-cwd defaults to $PWD. --workspace accepts a workspace id (w3) or label
 # (exact match first, then fragment; ambiguity = error listing candidates).
 # --prompt-file - reads the prompt from stdin. --runtime R targets another herdr
 # session (herdr --session R ...), e.g. creating in the dev runtime from elsewhere.
-# Prints JSON: {name, tab_id, pane_id, workspace_id, cwd, status, prompt}.
+# --machine M creates the peer on a SAVED SSH MACHINE (herdr >= 0.9.5; verified
+# 2026-10-15 on the wsl machine: tab create/agent start both forward). Mutually
+# exclusive with --runtime (--machine pins the remote machine's own session).
+# cwd is interpreted ON THE REMOTE machine — pass a remote-side path.
+# Prints JSON: {name, machine, tab_id, pane_id, workspace_id, cwd, status, prompt}.
 # Exit: 0 ok · 1 usage/validation · 2 herdr error.
 set -euo pipefail
 
 HERDR="${HERDR_BIN:-herdr}"
-usage() { echo "usage: herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus]" >&2; exit 1; }
+usage() { echo "usage: herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--prompt-file F|-] [--label L] [--focus] [--runtime R | --machine M]" >&2; exit 1; }
 jqget() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1]))" "$1"; }
 
 [ $# -ge 1 ] || usage
 NAME="$1"; shift
-CWD=""; WORKSPACE=""; PROMPT_FILE=""; LABEL=""; FOCUS=""; RUNTIME=""
-hr() { "$HERDR" ${RUNTIME:+--session "$RUNTIME"} "$@"; }
+CWD=""; WORKSPACE=""; PROMPT_FILE=""; LABEL=""; FOCUS=""; RUNTIME=""; MACHINE=""
+hr() { "$HERDR" ${MACHINE:+--machine "$MACHINE"} ${RUNTIME:+--session "$RUNTIME"} "$@"; }
 while [ $# -gt 0 ]; do
   case "$1" in
+    --machine) MACHINE="${2:?--machine needs a saved machine label (herdr machine list)}"; shift 2 ;;
     --runtime) RUNTIME="${2:?--runtime needs a herdr session name}"; shift 2 ;;
     --workspace) WORKSPACE="${2:?--workspace needs an id or label}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:?--prompt-file needs a path or -}"; shift 2 ;;
@@ -31,9 +36,15 @@ done
 # validate before touching herdr so offline tests can run
 echo "$NAME" | grep -qE '^[a-z][a-z0-9_-]{0,31}$' || { echo "name must match [a-z][a-z0-9_-]{0,31}" >&2; exit 1; }
 CWD="${CWD:-$PWD}"; CWD="${CWD%/}"
-[ -d "$CWD" ] || { echo "cwd not a directory: $CWD" >&2; exit 1; }
+# --machine: cwd is a REMOTE path, uncheckable locally — only require non-empty
+if [ -z "$MACHINE" ] && [ ! -d "$CWD" ]; then echo "cwd not a directory: $CWD" >&2; exit 1; fi
+if [ -n "$MACHINE" ] && [ -z "$CWD" ]; then echo "empty cwd" >&2; exit 1; fi
 [ -z "$PROMPT_FILE" ] || [ "$PROMPT_FILE" = "-" ] || [ -f "$PROMPT_FILE" ] || { echo "prompt file not found: $PROMPT_FILE" >&2; exit 1; }
-[ -n "${HERDR_ENV:-}" ] || { echo "HERDR_ENV=1 missing: run inside a herdr pane (see herdr skill)" >&2; exit 1; }
+# HERDR_ENV gate: required for local creation; --machine forwards over SSH and
+# works from any shell (verified 2026-10-15 — the probe ran from a plain shell)
+if [ -z "$MACHINE" ] && [ -z "${HERDR_ENV:-}" ]; then
+  echo "HERDR_ENV=1 missing: run inside a herdr pane, or pass --machine for cross-machine creation" >&2; exit 1
+fi
 [ -n "$LABEL" ] || LABEL="$NAME"
 
 # resolve workspace: bare id passes through; otherwise match against workspace list
@@ -80,4 +91,4 @@ if [ -n "$PROMPT_FILE" ]; then
 fi
 
 python3 -c 'import json,sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
-  name "$NAME" tab_id "$TAB_ID" pane_id "$PANE_ID" workspace_id "$WS_ACTUAL" cwd "$CWD" status "$STATUS" prompt "$PROMPT_STATE"
+  machine "${MACHINE:-local}" name "$NAME" tab_id "$TAB_ID" pane_id "$PANE_ID" workspace_id "$WS_ACTUAL" cwd "$CWD" status "$STATUS" prompt "$PROMPT_STATE"
