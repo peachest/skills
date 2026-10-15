@@ -15,25 +15,16 @@ import os
 import random
 import re
 import subprocess
+import sys
 import time
+
+from ocr_platform import _git_remote_url
 
 # ponytail: global lock, per-account limits if throughput matters
 MAX_RETRY_DELAY = 60.0
 
 _PROJECT_ID_CACHE = None
 _CONTEXT_CACHE = None
-
-
-def _git_remote_url():
-    """Return the origin remote URL, or '' on failure."""
-    try:
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return r.stdout.strip()
-    except Exception:
-        return ""
 
 
 def _parse_host(url):
@@ -78,6 +69,52 @@ def _glab_config():
             except Exception:
                 return {}
     return {}
+
+
+def _local_project_path():
+    """Parse namespace/project from the configured remote URL ('' if unparseable).
+
+    Handles:
+      git@host:ns/proj.git              → ns/proj
+      ssh://git@host:port/ns/proj.git   → ns/proj (ssh port lives in netloc, not path)
+      https://host/ns/proj.git          → ns/proj
+    """
+    from urllib.parse import urlparse
+    url = _git_remote_url()
+    if "://" in url:
+        path = urlparse(url).path
+    else:
+        path = url.split(":", 1)[-1]
+    return path.strip("/").removesuffix(".git")
+
+
+def probe_auth():
+    """Auth probe: one project lookup, compared against the local remote path.
+
+    token 存在 ≠ 实例正确 — a valid token on the wrong instance must fail
+    before the first business API call, not after pulling unrelated data.
+    Exits 2 naming OCR_REMOTE on mismatch; returns silently when the local
+    remote yields no project path to compare.
+    """
+    local_path = _local_project_path()
+    if not local_path or "/" not in local_path:
+        return
+    base_url, host, _token, _header = resolve_gitlab_context()
+    from urllib.parse import quote_plus
+    encoded = quote_plus(local_path, safe="")
+    status, body, _ = curl(f"/projects/{encoded}", retries=0)
+    returned = body.get("path_with_namespace", "") if isinstance(body, dict) else ""
+    if status == 200 and returned.casefold() == local_path.casefold():
+        return
+    remote_name = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+    detail = f"HTTP {status}" if status else "request failed"
+    got = f" (got project '{returned}')" if returned else ""
+    print(f"AUTH PROBE FAILED: GET /projects/{local_path} on {base_url} → {detail}{got}",
+          file=sys.stderr)
+    print(f"The token resolved for {host} does not serve this repo's project. "
+          f"Check OCR_REMOTE (current: '{remote_name}') points at the remote "
+          f"hosting the review instance, and glab auth for {host}.", file=sys.stderr)
+    sys.exit(2)
 
 
 def resolve_gitlab_context():
@@ -150,17 +187,9 @@ def get_project_id():
 
     # Local fallback: parse namespace/project from git remote, resolve via glab
     try:
-        url = _git_remote_url()
-        # Parse path from git URL. Handles:
-        #   git@host:ns/proj.git              → ns/proj
-        #   ssh://git@host:port/ns/proj.git   → ns/proj
-        #   https://host/ns/proj.git          → ns/proj
-        from urllib.parse import urlparse, quote_plus
-        if "://" in url:
-            path = urlparse(url).path
-        else:
-            path = url.split(":", 1)[-1]
-        path = path.strip("/").removesuffix(".git")
+        path = _local_project_path()
+        # Encode namespace/project for API: team/platform/my-project → team%2Fplatform%2Fmy-project
+        from urllib.parse import quote_plus
         if "/" in path:
             # Encode namespace/project for API: team/platform/my-project → team%2Fplatform%2Fmy-project
             encoded = quote_plus(path, safe="")

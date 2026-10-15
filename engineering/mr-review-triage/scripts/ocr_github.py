@@ -10,15 +10,27 @@ and owner/repo inference automatically.
 
 import json
 import os
+import random
 import re
 import subprocess
 import sys
 import time
-import random
+
+from ocr_platform import _git_remote_url
 
 MAX_RETRY_DELAY = 60.0
 
 _OWNER_REPO_CACHE = None
+
+
+def _local_owner_repo():
+    """Parse owner/repo from the configured remote URL ('' if not GitHub).
+
+    git@github.com:owner/repo.git → owner/repo
+    https://github.com/owner/repo.git → owner/repo
+    """
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", _git_remote_url())
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
 
 
 def get_project_id():
@@ -31,29 +43,37 @@ def get_project_id():
     if _OWNER_REPO_CACHE is not None:
         return _OWNER_REPO_CACHE
 
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if repo:
-        _OWNER_REPO_CACHE = repo
-        return repo
+    repo = os.environ.get("GITHUB_REPOSITORY", "") or _local_owner_repo()
+    _OWNER_REPO_CACHE = repo
+    return repo
 
-    try:
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=10,
-        )
-        url = r.stdout.strip()
-        # git@github.com:owner/repo.git → owner/repo
-        # https://github.com/owner/repo.git → owner/repo
-        m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", url)
-        if m:
-            repo = f"{m.group(1)}/{m.group(2)}"
-            _OWNER_REPO_CACHE = repo
-            return repo
-    except Exception:
-        pass
 
-    _OWNER_REPO_CACHE = ""
-    return ""
+def probe_auth():
+    """Auth probe: one repo lookup, compared against the local remote's path.
+
+    Skipped when GITHUB_REPOSITORY env takes precedence — the project id then
+    comes from env and there is no local remote path to compare (no error).
+    Exits 2 naming OCR_REMOTE on mismatch; returns silently when the local
+    remote yields no owner/repo to compare.
+    """
+    if os.environ.get("GITHUB_REPOSITORY", "").strip():
+        return
+    local_repo = _local_owner_repo()
+    if not local_repo:
+        return
+    status, body, _ = curl(f"/repos/{local_repo}", retries=0)
+    returned = body.get("full_name", "") if isinstance(body, dict) else ""
+    if status == 200 and returned.casefold() == local_repo.casefold():
+        return
+    remote_name = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+    detail = f"HTTP {status}" if status else "request failed"
+    got = f" (got full_name '{returned}')" if returned else ""
+    print(f"AUTH PROBE FAILED: GET /repos/{local_repo} via gh → {detail}{got}",
+          file=sys.stderr)
+    print("gh's token does not serve this repo's project. Check OCR_REMOTE "
+          f"(current: '{remote_name}') points at the remote hosting the "
+          "review instance, and gh auth status.", file=sys.stderr)
+    sys.exit(2)
 
 
 def _resolve_token():

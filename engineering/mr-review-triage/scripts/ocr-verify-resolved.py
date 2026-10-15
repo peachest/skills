@@ -25,7 +25,7 @@ The --json output is an array of unresolved threads:
 import json
 import sys
 
-from ocr_platform import detect_platform
+from ocr_platform import detect_platform, run_auth_probe
 
 # A discussion counts as an "OCR summary" (bot status notice, not an inline
 # finding) when its first note body starts with the OCR run-report emoji.
@@ -221,6 +221,8 @@ def main():
     platform = detect_platform()
     if not as_json:
         print(f"Detected platform: {platform}", file=sys.stderr)
+
+    run_auth_probe(platform)
 
     if platform == "github":
         unresolved = _unresolved_github(mr_or_pr_id)
