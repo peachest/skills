@@ -530,6 +530,7 @@ def test_github_edge_resolved_true_attempts_resolve(workdir, tmp_path, api_log):
     })
     proc = run_post("1", "--mode", "triage", "--classified", str(path),
                     platform="github", api_log=api_log, routes_file=routes)
-    assert proc.returncode == 0, proc.stderr
-    # graphql resolve is unserveable offline → the warn proves the attempt happened
+    # ocr r2 M7: resolve failure is counted as failure (mirrors the GitLab path)
+    assert proc.returncode != 0, proc.stderr
     assert "resolve failed" in proc.stderr
+    assert "1 failed" in proc.stderr
