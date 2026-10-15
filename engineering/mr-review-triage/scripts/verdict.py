@@ -31,7 +31,7 @@ import json
 import os
 import sys
 
-from ocr_platform import triage_state_dir
+from ocr_platform import load_pull_findings, triage_state_dir
 
 SCHEMA_VERSION = 2
 
@@ -61,22 +61,7 @@ def _build_parser():
 
 def _load_pull_finding(pull_path, no):
     """Load the pull state file and return the finding carrying this ordinal."""
-    if not os.path.exists(pull_path):
-        print(f"ERROR: pull state file not found: {pull_path} — run "
-              f"ocr-pull-discussions.py first with stdout redirected to that path",
-              file=sys.stderr)
-        sys.exit(1)
-    try:
-        with open(pull_path, encoding="utf-8") as fh:
-            findings = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"ERROR: pull state file {pull_path} is not readable JSON: {exc}",
-              file=sys.stderr)
-        sys.exit(1)
-    if not isinstance(findings, list):
-        print(f"ERROR: pull state file {pull_path}: expected the bare findings "
-              f"array ocr-pull-discussions.py writes to stdout", file=sys.stderr)
-        sys.exit(1)
+    findings = load_pull_findings(pull_path)
     finding = next((f for f in findings if isinstance(f, dict) and f.get("no") == no), None)
     if finding is None:
         available = sorted({f["no"] for f in findings
