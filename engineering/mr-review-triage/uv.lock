@@ -33,7 +33,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mr-review-triage"
+name = "mr-review-triage-tests"
 version = "0.1.0"
 source = { virtual = "." }
 
@@ -45,7 +45,7 @@ dev = [
 [package.metadata]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest" }]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "packaging"
