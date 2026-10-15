@@ -32,6 +32,12 @@ def _stub_env(platform, routes=None):
     env = os.environ.copy()
     env["PATH"] = f"{FAKE_BIN}{os.pathsep}{env['PATH']}"
     env["OCR_PLATFORM"] = platform
+    # M8: scrub an inherited OCR_REMOTE — it points at a remote the tmp cwd
+    # has no git repo for (exit 2 config error before the fixtures are
+    # reached), and CI_SERVER_URL keeps GitLab host derivation off local
+    # remotes entirely. Remote-selection tests build their own env.
+    env.pop("OCR_REMOTE", None)
+    env["CI_SERVER_URL"] = "https://gitlab.example"
     # ocr r1 F4: the GitHub fixture's bot comments are github-actions[bot]; a
     # caller-env OCR_BOT_LOGIN would flip _is_github_reviewer and drop them.
     env["OCR_BOT_LOGIN"] = "github-actions[bot]"
@@ -91,6 +97,8 @@ def run_post(*args, stdin_text="", platform="gitlab", api_log=None, routes_file=
     env = os.environ.copy()
     env["PATH"] = f"{FAKE_BIN}{os.pathsep}{env['PATH']}"
     env["OCR_PLATFORM"] = platform
+    env.pop("OCR_REMOTE", None)  # M8: see _stub_env — tmp cwd has no matching remote
+    env["CI_SERVER_URL"] = "https://gitlab.example"
     routes = routes_file or ("post_routes.json" if platform == "gitlab" else "routes.json")
     if not os.path.isabs(str(routes)):
         routes = str(FIXTURES_DIR / platform / routes)
