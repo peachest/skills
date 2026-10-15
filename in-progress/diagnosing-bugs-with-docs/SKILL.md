@@ -10,7 +10,7 @@ description: >
   domain (clusters, GPU virtualisation, k8s internals).
 ---
 
-> **Forked from** `vendor/mattpocock/skills/engineering/diagnosing-bugs` at upstream `c55ee46` (upstream sync 2026-09-20). Identical to `/skill:diagnosing-bugs` except the integration points marked **[vault]** below: three `~/ops` points plus a `/skill:domain-modeling` handoff at Phase 6. Keep the fork's drift to those marks only; anything else belongs upstream.
+> **Forked from** `vendor/mattpocock/skills/engineering/diagnosing-bugs` at upstream `c55ee46` (upstream sync 2026-09-20). Identical to `/skill:diagnosing-bugs` except the integration points marked **[vault]** or **[methods]** below: three `~/ops` points plus a `/skill:domain-modeling` handoff at Phase 6, and debug-methods (facts/hypotheses two-layer discipline, references/debug-methods.md) integration. Keep the fork's drift to those marks only; anything else belongs upstream.
 
 # Diagnosing Bugs
 
@@ -27,6 +27,12 @@ If the redacted output is not enough to diagnose the bug, say so and ask the use
 **[vault] Phase 0: Consult the vault**
 
 Before building a feedback loop, run `/skill:diag-search` with the bug's component, failure type, and symptom keywords. A prior diagnosis may hand you the repro command (Phase 1, half-done) or the root cause outright: an already-diagnosed bug needs no loop at all.
+
+**[vault][methods] Phase 0b: Anchor the object**
+
+Before hypothesising, pin down **what object you are investigating** and its aliases across systems (device ID ↔ PCI busid ↔ CRD name ↔ container device node ↔ k8s object; pod 名 ↔ service 名 ↔ 指标 label). Misidentified objects poison every later probe — this is the largest measured failure gap in RCA agent evaluation. If an entity mapping exists in your cross-repo knowledge wiki or the project's CONTEXT.md, read it; otherwise query each system directly and record the alias mapping you confirm — diag-write will persist it.
+
+Methodology reference: `references/debug-methods.md` — two-layer facts/hypotheses discipline, strong-signal ranking, and anti-patterns. Read it before Phase 3; the phase pointers below cite it.
 
 ## Phase 1: Build a feedback loop
 
@@ -92,6 +98,8 @@ Confirm:
 
 Once it's red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs, callers, config, data, and steps **one at a time**, re-running the loop after each cut, and keep only what's load-bearing for the failure.
 
+**[methods] Reproduction credibility**: a repro is itself a claim in the hypotheses layer. It is only trustworthy when it produces the **same strong signals** as the real incident — a repro whose later signals diverge from the real case is a *different* bug (see references/debug-methods.md §两层框架). When writing up, note whether the repro matched; an unaligned one is labelled 参考性复现.
+
 Why bother: a minimal repro shrinks the hypothesis space in Phase 3 (fewer moving parts left to suspect) and becomes the clean regression test in Phase 5.
 
 Done when **every remaining element is load-bearing**: removing any one of them makes the loop go green.
@@ -107,6 +115,8 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 > Format: "If <X> is the cause, then <changing Y> will make the bug disappear / <changing Z> will make it worse."
 
 If you cannot state the prediction, the hypothesis is a vibe: discard or sharpen it.
+
+**[methods] Rank with the strong-signal criterion** (references/debug-methods.md §三步循环): lay hypotheses against observed facts in a hypothesis × facts matrix; a fact only one hypothesis explains is a strong signal — test against it first. SLO/SLI-style aggregates that every hypothesis explains are weak signals: never anchor on them. If all signals are weak, go **one layer deeper** for rawer data and stop as soon as a strong signal appears — strongest, not deepest.
 
 **[vault]** Root causes the vault search surfaced enter this ranked list as hypotheses: prior evidence outranks fresh speculation at equal plausibility. If the bug's territory is new to the vault, re-run `/skill:diag-search` with sharper keywords now that the minimal repro names the moving parts.
 
@@ -137,7 +147,7 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 If a correct seam exists:
 
 1. Turn the minimised repro into a failing test at that seam.
-2. Watch it fail.
+2. Watch it fail. If you forced the red by mutating code or a fixture, `diff` against a pristine copy to prove the mutation landed before you trust it.
 3. Apply the fix.
 4. Watch it pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario.
@@ -150,7 +160,12 @@ Required before declaring done:
 - [ ] Regression test passes (or absence of seam is documented)
 - [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
-- [ ] The hypothesis that turned out correct is stated in the commit / PR message, so the next debugger learns
+- [ ] The hypothesis that turned out correct is stated in the commit / PR message, so the next debugger learns — **with evidence anchors for every mechanism claim**; uncited claims are unverified hypotheses, not findings (references/debug-methods.md §结论引用纪律).
+
+
+**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/skill:improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before: you have more information now than when you started.
+
+**[methods] Then register the dead ends**: the hypotheses that were eliminated — each with the one-line disqualifying evidence — belong in the vault entry's 排除的假设 section (diag-write), so the next diagnosis inherits the constraints, not just the answer.
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/skill:improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before: you have more information now than when you started.
 
