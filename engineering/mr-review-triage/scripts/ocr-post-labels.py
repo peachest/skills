@@ -594,7 +594,8 @@ def _sweep_notes_gitlab(base, disc_id, curl):
 
     Returns True iff every resolvable note is resolved after this pass —
     also serves as the fallback resolve path for instances where the
-    discussion-level PUT fails structurally (e.g. <git-host> returns 500 on it).
+    discussion-level PUT fails structurally (e.g. some internal instances
+    return 500 on it).
     """
     status, disc, _ = curl(f"{base}/discussions/{disc_id}")
     if status != 200 or not isinstance(disc, dict):
