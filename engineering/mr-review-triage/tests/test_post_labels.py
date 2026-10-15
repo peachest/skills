@@ -224,6 +224,19 @@ def test_invalid_priority_hard_fails(priority, api_log):
     assert_no_platform_calls(proc, api_log)
 
 
+@pytest.mark.parametrize("priority", [None, ["high"], {"p": 1}])
+def test_null_or_collection_priority_hard_fails(priority, api_log):
+    """ocr r1 F3: explicit null bypassed the `is not None` gate (rendered a
+    label-less body); collections raised uncaught TypeError at the `in` check.
+    A *supplied* priority must be a valid enum string — omitted stays legal."""
+    entry = {"discussion_id": DISC_TP, "classification": "TP", "reason": "r", "fix_plan": "f", "priority": priority}
+    proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}), api_log=api_log)
+    assert proc.returncode == 1
+    assert "priority" in proc.stderr and "<stdin>" in proc.stderr
+    assert "TypeError" not in proc.stderr and "Traceback" not in proc.stderr
+    assert_no_platform_calls(proc, api_log)
+
+
 def test_missing_priority_on_tp_defaults_medium(api_log):
     entry = {"discussion_id": DISC_TP, "classification": "TP", "reason": "r", "fix_plan": "f"}
     proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}), api_log=api_log)
