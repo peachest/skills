@@ -112,18 +112,18 @@ def _load_classified_entries(classified_path):
     return data["entries"]
 
 
-def _find_existing(entries, no, disc_id, anchor):
-    """Locate a prior verdict for the same ordinal, or for the same finding
-    (same thread + same body anchor) under an ordinal reshuffled across pulls.
-    Returns (index, kind) or (None, None)."""
+def _find_existing(entries, disc_id, anchor):
+    """Locate a prior verdict for the same finding: same thread + same body
+    anchor. `no` is display metadata only — it is stored but never matched:
+    re-pulls reshuffle ordinals, so an ordinal match would hit a different
+    finding and --force could overwrite the wrong entry. Returns index or
+    None."""
     for i, entry in enumerate(entries):
         if not isinstance(entry, dict):
             continue
-        if entry.get("no") == no:
-            return i, "ordinal"
         if entry.get("discussion_id") == disc_id and entry.get("anchor") == anchor:
-            return i, "finding"
-    return None, None
+            return i
+    return None
 
 
 def main():
@@ -166,15 +166,11 @@ def main():
     if entries is None:
         entries = []
 
-    match_idx, match_kind = _find_existing(entries, args.no, disc_id, anchor)
+    match_idx = _find_existing(entries, disc_id, anchor)
     if match_idx is not None and not args.force:
-        if match_kind == "finding":
-            print(f"ERROR: this finding is already classified (existing entry no="
-                  f"{entries[match_idx].get('no')}) — ordinal reshuffled across "
-                  f"pulls? pass --force to replace it", file=sys.stderr)
-        else:
-            print(f"ERROR: no={args.no} already has a verdict in {classified_path} — "
-                  f"pass --force to overwrite", file=sys.stderr)
+        print(f"ERROR: this finding is already classified in {classified_path} "
+              f"(existing entry no={entries[match_idx].get('no')}) — ordinal "
+              f"reshuffled across pulls? pass --force to replace it", file=sys.stderr)
         sys.exit(1)
 
     entry = {
