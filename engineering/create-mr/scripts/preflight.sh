@@ -84,7 +84,10 @@ esac
 echo "== EXISTING_MR =="
 case $platform in
   gh)
-    gh pr list --head "$branch" --json number,title,isDraft 2>&1 | head -20 ;;
+    # ocr r1 F2: gh resolves the repo from its own remote rules — on a fork
+    # checkout that can be the wrong repo. Pass the selected remote's
+    # owner/repo (path of the normalized web URL, .git already stripped).
+    gh pr list --repo "$path" --head "$branch" --json number,title,isDraft 2>&1 | head -20 ;;
   glab)
     if out=$(glab api --hostname "$host" "projects/$enc/merge_requests?source_branch=$branch&state=opened" 2>&1); then
       echo "$out" | python3 -c "import json,sys
