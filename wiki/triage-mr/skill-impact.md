@@ -13,3 +13,4 @@
 | F1 SKILL.md 写明 scripts/reference 路径解析规则（相对本 SKILL.md 目录）；gitlab.md 增平台 resolve quirk 条目（discussion PUT 500 / notes POST 404 / note 级 PUT 配方）；ocr-post-labels.py `_sweep_notes_gitlab` 返回成功并兼作 discussion-PUT 失败时的 fallback resolve | mr-review-triage + triage-mr | bf6282b | mock ✓（500 场景 fallback 判 False、note PUT 成功场景判 True 且请求路径正确）；真实实例回归待下轮 triage 验证（对应 P-005/P-006） |
 | S4 提案（待实现）：post-labels 加 `--classified <path>` 文件直读写模式，物理消灭 heredoc 双写 | mr-review-triage/scripts | — | 对应 P-002 refuted 复发（01a12f97#709/#805/#843/#909/#835） |
 | S5 提案（待实现）：pull 脚本加 `--digest [--against classified.json]` | mr-review-triage/scripts | — | 对应 P-007（01a12f97#444,#470,#679,#819,#833,#931，6 次/3 形状） |
+| 2026-10-15 | ocr r1 F6：SKILL.md Step 1 注明 scripted verdict 流程下 pull 输出必须落在 `.triage/<MR>/issues.json`（verdict.py 读取的路径），/tmp 仅为旧流程 | SKILL.md Step 1 | 155e956 | pytest 全绿（docs-only，模板 JSON 块 python 校验通过）；完整 SKILL.md 重写在 #65 |
