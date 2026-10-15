@@ -332,15 +332,21 @@ def test_github_dedup_skips_reply(workdir, tmp_path, api_log):
     write_pull(workdir, [finding(1, GH_DISC, GH_BODY)], mr="1")
     anchor = anchor_of(GH_BODY)
     routes = serve(tmp_path, {
-        "GET /replies": {"file": "replies_marked.json", "content": [
+        # H1: replies are listed via the PR review-comments listing filtered by
+        # in_reply_to — GitHub has no GET on the /replies endpoint (POST-only)
+        "in_reply_to": {"file": "replies_marked.json", "content": [
             {"id": 555, "body": f"### 🟡 边缘\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} -->"}]},
-        "/replies": {"file": "replies_other.json", "content": []},
         "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
         "/comments": {"file": "comments.json", "content": []},
-        # summary sweep: PR fetch + an empty reviewThreads listing (no summaries)
+        # summary sweep + classified resolve: PR fetch + the thread listing
         "/pulls/1": {"file": "pr.json", "content": {"number": 1, "node_id": "PR_node_1"}},
         "reviewThreads": {"file": "threads.json",
-                          "content": {"data": {"node": {"reviewThreads": {"nodes": []}}}}},
+                          "content": {"data": {"node": {"reviewThreads": {"nodes": [
+                              {"id": "PRRT_t1", "isResolved": False,
+                               "comments": {"nodes": [{"databaseId": int(GH_DISC),
+                                                       "body": GH_BODY}]}}]}}}}},
+        "resolveReviewThread": {"file": "resolve.json",
+                                "content": {"data": {"resolveReviewThread": {"thread": {"isResolved": True}}}}},
     })
     entries = [{"discussion_id": GH_DISC, "no": 1, "anchor": anchor,
                 "classification": "Edge", "reason": "r", "resolved": True}]
@@ -353,12 +359,46 @@ def test_github_dedup_skips_reply(workdir, tmp_path, api_log):
     assert "content dedup" in proc.stderr
 
 
+def test_github_dedup_probe_lists_replies_via_in_reply_to(workdir, tmp_path, api_log):
+    """H1: the GET /replies probe was a fabricated endpoint — GitHub replies
+    are POST-only, so every retry saw no marker and re-posted the verdict. The
+    probe must list PR review comments with in_reply_to=<comment_id> and find
+    a marker that lives in a reply, not the parent."""
+    write_pull(workdir, [finding(1, GH_DISC, GH_BODY)], mr="1")
+    anchor = anchor_of(GH_BODY)
+    routes = serve(tmp_path, {
+        "in_reply_to": {"file": "replies_marked.json", "content": [
+            {"id": 555, "body": f"### ❌ 假阳性\n\n**原因**: earlier\n\n<!-- triage-anchor: {anchor} -->"}]},
+        "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
+        "/comments": {"file": "comments.json", "content": []},
+        "/pulls/1": {"file": "pr.json", "content": {"number": 1, "node_id": "PR_node_1"}},
+        "reviewThreads": {"file": "threads.json",
+                          "content": {"data": {"node": {"reviewThreads": {"nodes": [
+                              {"id": "PRRT_t1", "isResolved": False,
+                               "comments": {"nodes": [{"databaseId": int(GH_DISC),
+                                                       "body": GH_BODY}]}}]}}}}},
+        "resolveReviewThread": {"file": "resolve.json",
+                                "content": {"data": {"resolveReviewThread": {"thread": {"isResolved": True}}}}},
+    })
+    entries = [{"discussion_id": GH_DISC, "no": 1, "anchor": anchor,
+                "classification": "Edge", "reason": "r", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post("1", "--classified", str(path), platform="github",
+                    api_log=api_log, routes_file=routes)
+    assert proc.returncode == 0, proc.stderr
+    calls = read_api_log(api_log)
+    assert not [c for c in calls if c["method"] == "POST"]  # marker seen → no re-reply
+    probes = [c for c in calls if "in_reply_to" in c["url"]]
+    assert probes and all("pulls/1/comments" in c["url"] for c in probes)
+    assert not [c for c in calls if c["method"] == "GET" and c["url"].endswith("/replies")]
+
+
 def test_github_reply_failure_blocks_resolve(workdir, tmp_path, api_log):
     write_pull(workdir, [finding(1, GH_DISC, GH_BODY)], mr="1")
     routes = serve(tmp_path, {
         "POST /replies": {"status": 422},
         "POST /comments": {"status": 422},
-        "GET /replies": {"file": "replies.json", "content": []},
+        "in_reply_to": {"file": "replies.json", "content": []},
         "/pulls/comments": {"file": "comment.json", "content": {"id": 555, "body": GH_BODY}},
         "/comments": {"file": "comments.json", "content": []},
     })
