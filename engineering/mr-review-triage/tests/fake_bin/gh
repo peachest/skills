@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Offline API stub standing in for gh (serves fixtures via ../fake_api.py).
+exec python3 "$(dirname "$0")/../fake_api.py" "$@"

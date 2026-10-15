@@ -1,0 +1,12 @@
+[project]
+name = "mr-review-triage-tests"
+version = "0.1.0"
+description = "CLI-level tests for the mr-review-triage skill scripts (offline API fixtures, no network)."
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
