@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# pre-commit — same never-do layer as pre-push (see its header), but at commit
+# time: scan the STAGED diff only. gitignored local files (runtime.conf/.env)
+# stay scannable locally; leaking requires staging them.
+#
+# Runs `gitleaks protect --staged` (v8): exits non-zero when leaks are found.
+#
+# Install: git config core.hooksPath scripts/githooks   (done in this repo)
+# Config:  ~/data/benchmark/config/gitleaks.toml — if missing, falls back
+#          to gitleaks default rules (weaker: no internal-IP/domain rules).
+
+set -u
+GITLEAKS_CONFIG="$HOME/data/benchmark/config/gitleaks.toml"
+
+cmd=(gitleaks protect --staged --redact)
+if [ -f "$GITLEAKS_CONFIG" ]; then
+    cmd+=(-c "$GITLEAKS_CONFIG")
+else
+    echo "pre-commit: WARN custom gitleaks config not found ($GITLEAKS_CONFIG) — using default rules (no internal-IP/domain checks)" >&2
+fi
+
+if ! "${cmd[@]}" >&2; then
+    echo "pre-commit: BLOCKED — gitleaks found issues in the staged diff. Unstage / remove them, or use --no-commit-hooks ONLY if you are certain the match is a false positive." >&2
+    exit 1
+fi
+exit 0

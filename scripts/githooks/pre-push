@@ -6,6 +6,7 @@
 # files like runtime.conf/.env are fine to keep locally, just not to push).
 #
 # Install: git config core.hooksPath scripts/githooks   (done in this repo)
+# See also: pre-commit (same checks, staged diff only)
 # Config:  ~/data/benchmark/config/gitleaks.toml — if missing, falls back
 #          to gitleaks default rules (weaker: no internal-IP/domain rules).
 
