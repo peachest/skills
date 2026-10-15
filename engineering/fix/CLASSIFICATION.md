@@ -42,7 +42,7 @@ Sub-types:
 
 - **Action**: Optional fix (user chooses).
 - **Required fields**: `reason`.
-- **`resolved`**: false by default.
+- **`resolved`**: false by default. (Triage mode via `verdict.py` defaults Edge to `true` at verdict time — the close-after-verification decision is made per item there; see `/skill:triage-mr`.)
 
 ### 🔵 OOS — Out of Scope
 

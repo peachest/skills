@@ -127,7 +127,7 @@ The skill produces two artifacts:
 
 1. **`.triage/classified.json`** — the input findings enriched with verdicts, reasons, fix plans, and resolved flags. The `.triage/` directory is a working area — add it to `.gitignore`. Write authority is dual-mode:
 
-   - **Triage mode** — running under `/skill:triage-mr` with an MR/PR and a pull state file: do not write the file yourself. Emit the verdict semantics (ordinal, classification, reason, fix plan, priority) and record each verdict immediately via `verdict.py`, the sole writer; state lives at `.triage/<MR>/classified.json`. Batch-assembly at the end of the run is a process violation.
+   - **Triage mode** — running under `/skill:triage-mr` with an MR/PR and a pull state file: do not write the file yourself. Emit the verdict semantics (ordinal, classification, reason, fix plan, priority) and record each verdict immediately via `verdict.py`, the sole writer (exit 0 ok · 1 state error · 2 usage); state lives at `.triage/<MR>/classified.json`. Batch-assembly at the end of the run is a process violation.
    - **Standalone mode** — called from `/skill:code-review`, `/skill:diagnosing-bugs`, or any source without a pull state file (no ordinals to redeem): write `.triage/classified.json` directly in the schema 2 format below.
 
 2. **`fix-plan-<ID>.md`** — human-readable report, also written to `.triage/`.
@@ -159,4 +159,4 @@ After the run, if new FP patterns surfaced, write them to `docs/agents/review-kn
 
 ## Resuming
 
-If `.triage/classified.json` from a prior run exists, load it. Findings already marked `resolved: true` are skipped. Present the state and continue from where it left off.
+Standalone: if `.triage/classified.json` from a prior run exists, load it. Findings already marked `resolved: true` are skipped. Present the state and continue from where it left off. Triage: state lives at `.triage/<MR>/classified.json`, written by `verdict.py` — re-verdicting goes through `verdict.py --force` (see `/skill:triage-mr`'s Resuming).
