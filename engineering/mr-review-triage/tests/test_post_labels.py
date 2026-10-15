@@ -37,6 +37,23 @@ def schema2_text():
     return json.dumps({"schema": 2, "entries": schema2_entries()})
 
 
+@pytest.fixture(autouse=True)
+def pull_state(tmp_path, monkeypatch):
+    """Post joins every entry against the pull state file (#61): default cwd
+    in a tmp checkout plus a pull file for the two fixture discussions. Tests
+    that need other ids or a missing file write their own state under tmp_path."""
+    monkeypatch.chdir(tmp_path)
+    state_dir = tmp_path / ".triage" / "!123"
+    state_dir.mkdir(parents=True)
+    findings = [
+        {"no": 1, "discussion_id": DISC_Q, "file": "src/app.py", "line": 1,
+         "author": "ocr-bot", "body": "needs team input"},
+        {"no": 2, "discussion_id": DISC_TP, "file": "src/app.py", "line": 2,
+         "author": "ocr-bot", "body": "real defect"},
+    ]
+    (state_dir / "issues.json").write_text(json.dumps(findings), encoding="utf-8")
+
+
 @pytest.fixture
 def state_file(tmp_path):
     """Valid schema 2 state file at .triage/<MR>/classified.json under tmp."""
@@ -99,7 +116,7 @@ def test_triage_mode_resolves_tp_but_q_stays_open(state_file, api_log):
     assert DISC_Q not in resolves[0]["url"]
 
 
-def test_verdict_shaped_entry_digests_end_to_end(tmp_path, api_log):
+def test_verdict_shaped_entry_digests_end_to_end(tmp_path, monkeypatch, api_log):
     """Entry shape verdict.py (#59) will write — extra no/anchor/posted fields — digests cleanly."""
     entry = {
         "discussion_id": DISC_Q,
@@ -113,6 +130,12 @@ def test_verdict_shaped_entry_digests_end_to_end(tmp_path, api_log):
     path = tmp_path / STATE_PATH
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"schema": 2, "entries": [entry]}), encoding="utf-8")
+    # anchor 9f86d081884c7d65 = sha256("test")[:16] — the pull file body must digest to it
+    pull = tmp_path / ".triage" / "!123"
+    pull.mkdir(parents=True, exist_ok=True)
+    (pull / "issues.json").write_text(json.dumps(
+        [{"no": 3, "discussion_id": DISC_Q, "file": "src/app.py", "line": 1,
+          "author": "ocr-bot", "body": "test"}]), encoding="utf-8")
     proc = run_post("!123", "--mode", "triage", "--classified", str(path), api_log=api_log)
     assert proc.returncode == 0, proc.stderr
     calls = read_api_log(api_log)

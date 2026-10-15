@@ -44,20 +44,25 @@ def run_pull(*args, platform="gitlab"):
     )
 
 
-def run_post(*args, stdin_text="", platform="gitlab", api_log=None):
+def run_post(*args, stdin_text="", platform="gitlab", api_log=None, routes_file=None):
     """Run ocr-post-labels.py against the offline API stub.
 
     stdin_text is the payload for the stdin transport; --classified tests
     pass the state file via args instead. GitLab post tests serve the
-    post_routes table (canned reply/resolve/sweep responses). When api_log
-    (a path) is given, every fake-API request is journaled there as JSON
-    lines so tests can assert call absence and posted bodies.
+    post_routes table (canned reply/resolve/sweep responses). routes_file
+    overrides the route table: a bare name resolves against the platform's
+    fixtures dir, an absolute path is used as-is (test-generated tables whose
+    fixture files live beside it). When api_log (a path) is given, every
+    fake-API request is journaled there as JSON lines so tests can assert
+    call absence and posted bodies.
     """
     env = os.environ.copy()
     env["PATH"] = f"{FAKE_BIN}{os.pathsep}{env['PATH']}"
     env["OCR_PLATFORM"] = platform
-    routes = "post_routes.json" if platform == "gitlab" else "routes.json"
-    env["FAKE_API_ROUTES"] = str(FIXTURES_DIR / platform / routes)
+    routes = routes_file or ("post_routes.json" if platform == "gitlab" else "routes.json")
+    if not os.path.isabs(str(routes)):
+        routes = str(FIXTURES_DIR / platform / routes)
+    env["FAKE_API_ROUTES"] = str(routes)
     if api_log is not None:
         env["FAKE_API_LOG"] = str(api_log)
     if platform == "gitlab":
