@@ -461,6 +461,7 @@ GH_FORK_REMOTES = {
     "git@github.com:team/app.git",
     "https://github.com/team/app.git",
     "ssh://git@github.com/team/app.git",
+    "ssh://github.com/team/app.git",  # M2: userless ssh:// (SSH config User git)
 ])
 def test_preflight_gh_pr_list_targets_selected_remote(tmp_path, review_url):
     remotes = {"origin": GH_FORK_REMOTES["origin"], "review": review_url}
