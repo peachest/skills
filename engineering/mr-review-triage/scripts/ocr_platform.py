@@ -80,3 +80,18 @@ def run_auth_probe(platform):
     else:
         from ocr_gitlab import probe_auth
     probe_auth()
+
+
+def triage_state_dir(mr_id=None):
+    """Resolve the .triage state directory against cwd via realpath.
+
+    State paths are always derived from the working directory — never
+    expanduser($HOME): peer sessions can run the same checkout under
+    different $HOME values (/home/x vs /mnt/disk1/x), and $HOME-derived
+    paths split state across two locations and FileNotFoundError later.
+    With mr_id, returns the per-MR state dir .triage/<mr_id>/; without,
+    the flat .triage/ working dir. Pure path computation — callers make
+    the directory when writing. Shared by post-labels and verdict.py.
+    """
+    base = os.path.realpath(os.path.join(os.getcwd(), ".triage"))
+    return os.path.join(base, str(mr_id)) if mr_id is not None else base
