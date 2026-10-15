@@ -583,6 +583,16 @@ def _sweep_summary_threads(threads, classified_ok, stats, fix_files, reply, reso
 # ── GitLab backend ──
 
 
+def _tid(disc_id):
+    """Stable display handle for a thread id in human-facing stderr lines.
+
+    A short hash of the id — never a prefix of the real id, so truncated-id
+    shapes cannot flow from display back into state (spec #57 display
+    discipline). """
+    import hashlib
+    return "thread#" + hashlib.sha256(str(disc_id).encode()).hexdigest()[:8]
+
+
 def _sweep_notes_gitlab(base, disc_id, curl):
     """Resolve every remaining resolvable-unresolved note in a thread.
 
@@ -599,7 +609,7 @@ def _sweep_notes_gitlab(base, disc_id, curl):
     """
     status, disc, _ = curl(f"{base}/discussions/{disc_id}")
     if status != 200 or not isinstance(disc, dict):
-        print(f"[WARN] note sweep {disc_id[:12]}: fetch HTTP {status} — notes untouched", file=sys.stderr)
+        print(f"[WARN] note sweep {_tid(disc_id)}: fetch HTTP {status} — notes untouched", file=sys.stderr)
         return False
     swept = remaining = 0
     for note in disc.get("notes", []):
@@ -614,9 +624,9 @@ def _sweep_notes_gitlab(base, disc_id, curl):
                 swept += 1
             else:
                 remaining += 1
-                print(f"[WARN] note sweep {disc_id[:12]}/{note_id}: HTTP {st}", file=sys.stderr)
+                print(f"[WARN] note sweep {_tid(disc_id)}/{note_id}: HTTP {st}", file=sys.stderr)
     if swept:
-        print(f"[OK] swept {swept} open reply note(s) in {disc_id[:12]}", file=sys.stderr)
+        print(f"[OK] swept {swept} open reply note(s) in {_tid(disc_id)}", file=sys.stderr)
     return remaining == 0
 
 
@@ -633,10 +643,10 @@ def _resolve_gitlab_thread(base, disc_id, curl):
         _sweep_notes_gitlab(base, disc_id, curl)
         return True
     if _sweep_notes_gitlab(base, disc_id, curl):
-        print(f"[WARN] discussion PUT {disc_id[:12]}: HTTP {status} — "
+        print(f"[WARN] discussion PUT {_tid(disc_id)}: HTTP {status} — "
               f"resolved via note-level fallback", file=sys.stderr)
         return True
-    print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}", file=sys.stderr)
+    print(f"[FAIL] resolve {_tid(disc_id)}: HTTP {status}", file=sys.stderr)
     return False
 
 
@@ -727,9 +737,9 @@ def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
                 deduped = any(marker in (n.get("body") or "")
                               for n in disc.get("notes", []) if isinstance(n, dict))
             else:
-                print(f"[WARN] dedup probe {disc_id[:12]}: HTTP {st} — posting anyway", file=sys.stderr)
+                print(f"[WARN] dedup probe {_tid(disc_id)}: HTTP {st} — posting anyway", file=sys.stderr)
         if deduped:
-            print(f"[SKIP] {label} {disc_id[:12]}: verdict note already on wall (content dedup)", file=sys.stderr)
+            print(f"[SKIP] {label} {_tid(disc_id)}: verdict note already on wall (content dedup)", file=sys.stderr)
 
         # 1) reply (#61 ④: a failed reply must never lead to a resolve)
         reply_status = None
@@ -750,9 +760,9 @@ def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
             resolved_ok = _resolve_gitlab_thread(base, disc_id, curl)
         elif do_resolve and force:
             resolved_ok = _resolve_gitlab_thread(base, disc_id, curl)
-            print(f"[WARN] reply {disc_id[:12]}: HTTP {reply_status} — resolving anyway (--force)", file=sys.stderr)
+            print(f"[WARN] reply {_tid(disc_id)}: HTTP {reply_status} — resolving anyway (--force)", file=sys.stderr)
         elif do_resolve:
-            print(f"[FAIL] reply {disc_id[:12]}: HTTP {reply_status} — NOT resolving "
+            print(f"[FAIL] reply {_tid(disc_id)}: HTTP {reply_status} — NOT resolving "
                   f"(verdict reason not on wall; --force to override)", file=sys.stderr)
 
         # 3) count + report
@@ -764,15 +774,15 @@ def _post_gitlab(mr_iid, items, resolved_map=None, force=False):
             fail += 1  # resolve failed on an already-labeled thread
         elif deduped:
             ok += 1
-            print(f"[OK] {label} {disc_id[:12]}: already labeled — resolved (content dedup)", file=sys.stderr)
+            print(f"[OK] {label} {_tid(disc_id)}: already labeled — resolved (content dedup)", file=sys.stderr)
         elif do_resolve and not resolved_ok:
             fail += 1
         elif do_resolve:
             ok += 1
-            print(f"[OK] {label} resolved {disc_id[:12]}", file=sys.stderr)
+            print(f"[OK] {label} resolved {_tid(disc_id)}", file=sys.stderr)
         else:
             ok += 1
-            print(f"[OK] {label} labeled {disc_id[:12]} (open)", file=sys.stderr)
+            print(f"[OK] {label} labeled {_tid(disc_id)} (open)", file=sys.stderr)
 
     total = ok + fail
     print(f"Done: {ok} ok, {fail} failed, {skip} skipped ({total}/{len(items)} processed)", file=sys.stderr)
@@ -1020,7 +1030,7 @@ def _post_github(pr_number, items, resolved_map=None, force=False):
         deduped = False
         if anchor and _github_thread_has_marker(owner_repo, pr_number, comment_id, anchor, curl):
             deduped = True
-            print(f"[SKIP] {label} {comment_id[:12]}: verdict note already on wall (content dedup)", file=sys.stderr)
+            print(f"[SKIP] {label} {_tid(comment_id)}: verdict note already on wall (content dedup)", file=sys.stderr)
 
         # 1) reply (#61 ④: a failed reply must never lead to a resolve)
         posted_now = False
@@ -1041,9 +1051,9 @@ def _post_github(pr_number, items, resolved_map=None, force=False):
                           f"NOT resolving (verdict reason not on wall; --force to override)", file=sys.stderr)
                     if do_resolve and force:
                         if _resolve_github_thread(pr_number, comment_id):
-                            print(f"[WARN] {comment_id[:12]}: resolved anyway (--force)", file=sys.stderr)
+                            print(f"[WARN] {_tid(comment_id)}: resolved anyway (--force)", file=sys.stderr)
                         else:
-                            print(f"[WARN] {comment_id[:12]}: resolve also failed (--force)", file=sys.stderr)
+                            print(f"[WARN] {_tid(comment_id)}: resolve also failed (--force)", file=sys.stderr)
                     fail += 1
                     continue
             else:
@@ -1057,16 +1067,16 @@ def _post_github(pr_number, items, resolved_map=None, force=False):
             if resolved:
                 ok += 1
                 suffix = " (content dedup)" if deduped else ""
-                print(f"[OK] {label} resolved {comment_id[:12]}{suffix}", file=sys.stderr)
+                print(f"[OK] {label} resolved {_tid(comment_id)}{suffix}", file=sys.stderr)
             else:
-                print(f"[WARN] reply ok but resolve failed for {comment_id[:12]}", file=sys.stderr)
+                print(f"[WARN] reply ok but resolve failed for {_tid(comment_id)}", file=sys.stderr)
                 ok += 1  # reply succeeded, just couldn't resolve — verify gate catches open threads
         elif deduped:
             skip += 1
-            print(f"[SKIP] {label} {comment_id[:12]}: already labeled, left open (content dedup)", file=sys.stderr)
+            print(f"[SKIP] {label} {_tid(comment_id)}: already labeled, left open (content dedup)", file=sys.stderr)
         else:
             ok += 1
-            print(f"[OK] {label} labeled {comment_id[:12]} (open)", file=sys.stderr)
+            print(f"[OK] {label} labeled {_tid(comment_id)} (open)", file=sys.stderr)
 
     total = ok + fail
     print(f"Done: {ok} ok, {fail} failed, {skip} skipped ({total}/{len(items)} processed)", file=sys.stderr)
