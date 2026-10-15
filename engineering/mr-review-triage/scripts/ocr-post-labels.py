@@ -44,7 +44,7 @@ import os
 import re
 import sys
 
-from ocr_platform import detect_platform
+from ocr_platform import detect_platform, run_auth_probe
 
 # ── Templates (platform-agnostic) ──
 
@@ -498,6 +498,8 @@ def main():
 
     platform = detect_platform()
     print(f"Detected platform: {platform}", file=sys.stderr)
+
+    run_auth_probe(platform)
 
     if platform == "github":
         success = _post_github(mr_or_pr_id, items, resolved_map)
