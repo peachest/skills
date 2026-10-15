@@ -35,7 +35,9 @@ confirm with the user is always clean.
    + branch-consistency), TITLE_CANDIDATE, ASSIGNEE, EXISTING_MR (API-first),
    TARGET_CANDIDATES. One remote → use it. Several → ask the user which one —
    via ask, even when context makes one look obvious; self-judging the remote
-   is the most recurring violation on record.
+   is the most recurring violation on record. `OCR_REMOTE` (if set) selects
+   the remote preflight uses as primary — it is the default when no ask
+   happened; an explicit user choice via ask always takes precedence over it.
 
 2. **Detect the platform** from the selected remote's URL: `github.com` → `gh`;
    anything else → `glab` (self-hosted GitLab included). For GitLab, check

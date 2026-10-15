@@ -10,15 +10,27 @@ and owner/repo inference automatically.
 
 import json
 import os
+import random
 import re
 import subprocess
 import sys
 import time
-import random
+
+from ocr_platform import _git_remote_url, pipeline_in_flight
 
 MAX_RETRY_DELAY = 60.0
 
 _OWNER_REPO_CACHE = None
+
+
+def _local_owner_repo():
+    """Parse owner/repo from the configured remote URL ('' if not GitHub).
+
+    git@github.com:owner/repo.git → owner/repo
+    https://github.com/owner/repo.git → owner/repo
+    """
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", _git_remote_url())
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
 
 
 def get_project_id():
@@ -31,29 +43,37 @@ def get_project_id():
     if _OWNER_REPO_CACHE is not None:
         return _OWNER_REPO_CACHE
 
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if repo:
-        _OWNER_REPO_CACHE = repo
-        return repo
+    repo = os.environ.get("GITHUB_REPOSITORY", "") or _local_owner_repo()
+    _OWNER_REPO_CACHE = repo
+    return repo
 
-    try:
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=10,
-        )
-        url = r.stdout.strip()
-        # git@github.com:owner/repo.git → owner/repo
-        # https://github.com/owner/repo.git → owner/repo
-        m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", url)
-        if m:
-            repo = f"{m.group(1)}/{m.group(2)}"
-            _OWNER_REPO_CACHE = repo
-            return repo
-    except Exception:
-        pass
 
-    _OWNER_REPO_CACHE = ""
-    return ""
+def probe_auth():
+    """Auth probe: one repo lookup, compared against the local remote's path.
+
+    Skipped when GITHUB_REPOSITORY env takes precedence — the project id then
+    comes from env and there is no local remote path to compare (no error).
+    Exits 2 naming OCR_REMOTE on mismatch; returns silently when the local
+    remote yields no owner/repo to compare.
+    """
+    if os.environ.get("GITHUB_REPOSITORY", "").strip():
+        return
+    local_repo = _local_owner_repo()
+    if not local_repo:
+        return
+    status, body, _ = curl(f"/repos/{local_repo}", retries=0)
+    returned = body.get("full_name", "") if isinstance(body, dict) else ""
+    if status == 200 and returned.casefold() == local_repo.casefold():
+        return
+    remote_name = os.environ.get("OCR_REMOTE", "").strip() or "origin"
+    detail = f"HTTP {status}" if status else "request failed"
+    got = f" (got full_name '{returned}')" if returned else ""
+    print(f"AUTH PROBE FAILED: GET /repos/{local_repo} via gh → {detail}{got}",
+          file=sys.stderr)
+    print("gh's token does not serve this repo's project. Check OCR_REMOTE "
+          f"(current: '{remote_name}') points at the remote hosting the "
+          "review instance, and gh auth status.", file=sys.stderr)
+    sys.exit(2)
 
 
 def _resolve_token():
@@ -197,6 +217,52 @@ def curl(endpoint, *, method="GET", data=None, retries=2):
         return (status, body, headers)
 
     return (0, None, {})
+
+
+def check_runs_status(pr_number):
+    """Aggregate GitHub check-run status over the PR head SHA ('' when none).
+
+    Spec #57 修订 B timing gate, GitHub side. Any queued/in_progress run →
+    that status (the gate blocks); all completed → "completed"; no check
+    runs on the head SHA (no CI configured) or an undeterminable state → ''
+    — the gate proceeds with a note, the thread check still fails closed.
+    """
+    owner_repo = get_project_id()
+    if not owner_repo:
+        return ""
+    status, pr_body, _ = curl(f"/repos/{owner_repo}/pulls/{pr_number}")
+    head_sha = (pr_body.get("head", {}) or {}).get("sha") \
+        if isinstance(pr_body, dict) else None
+    if not head_sha:
+        return ""
+    # M3: aggregate every page — a single per_page=100 request declared
+    # completed while queued/in-flight checks sat on page 2 of a busy head.
+    entries = []
+    page = 1
+    while True:
+        status, runs, _ = curl(
+            f"/repos/{owner_repo}/commits/{head_sha}/check-runs"
+            f"?per_page=100&page={page}")
+        if status != 200 or not isinstance(runs, dict):
+            return ""
+        batch = runs.get("check_runs") or []
+        entries.extend(batch)
+        total = runs.get("total_count")
+        if (not batch or len(batch) < 100
+                or (isinstance(total, int) and len(entries) >= total)):
+            break
+        page += 1
+        if page > 10:  # shortcut: 1000-check cap; aggregate beyond is unrealistic, revisit if a head ever exceeds it
+            break
+    if not entries:
+        return ""
+    for run in entries:
+        run_status = str(run.get("status", "")).strip().lower()
+        # M4: one spelling with the shared predicate — waiting/pending/
+        # requested are nonterminal and must block the gate.
+        if pipeline_in_flight(run_status):
+            return run_status
+    return "completed"
 
 
 def graphql(query, variables=None, retries=2):

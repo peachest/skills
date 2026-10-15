@@ -40,6 +40,7 @@
 - 现象: SKILL.md 对 `<SCRIPTS_DIR>` 只写 "resolve it before running"，agent 硬编码安装路径侥幸命中；安装副本被清理后脚本 ENOENT，需 find 全盘探测才恢复。注：成本曾被高估为"约 10 次查找"，trace 证实为 3 次 ENOENT + 6 次定位轮（其余是目录删除前的成功调用）
 - 根因: contract gap —— 无解析规则，也无"注入头自带 location"的利用指引
 - 方案: mr-review-triage SKILL.md 写明解析规则（相对本 SKILL.md 目录解析，对照注入 location，勿搜其他 skill 根）
+- 落地: bf6282b（解析规则段）→ #65 triage-mr SKILL.md 重写同步同规则并补充 .triage/ 状态路径 cwd/realpath 说明
 - 触发条件: trace 中出现脚本路径 ENOENT 或对 skill 目录的探测调用
 - passCheck: SKILL.md 含解析规则段；后续 trace 中脚本路径失败后一步内恢复
 - 证据: 01a12f97#815,#817,#819（ENOENT→find→重发，≈521 out tok）
@@ -50,17 +51,39 @@
 - 现象: 某内部 GitLab 实例 discussion 级 PUT 一律 500、notes POST 404；手工 saga 16 调用/3.5min 才试出 note 级 PUT 配方；notes 级 PUT 返回 404 却实际生效，错误语义与真实状态脱节进一步放大重试
 - 根因: contract gap —— 平台 quirk 只进 memory 不进 reference 文档；脚本无 fallback
 - 方案: mr-review-triage reference/gitlab.md 增 quirk 条目（症状/配方/端点表）；post-labels 的 note 扫尾函数兼作 discussion-PUT 失败时的 fallback resolve
+- 落地: bf6282b（quirk 节 + note 级 fallback）；#61/#62 post 语义硬化后 fallback 保留；#65 删除 reference 中手动 resolve 配方段并替换内部实例昵称为中性表述（脚本内 fallback 为唯一路径）
 - 触发条件: post-labels 或 resolve 调用返回 5xx/404/415
 - passCheck: gitlab.md 含 quirk 节；post-labels 在该实例上 resolve 成功（stderr 出现 note-level fallback）
 - 证据: 01a12f97#843-#906（500×6、404×6、415、400×3，≈227s ≈7.4K out tok）
 - 出现: 2026-10-15 diagnose#2
 
 ## P-007 pull 结果摘要解析器每轮重写
-- 状态: open
+- 状态: absorbed-into-skill
 - 现象: 每轮 pull 后手写 python3 -c 摘要 findings/diff classified，同形 3 种写法重复 6 次
 - 根因: contract gap —— pull 脚本不输出 digest，摘要逻辑无承载点
 - 方案: ocr-pull-discussions.py 加 `--digest [--against classified.json]`，输出 "N total/M new + id8|file:line|body[:120]"（台账 S5）
+- 落地: #60 ad19321（`--digest --against`，digest 输出保留全量 pull 序号、人读摘要零 ID 形态）；#65 写入 SKILL.md 对账步骤（digest 检测 + 全量刷新——post 的 join 基底须含全部已分类 id，digest-only 覆写会炸 round-1 entry）
 - 触发条件: pull 命令后紧跟 python3 -c 摘要
 - passCheck: 后续 trace 中 pull 后无手写摘要脚本
 - 证据: 01a12f97#444,#470,#679,#819,#833,#931（≈900 out tok + 结果重读）
-- 出现: 2026-10-15 diagnose#2
+- 出现: 2026-10-15 diagnose#2 → absorbed 2026-10-15 spec #57 #60/#65
+
+## P-008 LLM 手抄不透明长 ID 家族（截断/手写/模糊回填）
+- 状态: absorbed-into-skill
+- 现象: discussion_id 在展示层打印时截断（8 位前缀，同族 3 例）、组装 classified.json 时手写 `id:null` 占位、用 (file,line) 模糊匹配回填线程身份——裁决贴错线程或静默失配
+- 根因: contract gap —— 让 agent 搬运不透明长 ID 的环节必然出错；逐条加规则（"必须全量复制"、"展示不得截断"）零抑制力
+- 方案: ID 生命周期全部收回脚本内——verdict.py 按序号从 pull 文件字节级复制 discussion_id 并计算 anchor，agent 界面收敛为序号+裁决语义（#59）；post 对每条 entry 做 join+anchor 校验，失配在任何平台调用前 hard-fail（#61）；pull --digest 对账与 verify 人读输出零 ID 形态（#60/#64）；triage-mr SKILL.md 全删手动 fallback（#65）
+- 触发条件: trace 中出现 ID 截断形态、手写 id 落盘或 (file,line) 回填
+- passCheck: classified.json 无 agent 手写痕迹（verdict.py 唯一写者）；join 校验拦截截断 id
+- 证据: spec #57 problem statement（截断家族第五例触发本 spec）；peer 诊断 01a13ea6 / 01a12f97（截断×3、id:null 手写、(file,line) 模糊回填）；MR !688 复现实验定谳"端点 500"实为 8 位前缀截断（Amendment R2）
+- 出现: 2026-10-15 spec #57 立项事故 → absorbed 2026-10-15 spec #57 #59/#61/#65
+
+## P-009 post 调用点文档漂移
+- 状态: absorbed-into-skill
+- 现象: templates.md 残留 bare-array 输入死模板（post 已 hard-fail 拒绝无 schema 文件）——照文档构造的输入必炸；同类：调用点文档的 heredoc 形态、Edge/Q resolve 旧语义在脚本演进后未同步
+- 根因: contract gap —— post 的输入/调用契约散落多处调用点文档，脚本演进无同步义务
+- 方案: 调用点文档收敛并点名——triage-mr SKILL.md（流程权威）、reference/gitlab.md、github.md（平台命令形态）、templates.md（输入 schema 与回帖正文）；改 post 契约的 ticket 必须四处同步（#65 全量核对为执行样例）
+- 触发条件: 改 post 输入契约/回帖语义的 PR 未同步调用点文档
+- passCheck: 调用点文档的 CLI flag 与 schema 与实现一致（本票后以 ocr review 复核）
+- 证据: ocr review r1 F6（templates.md bare-array 死模板，155e956 修复）
+- 出现: 2026-10-15 ocr r1 → absorbed 2026-10-15 spec #57 #65
