@@ -251,6 +251,19 @@ def test_ocr_remote_nonexistent_remote_loud_failure(tmp_path):
     assert "nope" in r.stderr
 
 
+def test_explicit_ocr_remote_origin_without_origin_is_config_error(tmp_path):
+    """ocr r1 F5: explicit OCR_REMOTE=origin on a repo with no origin remote
+    must exit 2 like any other unresolvable name — silent '' fallback would
+    mis-detect the platform and skip the auth probe."""
+    repo = make_repo(tmp_path, {"internal": f"git@{FORKEE_HOST}:team/app.git"})
+    env, _ = gitlab_env(tmp_path)
+    env["OCR_REMOTE"] = "origin"
+    r = run_cli(repo, "ocr-pull-discussions.py", env, "1")
+    assert r.returncode == 2, r.stderr
+    assert "OCR_REMOTE='origin'" in r.stderr
+    assert r.stdout == ""
+
+
 # ── auth probe failure paths (exit 2 before first business API call) ─────
 
 
