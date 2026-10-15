@@ -3,6 +3,47 @@
 Ledger for behavioral changes to this skill. Sanitized per repo rules: no
 internal hosts/projects/credentials; tickets reference public GitHub issues.
 
+## 2026-10-15 — spec #57 / ticket #62: post absorbs OCR summary threads + GitHub dual-ID fix
+
+- Proposal: spec #57 Amendment R2 Q6 (ticket #62) — post sweeps the
+  remaining resolvable OCR summary threads after the classified phase;
+  the last routine manual glab/gh api path dies.
+- Landing: `scripts/ocr-post-labels.py` gains a summary sweep run on both
+  platforms after posting. Thread class off the root-note body prefixes
+  (kept in sync with ocr-verify-resolved.py `_OCR_SUMMARY_PREFIXES`,
+  fallback bodies excluded — they are finding carriers): 🔍 start →
+  confirmation note (本轮 triage 已启动…), no statistics, resolve only
+  when a ✅ end/LGTM thread exists AND completed this run (replied or
+  deduped, then resolved) AND the classified phase had zero failed items;
+  ✅ end/LGTM → statistics template (TP/FP/Edge/OOS/Q counts from the
+  classified entries + 修复涉及文件 = TP files joined from the pull
+  file), reply then resolve; ⚠️ error → fixed escalation note, reply
+  ONLY, never resolved, run exits non-zero — gate-forever-red is
+  intentional human-in-loop design. Every sweep reply embeds the summary
+  thread's own anchor marker (sha256(root body)[:16]) so re-runs post
+  nothing; deduped non-error threads still resolve. Sweep listings fail
+  closed (non-200/non-list GitLab listing, failed GraphQL listing →
+  non-zero exit) — a silently empty sweep would read as a done MR.
+  GitHub dual-ID-space fix: the sweep's REST reply target (root comment
+  databaseId) and GraphQL resolve target (thread node id) both come from
+  ONE reviewThreads listing; no node id enters a REST path and verify
+  --json ids are never consumed. `_resolve_github_thread` no longer
+  returns True on thread-not-found (silent-success bug) — it reports
+  failure while keeping the already-resolved thread as idempotent
+  success. Sweep stderr logs carry no platform ids (summary threads have
+  no pull-file ordinal). tests/fake_api.py gains a graphql branch
+  (route patterns match the query text, bare-JSON payload, `-F` var +
+  stdin body logging); post_routes.json serves an empty listing so the
+  pre-existing GitLab post tests see no summary threads.
+- Commit: 89b7898 (branch feat/triage-t62-summary-absorb)
+- Verification: 147 pytest cases green (131 pre-existing + 16 new in
+  tests/test_summary_sweep.py: three template classes, error
+  reply-only/non-zero exit both platforms, start resolve condition incl.
+  classified-phase-failure case, content-dedup re-run zero new replies,
+  fallback/finding threads untouched, GitLab + GitHub listing failures
+  fail closed, GitHub REST-vs-node id separation, thread-not-found
+  reports failure, already-resolved idempotent success).
+
 ## 2026-10-15 — spec #57 / ticket #59: verdict.py, classified.json sole writer
 
 - Proposal: spec #57 (triage-mr scripted redesign), ticket #59 — the agent
