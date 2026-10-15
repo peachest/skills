@@ -1,6 +1,7 @@
 """Post classification labels + resolve OCR review discussions.
 
-Reads a JSON array from stdin with classification results and for each:
+Reads a schema 2 classified state file (--classified <path>, or stdin as a
+bare transport — validation is identical for both) and for each entry:
   1. Posts a reply note with classification label + reason/fix-plan
   2. Resolves the discussion based on classification type (if platform supports)
 
@@ -15,28 +16,39 @@ Classifications (default mode — standalone /fix use):
     🔵 OOS  — label "非本 MR 范围" + reason, resolved
     ⏸️ Q    — label "需讨论" + question, NOT resolved
 
+Classification vocabulary is pinned: state files store the Question verdict
+as `Q`; both `Q` and `Question` are accepted and normalized to `Question`
+(the canonical key in the label/resolved maps) before any lookup. Unknown or
+missing classification values hard-fail the whole run before any platform
+call — no silent FP downgrade.
+
 In triage mode (--mode triage), a TP has already been fixed and build-verified
 by the time it reaches post-labels, so it is resolved like FP/OOS. The
 "stay open for tracking" default serves standalone /fix runs where the fix
 may not have landed yet; in /skill:triage-mr the fix is part of the same run.
 Edge and Question stay open in both modes (genuinely unresolved).
 
-Input format:
-    [
-      {
-        "discussion_id": "...",
-        "classification": "TP|FP|Edge|OOS|Question",
-        "reason": "...",
-        "fix_plan": "...",         # TP only
-        "priority": "high|medium|low",  # TP only
-        "resolved": true/false     # override default resolve behavior
-      },
-      ...
-    ]
+Input format (schema 2 — versionless or schema-1 files are rejected loudly
+with the filename, the missing-field list, and a rebuild hint):
+    {
+      "schema": 2,
+      "entries": [
+        {
+          "discussion_id": "...",
+          "classification": "TP|FP|Edge|OOS|Q",
+          "reason": "...",
+          "fix_plan": "...",              # TP only
+          "priority": "high|medium|low",  # TP only, string enum
+          "resolved": true/false          # override default resolve behavior
+        },
+        ...
+      ]
+    }
 
 Usage:
+    python3 ocr-post-labels.py <MR_OR_PR_ID> --classified .triage/<MR>/classified.json
     cat classified.json | python3 ocr-post-labels.py <MR_OR_PR_ID>
-    cat classified.json | python3 ocr-post-labels.py <MR_OR_PR_ID> --mode triage
+    python3 ocr-post-labels.py <MR_OR_PR_ID> --mode triage --classified .triage/<MR>/classified.json
 """
 
 import json
@@ -47,6 +59,12 @@ import sys
 from ocr_platform import detect_platform
 
 # ── Templates (platform-agnostic) ──
+
+_SCHEMA_VERSION = 2
+
+# State files store the Question verdict as `Q`; the maps below are keyed by
+# the canonical `Question`, so normalize aliases BEFORE any lookup.
+_CLASSIFICATION_ALIASES = {"Q": "Question"}
 
 _CLASSIFICATION_LABELS = {
     "TP": "✅ 真阳性",
@@ -122,6 +140,76 @@ def _extract_json(raw):
     return None
 
 
+def _parse_state_entries(raw, filename):
+    """Parse a schema 2 state payload; hard-fail on versionless/schema-1 input.
+
+    Both transports (--classified <path> and stdin) go through this same
+    validation. The error carries the filename, the missing/invalid field
+    list, and a one-line rebuild hint, then exits non-zero before any
+    platform call.
+    """
+    data = _extract_json(raw)
+    if data is None:
+        print(f"ERROR: {filename}: no valid JSON found in state input", file=sys.stderr)
+        sys.exit(1)
+
+    if isinstance(data, dict):
+        problems = []
+        if "schema" not in data:
+            problems.append("schema")
+        elif data["schema"] != _SCHEMA_VERSION:
+            problems.append(f"schema={data['schema']!r} (expected {_SCHEMA_VERSION})")
+        if not isinstance(data.get("entries"), list):
+            problems.append("entries")
+        got = ""
+    else:
+        problems = ["schema", "entries"]
+        got = f" (got bare {type(data).__name__})"
+
+    if problems:
+        print(
+            f"ERROR: {filename}: schema {_SCHEMA_VERSION} state file required — "
+            f"missing/invalid field(s): {', '.join(problems)}{got}. "
+            f"Rebuild: re-emit as {{\"schema\": {_SCHEMA_VERSION}, \"entries\": [...]}} — older formats are no longer accepted",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return data["entries"]
+
+
+def _preflight(entries, filename):
+    """Pin the classification vocabulary before any platform call.
+
+    Normalizes `Q` → `Question` (canonical key of the label/resolved maps —
+    a legal Q must not KeyError in _build_body), and hard-fails the whole run
+    on unknown or missing classification values (no silent FP downgrade) and
+    on TP priorities outside the high|medium|low string enum.
+    """
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            print(f"ERROR: {filename}: entry {i}: not a JSON object", file=sys.stderr)
+            sys.exit(1)
+        raw_cls = entry.get("classification")
+        cls = _CLASSIFICATION_ALIASES.get(raw_cls, raw_cls)
+        if cls not in _VALID_CLASSIFICATIONS:
+            kind = "missing classification" if raw_cls is None else f"unknown classification {raw_cls!r}"
+            print(
+                f"ERROR: {filename}: entry {i}: {kind} (valid: TP|FP|Edge|OOS|Q/Question) — no platform calls made",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        entry["classification"] = cls
+        if cls == "TP":
+            priority = entry.get("priority")
+            if priority is not None and priority not in _PRIORITY_LABELS:
+                print(
+                    f"ERROR: {filename}: entry {i}: priority must be one of high|medium|low, got {priority!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+    return entries
+
+
 def _validate_item(item, idx, resolved_map=None):
     resolved_map = resolved_map or _DEFAULT_RESOLVED
     cleaned = dict(item)
@@ -153,8 +241,6 @@ def _validate_item(item, idx, resolved_map=None):
             return (False, f"item {idx}: TP requires fix_plan", None)
         cleaned["fix_plan"] = fix_plan
         priority = cleaned.get("priority", "medium")
-        if priority not in _PRIORITY_LABELS:
-            priority = "medium"
         cleaned["priority"] = priority
     elif cls == "FP":
         reason = str(cleaned.get("reason", "")).strip()
@@ -472,37 +558,64 @@ def _post_github(pr_number, items, resolved_map=None):
 # ── Main ──
 
 
+def _parse_args(argv):
+    """Return (mr_or_pr_id, mode, classified_path) from the CLI tail."""
+    if not argv or argv[0].startswith("-"):
+        return None, None, None
+    mr_or_pr_id = argv[0]
+    mode = "default"
+    classified_path = None
+    rest = argv[1:]
+    i = 0
+    while i < len(rest):
+        arg = rest[i]
+        if arg == "--mode" and i + 1 < len(rest):
+            mode = rest[i + 1]
+            i += 2
+        elif arg == "--classified" and i + 1 < len(rest):
+            classified_path = rest[i + 1]
+            i += 2
+        elif arg in ("--mode", "--classified"):
+            print(f"ERROR: {arg} requires a value", file=sys.stderr)
+            sys.exit(1)
+        else:
+            i += 1
+    return mr_or_pr_id, mode, classified_path
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage]  <  classified.json", file=sys.stderr)
+        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>]  [< state.json]", file=sys.stderr)
         sys.exit(1)
 
-    mr_or_pr_id = sys.argv[1]
-    mode = "default"
-    for arg in sys.argv[2:]:
-        if arg == "--mode":
-            continue
-        if arg in ("triage", "default") and "--mode" in sys.argv:
-            mode = arg
+    mr_or_pr_id, mode, classified_path = _parse_args(sys.argv[1:])
+    if mr_or_pr_id is None:
+        print("Usage: python3 ocr-post-labels.py <MR_OR_PR_ID> [--mode triage] [--classified <path>]  [< state.json]", file=sys.stderr)
+        sys.exit(1)
+
+    if classified_path is not None:
+        filename = classified_path
+        try:
+            with open(classified_path, encoding="utf-8") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            print(f"ERROR: cannot read --classified {classified_path}: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # stdin is a transport only — the same schema 2 validation applies
+        filename = "<stdin>"
+        raw = sys.stdin.read()
+
+    entries = _preflight(_parse_state_entries(raw, filename), filename)
     resolved_map = _TRIAGE_RESOLVED if mode == "triage" else _DEFAULT_RESOLVED
-
-    raw = sys.stdin.read()
-
-    items = _extract_json(raw)
-    if items is None:
-        print("ERROR: no valid JSON array found in input", file=sys.stderr)
-        sys.exit(1)
-    if not isinstance(items, list):
-        print("ERROR: expected JSON array, got " + type(items).__name__, file=sys.stderr)
-        sys.exit(1)
 
     platform = detect_platform()
     print(f"Detected platform: {platform}", file=sys.stderr)
 
     if platform == "github":
-        success = _post_github(mr_or_pr_id, items, resolved_map)
+        success = _post_github(mr_or_pr_id, entries, resolved_map)
     else:
-        success = _post_gitlab(mr_or_pr_id, items, resolved_map)
+        success = _post_gitlab(mr_or_pr_id, entries, resolved_map)
 
     sys.exit(0 if success else 1)
 
