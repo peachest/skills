@@ -734,12 +734,15 @@ def _sweep_summaries_gitlab(mr_iid, classified_ok, stats, fix_files):
     threads = []
     for page in range(1, 6):
         status, body, _ = curl(f"{base}/discussions?per_page=100&page={page}")
-        if page == 1 and not (200 <= status < 300 and isinstance(body, list)):
-            print(f"ERROR: summary sweep: discussions listing failed (HTTP {status}) "
-                  f"— summary threads left open", file=sys.stderr)
+        if not (200 <= status < 300 and isinstance(body, list)):
+            # fail closed on ANY page (ocr r2 M10): a page-2 failure must not
+            # pass for a complete listing — an error summary on that page
+            # would be silently missed
+            print(f"ERROR: summary sweep: discussions listing failed (HTTP {status}, "
+                  f"page {page}) — summary threads left open", file=sys.stderr)
             return False
-        if status == 0 or not isinstance(body, list) or not body:
-            break
+        if not body:
+            break  # clean end of pagination
         for disc in body:
             notes = [n for n in disc.get("notes", []) if isinstance(n, dict)]
             if not notes:
@@ -1160,8 +1163,9 @@ def _post_github(pr_number, items, resolved_map=None, force=False):
                 suffix = " (content dedup)" if deduped else ""
                 print(f"[OK] {label} resolved {_tid(comment_id)}{suffix}", file=sys.stderr)
             else:
-                print(f"[WARN] reply ok but resolve failed for {_tid(comment_id)}", file=sys.stderr)
-                ok += 1  # reply succeeded, just couldn't resolve — verify gate catches open threads
+                print(f"[FAIL] {label} {_tid(comment_id)}: reply ok but resolve failed — "
+                      f"counted as failure so the summary sweep sees an incomplete run", file=sys.stderr)
+                fail += 1  # ocr r2 M7: mirror the GitLab path — an unresolved TP/FP/OOS is incomplete work
         elif deduped:
             skip += 1
             print(f"[SKIP] {label} {_tid(comment_id)}: already labeled, left open (content dedup)", file=sys.stderr)
