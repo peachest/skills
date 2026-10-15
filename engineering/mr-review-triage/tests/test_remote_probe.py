@@ -220,8 +220,9 @@ def test_ocr_remote_override_post(tmp_path):
         {"match": "discussions/abc123def", "method": "PUT", "status": 200, "body": {}},
     ]
     env, log = gitlab_env(tmp_path, extra_routes=extra)
-    item = json.dumps([{"discussion_id": "abc123def", "classification": "FP",
-                        "reason": "not a real issue"}])
+    item = json.dumps({"schema": 2, "entries": [
+        {"discussion_id": "abc123def", "classification": "FP",
+         "reason": "not a real issue"}]})
     r = run_cli(repo, "ocr-post-labels.py", env, "1", stdin=item)
     assert r.returncode == 0, r.stderr
     assert "Detected platform: gitlab" in r.stderr
@@ -291,8 +292,8 @@ def test_probe_failure_post_404(tmp_path):
     env = base_env(tmp_path, bin_dir, log)
     env.update({"OCR_REMOTE": "review", "CI_PROJECT_ID": "42",
                 "GITLAB__PERSONAL_ACCESS_TOKEN": "test-token"})
-    item = json.dumps([{"discussion_id": "abc123def", "classification": "FP",
-                        "reason": "x"}])
+    item = json.dumps({"schema": 2, "entries": [
+        {"discussion_id": "abc123def", "classification": "FP", "reason": "x"}]})
     r = run_cli(repo, "ocr-post-labels.py", env, "1", stdin=item)
     assert r.returncode == 2, r.stderr
     assert "OCR_REMOTE" in r.stderr
