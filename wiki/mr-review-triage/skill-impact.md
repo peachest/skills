@@ -107,3 +107,37 @@ internal hosts/projects/credentials; tickets reference public GitHub issues.
   alias + unknown/missing hard-fail with empty API journal, priority enum
   accept/reject, triage-mode resolve semantics, verdict-shaped entry
   digest, cwd/realpath state-dir vs $HOME, unreadable path.
+
+## 2026-10-15 — spec #57 / ticket #61: post execution semantics hardening
+
+- Proposal: spec #57 (triage-mr scripted redesign), ticket #61 — post
+  hardening per Amendment R2 (challenger B-2 + Q4 + 修订 A absorption).
+- Landing: `scripts/ocr-post-labels.py` — join validation against the
+  pull state file (`--pull-file`, default `.triage/<MR>/issues.json`):
+  every discussion_id must byte-match or the run hard-fails before any
+  platform call naming the entry's no + closest real id (prefix-first
+  then fuzzy; the offending id shape is never echoed); anchor recompute
+  sha256(pull body)[:16] from the same pull file (reviewer-mid-edit
+  cannot false-reject, Q4); content dedup — reply bodies carry an
+  invisible `<!-- triage-anchor: ... -->` marker, the sweep's GET checks
+  the thread and skips the reply (manual-curl bypass covered), resolve
+  still executes for crash-recovery; reply failure blocks resolve unless
+  `--force` and counts fail (exit non-zero); per-item resolved executed
+  verbatim (Edge resolves / Q stays open per 修订 A — decision made at
+  verdict time), legacy entries keep the mode maps; docstring rewritten
+  ("stay open in both modes" removed); post is the declared exception
+  writer of posted:true, written back atomically to the --classified
+  file (stdin transport: no write-back, dedup is the net there).
+  `ocr_platform.load_pull_findings()` extracted so verdict.py and post
+  share one pull-state contract. Harness: fake_api.py method-scoped
+  routes + status-injected dict values (fail a reply while GETs
+  succeed), conftest run_post routes_file override.
+- Commit: 4f250ef (branch feat/triage-t61-post-semantics)
+- Verification: 100 pytest cases green (80 pre-existing — the two
+  remote-probe post cases gained pull files per the new contract — plus
+  20 new #61 cases: truncated/forged id with closest-id error, anchor
+  mismatch vs valid recompute, dedup zero-new-replies with resolve
+  still executing, reply-fail blocking resolve incl. --force and
+  no-resolve-Q variants, Edge-resolves/Q-open per-item, legacy mode-map
+  fallback, posted write-back, GitHub dedup/reply-fail/resolve-attempt,
+  docstring residue gate).
