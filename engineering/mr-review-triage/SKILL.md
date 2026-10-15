@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 Platform-specific scripts and reference docs for GitLab MR and GitHub PR review triage.
 
+All `scripts/` and `reference/` paths below are relative to **this SKILL.md's own directory** — resolve them against the `location` shown when the skill is injected, e.g. the installed copy at `~/.agents/skills/mr-review-triage/`. Do not search `.pi/agent/skills/` or other skill roots.
+
 ## Scripts
 
 | Script | Purpose |

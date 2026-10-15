@@ -219,12 +219,16 @@ def _sweep_notes_gitlab(base, disc_id, curl):
     (including the verdict label just posted) stay open and trip the closure
     gate. Called after a successful thread resolve so the script leaves
     nothing for a manual fallback.
+
+    Returns True iff every resolvable note is resolved after this pass —
+    also serves as the fallback resolve path for instances where the
+    discussion-level PUT fails structurally (e.g. <git-host> returns 500 on it).
     """
     status, disc, _ = curl(f"{base}/discussions/{disc_id}")
     if status != 200 or not isinstance(disc, dict):
-        print(f"[WARN] note sweep {disc_id[:12]}: fetch HTTP {status} — head resolved, notes unswept", file=sys.stderr)
-        return
-    swept = 0
+        print(f"[WARN] note sweep {disc_id[:12]}: fetch HTTP {status} — notes untouched", file=sys.stderr)
+        return False
+    swept = remaining = 0
     for note in disc.get("notes", []):
         if note.get("resolvable") and not note.get("resolved"):
             note_id = note.get("id")
@@ -236,9 +240,11 @@ def _sweep_notes_gitlab(base, disc_id, curl):
             if 200 <= st < 300:
                 swept += 1
             else:
+                remaining += 1
                 print(f"[WARN] note sweep {disc_id[:12]}/{note_id}: HTTP {st}", file=sys.stderr)
     if swept:
         print(f"[OK] swept {swept} open reply note(s) in {disc_id[:12]}", file=sys.stderr)
+    return remaining == 0
 
 
 def _post_gitlab(mr_iid, items, resolved_map=None):
@@ -287,6 +293,12 @@ def _post_gitlab(mr_iid, items, resolved_map=None):
                 ok += 1
                 label = _CLASSIFICATION_LABELS.get(cls, cls)
                 print(f"[OK] {label} resolved {disc_id[:12]}" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
+            elif _sweep_notes_gitlab(base, disc_id, curl):
+                # discussion-level PUT failed structurally (e.g. <git-host> 500s)
+                # — note-level PUT is the working resolve path there
+                ok += 1
+                label = _CLASSIFICATION_LABELS.get(cls, cls)
+                print(f"[OK] {label} resolved {disc_id[:12]} via note-level fallback" + ("" if reply_ok else " (reply failed)"), file=sys.stderr)
             else:
                 print(f"[FAIL] resolve {disc_id[:12]}: HTTP {status}" + ("" if reply_ok else " (reply also failed)"), file=sys.stderr)
                 fail += 1

@@ -122,7 +122,15 @@ text...
 
 ### Resolved 状态
 
-GitLab 将 resolved 状态存储在 discussion 的第一个 note 上（`notes[0].resolved`）。通过 `PUT /discussions/{id}` 传 `{"resolved": true}` 来 resolve。
+GitLab 将 resolved 状态存储在 discussion 的第一个 note 上（`notes[0].resolved`）。标准路径是 `PUT /discussions/{id}` 传 `{"resolved": true}`。
+
+**平台怪癖（部分内部 GitLab 实例，如 gitlab.red.example）**：discussion 级 PUT 一律返回 500，`POST /discussions/{id}/notes`（回复）返回 404——两个标准端点在该实例上结构性不可用。唯一可靠的 resolve 路径是 **note 级 PUT**：
+
+```bash
+PUT /projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes/<note_id>?resolved=true
+```
+
+`ocr-post-labels.py` 已内置 fallback：discussion 级 PUT 失败时自动逐 note resolve（含刚贴的 verdict reply note）。手动回退时先用 GET discussions 拿到 note id 列表，再对每个 `resolvable && !resolved` 的 note 执行上述 PUT。
 
 ### 分页
 
@@ -156,11 +164,15 @@ glab mr note create -R https://gitlab.red.example/<group>/<project> \
 
 ### Resolve discussion
 
+标准实例：
+
 ```bash
 glab api --hostname gitlab.red.example \
   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
 ```
+
+<git-host> 等 discussion 级 PUT 500 的实例，改用 note 级 PUT（见「Resolved 状态」节）：先 GET discussions 取 note id，再 `PUT .../discussions/<discussion_id>/notes/<note_id> -F "resolved=true"`。
 
 ## 收尾验证（closure gate）
 
@@ -178,10 +190,15 @@ python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <MR_IID>
 glab api --hostname gitlab.red.example \
   -X POST "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes" \
   -f "body=✅ 已修复（commit <hash>）：..."
-# 2) resolve
+# 2) resolve —— 标准实例用 discussion 级 PUT；<git-host> 上该端点 500，
+#    改用 note 级 PUT（先 GET discussions 拿 note id）：
 glab api --hostname gitlab.red.example \
   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
   -F "resolved=true"
+# <git-host> fallback:
+# glab api --hostname gitlab.red.example \
+#   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes/<note_id>" \
+#   -F "resolved=true"
 ```
 
 重跑 verify 直到 exit 0。
@@ -194,7 +211,8 @@ glab api --hostname gitlab.red.example \
 | 创建普通 note | `POST /projects/:id/merge_requests/:iid/notes` |
 | 回复 discussion | `POST /projects/:id/merge_requests/:iid/discussions/:discussion_id/notes` |
 | 列出 discussions | `GET /projects/:id/merge_requests/:iid/discussions` |
-| Resolve discussion | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id` |
+| Resolve discussion | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id`（<git-host>：500，改用下行） |
+| Resolve 单个 note（<git-host> 可用） | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id/notes/:note_id` |
 
 ## 环境变量
 
