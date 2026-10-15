@@ -30,6 +30,9 @@ def run_pull(*args, platform="gitlab"):
     env = os.environ.copy()
     env["PATH"] = f"{FAKE_BIN}{os.pathsep}{env['PATH']}"
     env["OCR_PLATFORM"] = platform
+    # ocr r1 F4: the GitHub fixture's bot comments are github-actions[bot]; a
+    # caller-env OCR_BOT_LOGIN would flip _is_github_reviewer and drop them.
+    env["OCR_BOT_LOGIN"] = "github-actions[bot]"
     env["FAKE_API_ROUTES"] = str(FIXTURES_DIR / platform / "routes.json")
     if platform == "gitlab":
         env["CI_PROJECT_ID"] = "22412"
