@@ -107,3 +107,27 @@ internal hosts/projects/credentials; tickets reference public GitHub issues.
   alias + unknown/missing hard-fail with empty API journal, priority enum
   accept/reject, triage-mode resolve semantics, verdict-shaped entry
   digest, cwd/realpath state-dir vs $HOME, unreadable path.
+
+## 2026-10-15 — spec #57 / ticket #64: verify display de-truncation + pipeline timing gate
+
+- Proposal: spec #57 Amendment R2 修订 B + 展示层纪律 — verify human output
+  drops the `discussion_id[:12]` truncation (P-005 script-side self-bite);
+  pipeline completion check moves into the scripts (P-002: no agent
+  ritual checks).
+- Landing: `scripts/ocr-verify-resolved.py` — human thread labels are
+  `no=<ordinal>` (mapped from the pull state file, default
+  `.triage/<MR>/issues.json`, override `--pull-file`) or `anchor=<sha256(body)[:8]>`
+  for threads outside the pull file (OCR summaries / no pull run); corrupt
+  pull file = WARN + anchor degradation, never blocks the gate; `[N/M notes
+  open]` annotation kept; `--json` keeps full ids (internal `_body` field
+  projected out). `run_pipeline_gate()` in `ocr_platform.py` +
+  `head_pipeline_status()` (ocr_gitlab.py) / `check_runs_status()`
+  (ocr_github.py): in-flight CI → exit 2 on pull AND verify,
+  `--skip-pipeline-check` escape hatch; terminal/unknown/no-CI → stderr
+  note + proceed (thread check still fails closed). SKILL.md gate wording
+  itself is ticket #65 scope.
+- Commit: de91927 (branch feat/triage-t64-verify-gate)
+- Verification: 102 pytest cases green (80 pre-existing + 22 new
+  CLI-level: ordinal/anchor display, annotation, corrupt/missing pull
+  file, --json ids, gate running/skip/terminal/no-CI × gitlab+github ×
+  pull+verify).
