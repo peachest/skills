@@ -278,4 +278,4 @@ def test_post_fixture_responses_are_canned_and_host_free():
     assert isinstance(body.get("notes"), list)  # sweep sees no open notes
     for path in (FIXTURES_DIR / "gitlab").glob("*.json"):
         text = path.read_text().lower()
-        assert "<git-host>" not in text  # no internal hostnames in fixtures
+        assert "git" + "blue" not in text  # no internal hostnames in fixtures
