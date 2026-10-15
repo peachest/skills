@@ -5,9 +5,26 @@ is NOT sufficient — OCR bot posts summary discussions that the pull script
 intentionally filters out, yet they are `resolvable=True` threads on the
 platform. A triage run is done only when this script exits 0.
 
+Human output never shows platform ids — full or truncated (spec #57 display
+discipline; the old `discussion_id[:12]` form caused the P-005 truncation
+family). Each thread is labeled with its pull-file ordinal (`no=<N>`, mapped
+from the pull state file via --pull-file, default
+.triage/<MR>/issues.json) or, when the thread is not in the pull file (OCR
+summary threads, no pull run), a short content anchor
+(`anchor=<sha256(first note body)[:8]>`). The per-thread
+`[N/M notes open]` annotation is load-bearing and kept.
+
+Timing gate (spec #57 Amendment R2 修订 B): head-CI status (GitLab
+head_pipeline / GitHub check runs) is queried first; while it is in flight
+the script exits 2 — pass --skip-pipeline-check to override. No CI on the
+head ref: stderr note and the normal thread check proceeds.
+
 Exit codes:
     0  — every resolvable thread is resolved (MR is closed-for-review)
-    1  — one or more resolvable threads remain open (list printed to stderr)
+    1  — one or more resolvable threads remain open (list printed to stderr),
+         or a backend error (fail closed)
+    2  — CI pipeline/check runs still in flight (--skip-pipeline-check
+         overrides), or usage error
 
 Platform is auto-detected from git remote:
   - github.com    → GitHub PR review threads (GraphQL)
@@ -15,17 +32,30 @@ Platform is auto-detected from git remote:
 
 Usage:
     python3 ocr-verify-resolved.py <MR_OR_PR_ID>
+    python3 ocr-verify-resolved.py <MR_OR_PR_ID> [--pull-file <path>] \
+        [--skip-pipeline-check]
     python3 ocr-verify-resolved.py <MR_OR_PR_ID> --json   # machine-readable
 
 The --json output is an array of unresolved threads:
     [{"discussion_id", "author", "resolvable", "resolved", "body_preview",
       "is_ocr_summary"}]
+
+--json keeps the full platform ids — script chains rely on them; the
+ordinal/anchor display discipline applies to human output only.
 """
 
+import hashlib
 import json
+import os
 import sys
 
-from ocr_platform import detect_platform
+from ocr_platform import (detect_platform, run_auth_probe, run_pipeline_gate,
+                          triage_state_dir)
+
+# Documented --json contract; internal fields (_body) are projected away so
+# script chains see exactly the shape they always saw.
+_JSON_FIELDS = ("discussion_id", "author", "resolvable", "resolved",
+                "body_preview", "is_ocr_summary")
 
 # A discussion counts as an "OCR summary" (bot status notice, not an inline
 # finding) when its first note body starts with the OCR run-report emoji.
@@ -106,6 +136,7 @@ def _unresolved_gitlab(mr_iid):
                 "resolved": False,
                 "body_preview": _preview(note_body) + _open_note_count(resolvable_notes),
                 "is_ocr_summary": _is_ocr_summary(note_body),
+                "_body": note_body,  # display-only; projected out of --json
             })
 
         if len(body) < 100:
@@ -177,6 +208,7 @@ def _unresolved_github(pr_number):
             "resolved": False,
             "body_preview": _preview(note_body),
             "is_ocr_summary": _is_ocr_summary(note_body),
+            "_body": note_body,  # display-only; projected out of --json
         })
 
     return unresolved
@@ -185,7 +217,45 @@ def _unresolved_github(pr_number):
 # ── Main ──
 
 
-def _print_human(unresolved):
+def _load_no_map(pull_file, explicit):
+    """Map discussion_id → pull-file ordinal for the human thread labels.
+
+    Missing file → {} (verify stays meaningful without a pull run); an
+    explicitly requested missing file gets a note (typo guard); corrupt
+    content → WARN and {} — display-only degradation, never blocks the gate.
+    """
+    if not pull_file or not os.path.exists(pull_file):
+        if explicit:
+            print(f"note: --pull-file not found: {pull_file} — threads "
+                  f"labeled with content anchors", file=sys.stderr)
+        return {}
+    try:
+        with open(pull_file, encoding="utf-8") as fh:
+            findings = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"WARN: pull state file {pull_file} unreadable ({exc}) — "
+              f"threads labeled with content anchors", file=sys.stderr)
+        return {}
+    if not isinstance(findings, list):
+        print(f"WARN: pull state file {pull_file} is not a findings array — "
+              f"threads labeled with content anchors", file=sys.stderr)
+        return {}
+    return {f["discussion_id"]: f["no"] for f in findings
+            if isinstance(f, dict) and isinstance(f.get("discussion_id"), str)
+            and isinstance(f.get("no"), int)}
+
+
+def _thread_label(discussion_id, body, no_map):
+    """Human-output thread handle: pull-file ordinal when mapped, else a
+    short content anchor — never a platform-id shape (full or truncated)."""
+    no = no_map.get(discussion_id)
+    if no is not None:
+        return f"no={no}"
+    return "anchor=" + hashlib.sha256((body or "").encode("utf-8")).hexdigest()[:8]
+
+
+def _print_human(unresolved, no_map=None):
+    no_map = no_map or {}
     if not unresolved:
         print("✅ All resolvable review threads resolved (0 open).", file=sys.stderr)
         return
@@ -199,8 +269,9 @@ def _print_human(unresolved):
     )
     for u in unresolved:
         tag = " [OCR summary]" if u["is_ocr_summary"] else ""
+        label = _thread_label(u["discussion_id"], u.get("_body", ""), no_map)
         print(
-            f"  • {u['discussion_id'][:12]} ({u['author']}){tag}: {u['body_preview']}",
+            f"  • {label} ({u['author']}){tag}: {u['body_preview']}",
             file=sys.stderr,
         )
     print(
@@ -212,15 +283,29 @@ def _print_human(unresolved):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 ocr-verify-resolved.py <MR_OR_PR_ID> [--json]", file=sys.stderr)
+        print("Usage: python3 ocr-verify-resolved.py <MR_OR_PR_ID> [--json] "
+              "[--pull-file <path>] [--skip-pipeline-check]", file=sys.stderr)
         sys.exit(2)
 
     mr_or_pr_id = sys.argv[1]
-    as_json = "--json" in sys.argv[2:]
+    rest = sys.argv[2:]
+    as_json = "--json" in rest
+    skip_pipeline = "--skip-pipeline-check" in rest
+    explicit_pull_file = "--pull-file" in rest
+    pull_file = None
+    if explicit_pull_file:
+        i = rest.index("--pull-file")
+        if i + 1 >= len(rest):
+            print("ERROR: --pull-file requires a file path argument", file=sys.stderr)
+            sys.exit(2)
+        pull_file = rest[i + 1]
 
     platform = detect_platform()
     if not as_json:
         print(f"Detected platform: {platform}", file=sys.stderr)
+
+    run_auth_probe(platform)
+    run_pipeline_gate(platform, mr_or_pr_id, skip=skip_pipeline)
 
     if platform == "github":
         unresolved = _unresolved_github(mr_or_pr_id)
@@ -232,10 +317,13 @@ def main():
         sys.exit(1)
 
     if as_json:
-        json.dump(unresolved, sys.stdout, indent=2, ensure_ascii=False)
+        projected = [{k: u[k] for k in _JSON_FIELDS} for u in unresolved]
+        json.dump(projected, sys.stdout, indent=2, ensure_ascii=False)
         print(file=sys.stdout)
     else:
-        _print_human(unresolved)
+        pull_file = pull_file or os.path.join(
+            triage_state_dir(mr_or_pr_id), "issues.json")
+        _print_human(unresolved, _load_no_map(pull_file, explicit_pull_file))
 
     sys.exit(0 if not unresolved else 1)
 

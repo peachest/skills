@@ -31,8 +31,10 @@ gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --json number --jq '.[0].
 脚本自动使用 GitHub 后端：
 
 ```bash
-python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <PR_NUMBER> > /tmp/issues.json
+python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <PR_NUMBER> > .triage/<PR_NUMBER>/issues.json
 ```
+
+状态文件必须落在 `.triage/<PR_NUMBER>/issues.json`（verdict/post/verify 的 join 基底），不入 /tmp；CI 未完结时脚本 exit 2（pipeline 门）。流程编排见 triage-mr SKILL.md。
 
 ### GitHub review comment 数据结构
 
@@ -66,12 +68,13 @@ GitHub review comment 与 GitLab discussion 的关键差异：
 
 **线程根评论**：`in_reply_to_id == null` 的评论是线程根。有 `in_reply_to_id` 的是回复。
 
-脚本将线程根评论映射为统一的 `{discussion_id, file, line, body}` 格式：
+脚本将线程根评论映射为统一的 `{discussion_id, file, line, body, no}` 格式：
 
 - `discussion_id` → review comment `id`（字符串）
 - `file` → `path`
 - `line` → `line`（fallback `original_line`）
 - `body` → `body`
+- `no` → 单轮 pull 文件内的去重后 API 首现序（1..N），verdict 落盘当场消费的临时指针；跨轮身份仍是 `discussion_id`
 
 ### 过滤规则
 
@@ -103,21 +106,15 @@ Bot 识别：配置的 OCR bot（`OCR_BOT_LOGIN`，默认 `github-actions[bot]`�
 脚本自动使用 GitHub 后端：
 
 ```bash
-cat .triage/<PR_NUMBER>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <PR_NUMBER> --mode triage
+python3 <SKILL_DIR>/scripts/ocr-post-labels.py <PR_NUMBER> --mode triage \
+  --classified .triage/<PR_NUMBER>/classified.json
 ```
 
-`--mode triage` 让 TP（真阳性）也 resolve——fix 已在本 run 落地并验证。Edge/Question 保持 open。
+`--mode triage` 的模式映射只兜底没有 per-item `resolved` 字段的旧条目；现行流程下每条是否 resolve 由 `verdict.py` 在 verdict 时刻写入 per-item `resolved`，post 只执行不重判。join + anchor 校验、内容判重、reply 失败不 resolve、OCR summary 线程扫尾（⚠️ error 只回帖永不 resolve，gate 永红为有意设计）与 posted 回写均在脚本内完成——无手动回退路径，脚本出错 = 修脚本或上报。
 
-### 回复 review comment
+### 回复与 resolve 的 ID 空间
 
-```bash
-gh api -X POST repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments/<comment_id>/replies \
-  -f body="..."
-```
-
-### Resolve conversation
-
-GitHub 的 resolve 操作需要通过 **GraphQL API** 完成。REST API 不直接支持 resolve。
+REST 回复目标是 comment databaseId，GraphQL resolve 目标是 thread node id——两个不可互换的 ID 空间。脚本在同一次 reviewThreads 读取内解析两者：任何 node id 都不进入 REST 路径，`ocr-verify-resolved.py --json` 输出的 thread node id 也不被消费。GraphQL resolve 的机制：
 
 ```bash
 # 1. 获取 review thread node_id（需要 pull_request_review_id + comment_id）
@@ -142,44 +139,19 @@ mutation($threadId: ID!) {
 }' -F threadId="<THREAD_NODE_ID>"
 ```
 
-脚本内部处理 GraphQL resolve 逻辑。如脚本不支持 resolve，则仅贴标签，不 resolve。
+脚本内部完成上述 GraphQL resolve（含查不到 thread 时不再静默返回成功的修复）。
 
 ## 收尾验证（closure gate）
 
-post-labels 返回 ok 不等于 triage 完成。OCR summary/LGTM/error discussion 不在 classified.json 里，post-labels 不会 resolve 它们，但它们仍是 review thread。必须跑 closure gate：
+post-labels 返回 ok 不等于 triage 完成。OCR summary/LGTM/error 线程不在 classified.json 里，由 post 的扫尾逻辑处理（见上节）。必须跑 closure gate：
 
 ```bash
 python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <PR_NUMBER>
-# exit 0 = 全部 resolved；exit 1 = 有残留（列在 stderr）
+# exit 0 = 全部 resolved（且 head CI 已完结）；exit 1 = 有残留或后端错误（fail closed，列在 stderr）；
+# exit 2 = check runs 未完结（--skip-pipeline-check 覆盖）或用法错误
 ```
 
-残留线程手动回复 + resolve（GraphQL）：
-
-```bash
-# 1) 回复
-gh api -X POST repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments/<comment_id>/replies \
-  -f body="✅ 已修复（commit <hash>）：..."
-# 2) resolve thread（需先查 review thread node_id，见上）
-gh api graphql -f query='
-mutation($threadId: ID!) {
-  resolveReviewThread(input: {threadId: $threadId}) {
-    thread { isResolved }
-  }
-}' -F threadId="<THREAD_NODE_ID>"
-```
-
-重跑 verify 直到 exit 0。
-
-### 回退命令
-
-脚本失败时逐条回退：
-
-```bash
-gh pr comment <PR_NUMBER> --body "..."  # 普通 PR comment
-# 或回复 review comment thread：
-gh api -X POST repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments/<comment_id>/replies \
-  -f body="..."
-```
+人读输出以序号/内容锚标注线程、不出现平台 id；残留 ⚠️ error 线程使 gate 保持红——有意的 human-in-loop 设计，上报用户裁决，不得自行 resolve 凑绿。
 
 ## API 端点参考
 

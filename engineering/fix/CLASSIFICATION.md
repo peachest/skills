@@ -4,6 +4,8 @@ The verdict definitions and decision tree for `/fix`. Consulted during Step 2 (r
 
 ## Verdicts
 
+Verdict values stored in classified.json (schema 2): `TP` | `FP` | `Edge` | `OOS` | `Q` — Question is stored as `Q`; the post script accepts `Question` as an input alias.
+
 ### ✅ TP — True Positive
 
 A real defect in the code introduced or touched by this change. The finding accurately describes a problem that should be fixed.
@@ -40,7 +42,7 @@ Sub-types:
 
 - **Action**: Optional fix (user chooses).
 - **Required fields**: `reason`.
-- **`resolved`**: false by default.
+- **`resolved`**: false by default. (Triage mode via `verdict.py` defaults Edge to `true` at verdict time — the close-after-verification decision is made per item there; see `/skill:triage-mr`.)
 
 ### 🔵 OOS — Out of Scope
 
