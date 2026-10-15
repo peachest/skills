@@ -153,7 +153,8 @@ def test_pull_file_override_param(workdir, tmp_path, api_log):
     alt = tmp_path / "elsewhere" / "issues.json"
     alt.parent.mkdir()
     alt.write_text(json.dumps([finding(1, DISC_A, BODY_A)]), encoding="utf-8")
-    entries = [{"discussion_id": DISC_A, "classification": "FP", "reason": "r", "resolved": True}]
+    entries = [{"discussion_id": DISC_A, "anchor": anchor_of(BODY_A),
+                "classification": "FP", "reason": "r", "resolved": True}]
     path = write_classified(workdir, entries)
     proc = run_post(MR, "--pull-file", str(alt), "--classified", str(path), api_log=api_log)
     assert proc.returncode == 0, proc.stderr
