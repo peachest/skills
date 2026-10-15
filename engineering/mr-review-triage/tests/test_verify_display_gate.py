@@ -293,6 +293,47 @@ def test_verify_github_check_runs_running_exits_2(tmp_path):
     assert "--skip-pipeline-check" in proc.stderr
 
 
+@pytest.mark.parametrize("status", ["waiting", "pending", "requested"])
+def test_verify_github_check_run_nonterminal_statuses_in_flight(status, tmp_path):
+    """M4: waiting/pending/requested check runs are nonterminal — they used to
+    fall through to completed, passing the timing gate while CI is unfinished
+    (e.g. a job waiting for environment approval)."""
+    routes = github_routes(tmp_path, {"total_count": 1, "check_runs": [
+        {"name": "gate", "status": status, "conclusion": None}]})
+    proc = run_verify("9", platform="github", routes=routes)
+    assert proc.returncode == 2, proc.stderr
+    assert status in proc.stderr
+
+
+def test_verify_github_check_runs_paginated_before_completed(tmp_path):
+    """M3: the completion gate aggregates every check-run page — a head with
+    >100 checks used to read only the first page and declare completed while
+    an active check sat on page 2."""
+    completed = [{"name": f"check-{i}", "status": "completed",
+                  "conclusion": "success"} for i in range(100)]
+    page1 = {"total_count": 101, "check_runs": completed}
+    page2 = {"total_count": 101, "check_runs": [
+        {"name": "slow", "status": "queued", "conclusion": None}]}
+    (tmp_path / "pr.json").write_text(json.dumps({
+        "node_id": "PR_node_fixture_1", "title": "triage fixture MR",
+        "state": "open",
+        "html_url": "https://github.com/owner/repo/pull/9",
+        "head": {"sha": GITHUB_HEAD_SHA}}))
+    (tmp_path / "page1.json").write_text(json.dumps(page1))
+    (tmp_path / "page2.json").write_text(json.dumps(page2))
+    routes = tmp_path / "routes.json"
+    # page-2 pattern must precede the generic /check-runs (first match wins)
+    routes.write_text(json.dumps({
+        "/comments": str(FIXTURES_DIR / "github" / "comments.json"),
+        "check-runs?per_page=100&page=2": str(tmp_path / "page2.json"),
+        "/check-runs": str(tmp_path / "page1.json"),
+        "/pulls/9": str(tmp_path / "pr.json"),
+    }))
+    proc = run_verify("9", platform="github", routes=str(routes))
+    assert proc.returncode == 2, proc.stderr
+    assert "queued" in proc.stderr
+
+
 # ── Pipeline timing gate (pull) ──
 
 

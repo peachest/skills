@@ -129,9 +129,11 @@ def load_pull_findings(pull_path):
 # CI statuses meaning "still in flight" — union of GitLab pipeline and
 # GitHub check-run states. Terminal states (success, failed, skipped,
 # canceled, completed, ...) and unknown values let the gate proceed.
+# waiting/pending/requested: nonterminal GitHub check-run statuses (M4) —
+# e.g. a job waiting for environment approval must not pass as completed.
 _IN_FLIGHT_STATUSES = {
     "created", "waiting_for_resource", "preparing", "pending",
-    "running", "queued", "in_progress",
+    "running", "queued", "in_progress", "waiting", "requested",
 }
 
 
