@@ -267,6 +267,25 @@ def _sleep_for_retry(attempt, headers):
     time.sleep(delay)
 
 
+def head_pipeline_status(mr_iid):
+    """Head-ref CI pipeline status for an MR ('' when none or undeterminable).
+
+    Spec #57 修订 B timing gate. '' covers both "no CI configured"
+    (head_pipeline is null) and a failed fetch — the gate treats both as
+    proceed-with-note, since the thread-state check still fails closed.
+    """
+    project_id = get_project_id()
+    if not project_id:
+        return ""
+    status, body, _ = curl(f"/projects/{project_id}/merge_requests/{mr_iid}")
+    if status != 200 or not isinstance(body, dict):
+        return ""
+    pipeline = body.get("head_pipeline")
+    if not isinstance(pipeline, dict):
+        return ""
+    return str(pipeline.get("status", "")).strip().lower()
+
+
 def curl(endpoint, *, method="GET", data=None, retries=2):
     """Make a GitLab API request via subprocess curl with retry.
 
