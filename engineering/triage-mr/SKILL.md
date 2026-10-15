@@ -61,7 +61,7 @@ A run is **not done** when post-labels returns ok. It is done when the closure g
 python3 <SCRIPTS_DIR>/ocr-pull-discussions.py <MR_OR_PR_ID> > /tmp/issues.json 2>/tmp/pull-source.log
 ```
 
-The script writes JSON to stdout and progress info to stderr — including the source MR/PR title, URL, and state, so the user can verify the pull came from the right MR. Keep them separate: **do not use `2>&1`**, which would corrupt the JSON output with progress text.
+The script writes JSON to stdout and progress info to stderr — including the source MR/PR title, URL, and state, so the user can verify the pull came from the right MR. Keep them separate: **do not use `2>&1`**, which would corrupt the JSON output with progress text. When the scripted verdict flow is used, pull output must be staged at `.triage/<MR_OR_PR_ID>/issues.json` (not /tmp) — that is the path `verdict.py` reads.
 
 MR/PR ID not given? Derive it from the branch name — see the platform reference doc.
 
