@@ -200,13 +200,18 @@ def _preflight(entries, filename):
             sys.exit(1)
         entry["classification"] = cls
         if cls == "TP":
-            priority = entry.get("priority")
-            if priority is not None and priority not in _PRIORITY_LABELS:
-                print(
-                    f"ERROR: {filename}: entry {i}: priority must be one of high|medium|low, got {priority!r}",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+            # ocr r1 F3: omitted priority defaults to medium in _validate_item;
+            # a *supplied* priority must be a valid enum string — explicit null
+            # and non-string values (incl. collections, which raise TypeError
+            # at an `in` check) hard-fail here, before any platform call.
+            if "priority" in entry:
+                priority = entry["priority"]
+                if not isinstance(priority, str) or priority not in _PRIORITY_LABELS:
+                    print(
+                        f"ERROR: {filename}: entry {i}: priority must be one of high|medium|low, got {priority!r}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
     return entries
 
 
