@@ -201,6 +201,7 @@ def test_ocr_remote_override_pull(tmp_path):
     assert "Detected platform: gitlab" in r.stderr
     issues = json.loads(r.stdout)
     assert issues == [{
+        "no": 1,
         "discussion_id": "abc123def", "file": "a.go", "line": 3,
         "body": "use fmt.Errorf instead of errors.New", "author": "ocr-bot",
     }]
@@ -370,6 +371,7 @@ def test_github_happy_path_regression(tmp_path):
     assert r.returncode == 0, r.stderr
     issues = json.loads(r.stdout)
     assert issues == [{
+        "no": 1,
         "discussion_id": "99", "file": "src/a.go", "line": 5,
         "body": "off-by-one in loop bound", "author": "human-1",
     }]
