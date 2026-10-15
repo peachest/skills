@@ -11,8 +11,10 @@ norm_url() {  # any remote URL form → https://host/path (port dropped, .git st
   local u=$1 rest host path
   u=${u%.git}
   case "$u" in
-    ssh://git@*)
-      rest=${u#ssh://git@}; host=${rest%%/*}; host=${host%%:*}; path=${rest#*/}
+    ssh://*)  # git@host:path and userless ssh://host/path (SSH config User git)
+      rest=${u#ssh://}
+      rest=${rest##*@}
+      host=${rest%%/*}; host=${host%%:*}; path=${rest#*/}
       echo "https://$host/$path" ;;
     git@*)  # scp form git@host:group/project
       rest=${u#git@}; host=${rest%%:*}; path=${rest#*:}
