@@ -5,6 +5,7 @@ fake curl/gh/glab executables + git ls-remote shim on PATH. Synthetic hostnames
 only (gitlab.blue.example / github.com) — no internal names (pre-push sanitize).
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -231,8 +232,9 @@ def test_ocr_remote_override_post(tmp_path):
     ]
     env, log = gitlab_env(tmp_path, extra_routes=extra)
     item = json.dumps({"schema": 2, "entries": [
-        {"discussion_id": "abc123def", "classification": "FP",
-         "reason": "not a real issue"}]})
+        {"discussion_id": "abc123def",
+         "anchor": hashlib.sha256(b"use fmt.Errorf instead of errors.New").hexdigest()[:16],
+         "classification": "FP", "reason": "not a real issue"}]})
     r = run_cli(repo, "ocr-post-labels.py", env, "1", stdin=item)
     assert r.returncode == 0, r.stderr
     assert "Detected platform: gitlab" in r.stderr
@@ -339,7 +341,9 @@ def test_probe_failure_post_404(tmp_path):
     env.update({"OCR_REMOTE": "review", "CI_PROJECT_ID": "42",
                 "GITLAB__PERSONAL_ACCESS_TOKEN": "test-token"})
     item = json.dumps({"schema": 2, "entries": [
-        {"discussion_id": "abc123def", "classification": "FP", "reason": "x"}]})
+        {"discussion_id": "abc123def",
+         "anchor": hashlib.sha256(b"use fmt.Errorf instead of errors.New").hexdigest()[:16],
+         "classification": "FP", "reason": "x"}]})
     r = run_cli(repo, "ocr-post-labels.py", env, "1", stdin=item)
     assert r.returncode == 2, r.stderr
     assert "OCR_REMOTE" in r.stderr

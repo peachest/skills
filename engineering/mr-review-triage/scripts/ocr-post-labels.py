@@ -447,15 +447,23 @@ def _validate_against_pull(entries, pull_path):
                   file=sys.stderr)
             sys.exit(1)
         anchor = entry.get("anchor")
-        if isinstance(anchor, str) and anchor:
-            candidates = by_id[disc_id]
-            if not any(hashlib.sha256((f.get("body") or "").encode("utf-8")).hexdigest()[:16] == anchor
-                       for f in candidates):
-                print(f"ERROR: {label}: anchor mismatch — the classified entry does not "
-                      f"match any pulled body for this discussion (stale round or hand-edited "
-                      f"state?) — re-run verdict.py against the current pull file",
-                      file=sys.stderr)
-                sys.exit(1)
+        # M6: a missing/empty/non-string anchor bypassed validation entirely —
+        # the reply would carry no dedup marker and retries would duplicate it.
+        # The schema-2 producer (verdict.py) always sets one; anything else is
+        # a hand-edited state → hard-fail before platform traffic.
+        if not isinstance(anchor, str) or not anchor.strip():
+            print(f"ERROR: {label}: missing or invalid anchor — schema 2 entries carry "
+                  f"sha256(pull body)[:16] from verdict.py; re-run verdict.py for this finding",
+                  file=sys.stderr)
+            sys.exit(1)
+        candidates = by_id[disc_id]
+        if not any(hashlib.sha256((f.get("body") or "").encode("utf-8")).hexdigest()[:16] == anchor
+                   for f in candidates):
+            print(f"ERROR: {label}: anchor mismatch — the classified entry does not "
+                  f"match any pulled body for this discussion (stale round or hand-edited "
+                  f"state?) — re-run verdict.py against the current pull file",
+                  file=sys.stderr)
+            sys.exit(1)
 
 
 def _write_back_posted(classified_path, entries):

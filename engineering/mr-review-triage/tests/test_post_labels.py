@@ -8,6 +8,7 @@ and the cwd/realpath .triage state-dir helper. Runs the real script as a
 subprocess against the offline fake-curl stub; ids are synthetic.
 """
 
+import hashlib
 import json
 import os
 
@@ -20,11 +21,17 @@ DISC_Q = "a1b2c3d4e5f60718"
 DISC_TP = "b2c3d4e5f6071819"
 
 
+def anchor_of(body):
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
 def schema2_entries():
     return [
-        {"discussion_id": DISC_Q, "classification": "Q", "reason": "needs team input"},
+        {"discussion_id": DISC_Q, "anchor": anchor_of("needs team input"),
+         "classification": "Q", "reason": "needs team input"},
         {
             "discussion_id": DISC_TP,
+            "anchor": anchor_of("real defect"),
             "classification": "TP",
             "reason": "real defect",
             "fix_plan": "add a guard clause",
@@ -194,10 +201,26 @@ def test_unreadable_classified_path_hard_fails(tmp_path, api_log):
 
 # ── Classification vocabulary ──
 
+@pytest.mark.parametrize("bad_anchor", [None, "", 123])
+def test_missing_or_invalid_anchor_hard_fails(bad_anchor, api_log):
+    """M6: the anchor is the proof the entry matches the pulled body — a valid
+    nonempty anchor is required for every unposted entry. Missing/empty/non-
+    string used to bypass validation entirely; without an anchor the reply
+    also carries no dedup marker, so retries duplicate it."""
+    entry = {"discussion_id": DISC_Q, "classification": "FP", "reason": "r"}
+    if bad_anchor is not None:
+        entry["anchor"] = bad_anchor
+    proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}),
+                    api_log=api_log)
+    assert proc.returncode == 1
+    assert "anchor" in proc.stderr
+    assert_no_platform_calls(proc, api_log)
+
 
 @pytest.mark.parametrize("cls", ["Q", "Question"])
 def test_q_and_question_both_accepted(cls, api_log):
-    entry = {"discussion_id": DISC_Q, "classification": cls, "reason": "unsure"}
+    entry = {"discussion_id": DISC_Q, "anchor": anchor_of("needs team input"),
+             "classification": cls, "reason": "unsure"}
     proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}), api_log=api_log)
     assert proc.returncode == 0, proc.stderr  # a legal Q must not KeyError in label/resolved lookup
     calls = read_api_log(api_log)
@@ -232,7 +255,8 @@ def test_missing_classification_hard_fails(api_log):
 
 @pytest.mark.parametrize("priority,mark", [("high", "🚨 高"), ("medium", "⚠️ 中"), ("low", "🟢 低")])
 def test_priority_string_enum_accepted(priority, mark, api_log):
-    entry = {"discussion_id": DISC_TP, "classification": "TP", "reason": "r", "fix_plan": "f", "priority": priority}
+    entry = {"discussion_id": DISC_TP, "anchor": anchor_of("real defect"),
+             "classification": "TP", "reason": "r", "fix_plan": "f", "priority": priority}
     proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}), api_log=api_log)
     assert proc.returncode == 0, proc.stderr
     assert mark in post_body(read_api_log(api_log), DISC_TP)
@@ -261,7 +285,8 @@ def test_null_or_collection_priority_hard_fails(priority, api_log):
 
 
 def test_missing_priority_on_tp_defaults_medium(api_log):
-    entry = {"discussion_id": DISC_TP, "classification": "TP", "reason": "r", "fix_plan": "f"}
+    entry = {"discussion_id": DISC_TP, "anchor": anchor_of("real defect"),
+             "classification": "TP", "reason": "r", "fix_plan": "f"}
     proc = run_post("!123", stdin_text=json.dumps({"schema": 2, "entries": [entry]}), api_log=api_log)
     assert proc.returncode == 0, proc.stderr
     assert "⚠️ 中" in post_body(read_api_log(api_log), DISC_TP)
