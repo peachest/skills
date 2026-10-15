@@ -11,8 +11,10 @@ norm_url() {  # any remote URL form → https://host/path (port dropped, .git st
   local u=$1 rest host path
   u=${u%.git}
   case "$u" in
-    ssh://git@*)
-      rest=${u#ssh://git@}; host=${rest%%/*}; host=${host%%:*}; path=${rest#*/}
+    ssh://*)  # git@host:path and userless ssh://host/path (SSH config User git)
+      rest=${u#ssh://}
+      rest=${rest##*@}
+      host=${rest%%/*}; host=${host%%:*}; path=${rest#*/}
       echo "https://$host/$path" ;;
     git@*)  # scp form git@host:group/project
       rest=${u#git@}; host=${rest%%:*}; path=${rest#*:}
@@ -28,7 +30,16 @@ git remote -v | awk '!seen[$2]++ {print $1, $2}'
 if [ "$(git remote | wc -l)" -gt 1 ]; then
   echo "MULTI_REMOTE=true —— 必须 ask 用户选择，上下文再明确也不自判"
 fi
-primary=$(git remote | head -1)   # 多 remote 时仅作信息块基准，最终由用户定
+primary=${OCR_REMOTE:-}   # OCR_REMOTE 覆盖 remote 推导（fork 仓防呆）；显式 ask 选择仍优先于它
+if [ -n "$primary" ]; then
+  if ! git remote get-url "$primary" >/dev/null 2>&1; then
+    echo "OCR_REMOTE='$primary' 不是本仓的 git remote —— 可用 remote:" >&2
+    git remote >&2
+    exit 2
+  fi
+else
+  primary=$(git remote | head -1)   # 多 remote 时仅作信息块基准，最终由用户定
+fi
 url=$(git remote get-url "$primary")
 web=$(norm_url "$url")
 case "$url" in *github.com*) platform=gh ;; *) platform=glab ;; esac
@@ -75,7 +86,11 @@ esac
 echo "== EXISTING_MR =="
 case $platform in
   gh)
-    gh pr list --head "$branch" --json number,title,isDraft 2>&1 | head -20 ;;
+    # ocr r1 F2 + r2 M1: gh resolves the repo from its own remote rules — on a
+    # fork checkout that can be the wrong repo, and OWNER/REPO alone still
+    # honors GH_HOST. Pass host/owner/repo so both are pinned to the selected
+    # remote (path of the normalized web URL, .git already stripped).
+    gh pr list --repo "$host/$path" --head "$branch" --json number,title,isDraft 2>&1 | head -20 ;;
   glab)
     if out=$(glab api --hostname "$host" "projects/$enc/merge_requests?source_branch=$branch&state=opened" 2>&1); then
       echo "$out" | python3 -c "import json,sys

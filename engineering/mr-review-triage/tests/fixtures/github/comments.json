@@ -1,0 +1,26 @@
+[
+  {
+    "id": 9876543210001,
+    "in_reply_to_id": null,
+    "path": "src/app.py",
+    "line": 42,
+    "body": "Use a named constant for the retry limit instead of a literal",
+    "user": {"login": "github-actions[bot]", "type": "Bot"}
+  },
+  {
+    "id": 9876543210002,
+    "in_reply_to_id": null,
+    "path": "src/app.py",
+    "line": 42,
+    "body": "Use a named constant for the retry limit instead of a literal",
+    "user": {"login": "github-actions[bot]", "type": "Bot"}
+  },
+  {
+    "id": 9876543210003,
+    "in_reply_to_id": null,
+    "path": "src/util.py",
+    "line": 7,
+    "body": "Consider splitting this module before the next feature lands",
+    "user": {"login": "human-reviewer", "type": ""}
+  }
+]

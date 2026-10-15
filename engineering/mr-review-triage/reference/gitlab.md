@@ -53,8 +53,12 @@ glab mr list -R https://gitlab.red.example/<group>/<project> \
 脚本自动使用 GitLab 后端：
 
 ```bash
-python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
+python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > .triage/<MR_IID>/issues.json
 ```
+
+输出为统一的 `{discussion_id, file, line, body, no}` finding 数组。`no` 是单轮 pull 文件内的去重后 API 首现序（1..N），verdict 落盘当场消费的临时指针；跨轮身份仍是 `discussion_id`（精确字节比对）。状态文件必须落在 `.triage/<MR_IID>/issues.json`（verdict/post/verify 的 join 基底），不入 /tmp；CI 未完结时脚本 exit 2（pipeline 门，`--skip-pipeline-check` 显式逃生）。流程编排见 triage-mr SKILL.md。
+
+新轮检测：重拉时加 `--digest --against .triage/<MR_IID>/classified.json`，stdout 只输出 classified 文件中不存在的新 findings（保留原 `no`），人读摘要走 stderr（零长 ID 形态）。`--against` 文件缺失视为首轮（全部为新增），不报错。
 
 ### GitLab discussion 数据结构
 
@@ -130,7 +134,7 @@ GitLab 将 resolved 状态存储在 discussion 的第一个 note 上（`notes[0]
 PUT /projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes/<note_id>?resolved=true
 ```
 
-`ocr-post-labels.py` 已内置 fallback：discussion 级 PUT 失败时自动逐 note resolve（含刚贴的 verdict reply note）。手动回退时先用 GET discussions 拿到 note id 列表，再对每个 `resolvable && !resolved` 的 note 执行上述 PUT。
+`ocr-post-labels.py` 已内置 fallback：discussion 级 PUT 失败时自动逐 note resolve（含刚贴的 verdict reply note）——无需手动干预。
 
 ### 分页
 
@@ -146,62 +150,33 @@ glab api --hostname gitlab.red.example \
 脚本自动使用 GitLab 后端：
 
 ```bash
-cat .triage/<MR_ID>/classified.json | python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_IID> --mode triage
+python3 <SKILL_DIR>/scripts/ocr-post-labels.py <MR_IID> --mode triage \
+  --classified .triage/<MR_IID>/classified.json
 ```
 
-`--mode triage` 让 TP（真阳性）也 resolve——fix 已在本 run 落地并验证，不需要「stay open for tracking」。Edge/Question 保持 open。
+`--mode triage` 的模式映射只兜底没有 per-item `resolved` 字段的旧条目；现行流程下每条是否 resolve 由 `verdict.py` 在 verdict 时刻写入 per-item `resolved`（Edge 默认 resolve、Q 默认留开、triage 模式 TP resolve），post 只执行不重判。
 
-### 回退命令
+以下全部在脚本内完成，无手动回退路径（脚本出错 = 修脚本或上报）：
 
-脚本失败时逐条回退（`glab mr` 子命令用 `-R` 指定实例，不是 `--hostname`）：
+- **join + anchor 校验**：任何平台调用前，每条 entry 的 `discussion_id` 必须与 pull 文件字节一致、anchor 必须可由同一文件 body 复算——截断/手抄 id 在此处响亮失败；
+- **内容判重**：回帖内嵌 anchor 标记，重跑自动跳过已回帖线程（幂等，含 posted 标志缺失场景）；
+- **回复失败不 resolve**（`--force` 显式覆盖）——裁决理由必须先上墙；
+- **summary 线程扫尾**：🔍 start 回确认帖、✅ end/LGTM 回当轮统计后 resolve、⚠️ error 只回帖**永不 resolve** 且使运行非零退出（gate 永红为有意 human-in-loop 设计）；
+- **posted 标志**回写 `--classified` 文件。
 
-```bash
-glab mr note create -R https://gitlab.red.example/<group>/<project> \
-  <MR_ID> --reply <discussion_id_prefix> -m "..."
-```
-
-`--reply` 接受完整 discussion ID 或至少 8 字符的唯一前缀。
-
-### Resolve discussion
-
-标准实例：
-
-```bash
-glab api --hostname gitlab.red.example \
-  -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
-  -F "resolved=true"
-```
-
-gitblue 等 discussion 级 PUT 500 的实例，改用 note 级 PUT（见「Resolved 状态」节）：先 GET discussions 取 note id，再 `PUT .../discussions/<discussion_id>/notes/<note_id> -F "resolved=true"`。
+stdin（`< state.json`）仅作传输方式保留，schema 2 校验同等适用。
 
 ## 收尾验证（closure gate）
 
-post-labels 返回 ok 不等于 triage 完成。OCR summary discussion 是 `resolvable=True` 但不在 classified.json 里，post-labels 不会 resolve 它们。必须跑 closure gate：
+post-labels 返回 ok 不等于 triage 完成。OCR summary discussion 是 `resolvable=True` 但不在 classified.json 里。必须跑 closure gate：
 
 ```bash
 python3 <SKILL_DIR>/scripts/ocr-verify-resolved.py <MR_IID>
-# exit 0 = 全部 resolved；exit 1 = 有残留（列在 stderr）
+# exit 0 = 全部 resolved（且 head CI 已完结）；exit 1 = 有残留或后端错误（fail closed，列在 stderr）；
+# exit 2 = pipeline 未完结（--skip-pipeline-check 覆盖）或用法错误
 ```
 
-残留的 OCR summary 线程手动回复 + resolve：
-
-```bash
-# 1) 回复
-glab api --hostname gitlab.red.example \
-  -X POST "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes" \
-  -f "body=✅ 已修复（commit <hash>）：..."
-# 2) resolve —— 标准实例用 discussion 级 PUT；gitblue 上该端点 500，
-#    改用 note 级 PUT（先 GET discussions 拿 note id）：
-glab api --hostname gitlab.red.example \
-  -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>" \
-  -F "resolved=true"
-# gitblue fallback:
-# glab api --hostname gitlab.red.example \
-#   -X PUT "/projects/:id/merge_requests/<MR_ID>/discussions/<discussion_id>/notes/<note_id>" \
-#   -F "resolved=true"
-```
-
-重跑 verify 直到 exit 0。
+summary 线程由 post 的扫尾逻辑处理（见上节），无需手动回复。人读输出以序号/内容锚标注线程、不出现平台 id；残留 ⚠️ error 线程使 gate 保持红——那是有意的 human-in-loop 设计（本轮 review 未跑成），上报用户裁决，不得自行 resolve 凑绿。
 
 ## API 端点参考
 
@@ -211,8 +186,8 @@ glab api --hostname gitlab.red.example \
 | 创建普通 note | `POST /projects/:id/merge_requests/:iid/notes` |
 | 回复 discussion | `POST /projects/:id/merge_requests/:iid/discussions/:discussion_id/notes` |
 | 列出 discussions | `GET /projects/:id/merge_requests/:iid/discussions` |
-| Resolve discussion | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id`（gitblue：500，改用下行） |
-| Resolve 单个 note（gitblue 可用） | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id/notes/:note_id` |
+| Resolve discussion | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id`（部分内部实例 500，脚本自动降级到下行） |
+| Resolve 单个 note（同上实例可用） | `PUT /projects/:id/merge_requests/:iid/discussions/:discussion_id/notes/:note_id` |
 
 ## 环境变量
 

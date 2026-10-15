@@ -1,0 +1,4 @@
+{
+  "POST /notes": {"status": 422},
+  "/discussions": "post_thread.json"
+}
