@@ -1,12 +1,15 @@
 [project]
-name = "mr-review-triage"
+name = "mr-review-triage-tests"
 version = "0.1.0"
-description = "OCR review pipeline scripts — platform detection, GitLab/GitHub API clients, pull/post/verify CLIs for /skill:triage-mr"
+description = "CLI-level tests for the mr-review-triage skill scripts (offline API fixtures, no network)."
 requires-python = ">=3.10"
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
