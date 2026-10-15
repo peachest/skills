@@ -1,10 +1,10 @@
 ---
-name: implement-spec
-description: "Implement the result of /to-spec and /to-tickets in code."
+name: implement-spec-in-pipeline
+description: "Implement the result of /to-spec and /to-tickets in code, with a rolling review pipeline instead of a single end-of-branch review. Fork of /skill:implement-spec."
 disable-model-invocation: true
 ---
 
-> **Forked from** `vendor/mattpocock/skills/engineering/implement-spec` at upstream `49dd158` (upstream sync 2026-10-15). Identical to the vendor skill except the integration points marked **[rolling-review]** below: a background rolling review fires after every merger merge and its findings are triaged by severity, instead of discovering all problems at step 7. Keep the fork's drift to those marks only; anything else belongs upstream.
+> **Forked from** `vendor/mattpocock/skills/engineering/implement-spec` at upstream `49dd158` (upstream sync 2026-10-15; renamed `implement-spec-in-pipeline` to keep both installable side by side). Identical to the vendor skill except the integration points marked **[rolling-review]** below: a background rolling review fires after every merger merge and its findings are triaged by severity, instead of discovering all problems at step 7. Keep the fork's drift to those marks only; anything else belongs upstream.
 
 You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
 
