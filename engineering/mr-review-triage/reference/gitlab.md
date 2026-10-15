@@ -56,6 +56,10 @@ glab mr list -R https://gitlab.red.example/<group>/<project> \
 python3 <SKILL_DIR>/scripts/ocr-pull-discussions.py <MR_IID> > /tmp/issues.json
 ```
 
+输出为统一的 `{discussion_id, file, line, body, no}` finding 数组。`no` 是单轮 pull 文件内的去重后 API 首现序（1..N），verdict 落盘当场消费的临时指针；跨轮身份仍是 `discussion_id`（精确字节比对）。
+
+新轮检测：重拉时加 `--digest --against .triage/<MR_IID>/classified.json`，stdout 只输出 classified 文件中不存在的新 findings（保留原 `no`），人读摘要走 stderr（零长 ID 形态）。`--against` 文件缺失视为首轮（全部为新增），不报错。
+
 ### GitLab discussion 数据结构
 
 `GET /projects/:id/merge_requests/:iid/discussions` 返回 JSON 数组，每个元素是一个 discussion（thread）：

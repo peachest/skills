@@ -66,12 +66,13 @@ GitHub review comment 与 GitLab discussion 的关键差异：
 
 **线程根评论**：`in_reply_to_id == null` 的评论是线程根。有 `in_reply_to_id` 的是回复。
 
-脚本将线程根评论映射为统一的 `{discussion_id, file, line, body}` 格式：
+脚本将线程根评论映射为统一的 `{discussion_id, file, line, body, no}` 格式：
 
 - `discussion_id` → review comment `id`（字符串）
 - `file` → `path`
 - `line` → `line`（fallback `original_line`）
 - `body` → `body`
+- `no` → 单轮 pull 文件内的去重后 API 首现序（1..N），verdict 落盘当场消费的临时指针；跨轮身份仍是 `discussion_id`
 
 ### 过滤规则
 
