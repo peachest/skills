@@ -121,15 +121,23 @@ P0（🚨）排最前，⚠️ 中，🟢 低。
 
 ## 脚本输入格式
 
-`ocr-post-labels.py` 输入 JSON：
+`ocr-post-labels.py` 输入 JSON（schema 2 —— 裸数组已不再接受）：
 
 ```json
-[
-  {
-    "discussion_id": "def...",
-    "classification": "FP",
-    "reason": "设计意图 (`GOSUMDB=off`)",
-    "adr": "docs/adr/0002-offline-build.md"
-  }
-]
+{
+  "schema": 2,
+  "entries": [
+    {
+      "discussion_id": "def...",
+      "no": 1,
+      "anchor": "0123abcd...",
+      "classification": "FP",
+      "reason": "设计意图 (`GOSUMDB=off`)",
+      "adr": "docs/adr/0002-offline-build.md",
+      "posted": false
+    }
+  ]
+}
 ```
+
+`no` 是 pull 的序号展示元数据（仅存储，不参与查重），`anchor` 是 `sha256(body)[:16]`，`posted` 由 post 回写。triage-mr 流程下此文件由 `verdict.py` 逐条写入（`.triage/<MR>/classified.json`），不手写。
