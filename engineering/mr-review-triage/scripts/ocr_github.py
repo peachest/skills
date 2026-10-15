@@ -219,6 +219,36 @@ def curl(endpoint, *, method="GET", data=None, retries=2):
     return (0, None, {})
 
 
+def check_runs_status(pr_number):
+    """Aggregate GitHub check-run status over the PR head SHA ('' when none).
+
+    Spec #57 修订 B timing gate, GitHub side. Any queued/in_progress run →
+    that status (the gate blocks); all completed → "completed"; no check
+    runs on the head SHA (no CI configured) or an undeterminable state → ''
+    — the gate proceeds with a note, the thread check still fails closed.
+    """
+    owner_repo = get_project_id()
+    if not owner_repo:
+        return ""
+    status, pr_body, _ = curl(f"/repos/{owner_repo}/pulls/{pr_number}")
+    head_sha = (pr_body.get("head", {}) or {}).get("sha") \
+        if isinstance(pr_body, dict) else None
+    if not head_sha:
+        return ""
+    status, runs, _ = curl(
+        f"/repos/{owner_repo}/commits/{head_sha}/check-runs?per_page=100")
+    if status != 200 or not isinstance(runs, dict):
+        return ""
+    entries = runs.get("check_runs") or []
+    if not entries:
+        return ""
+    for run in entries:
+        run_status = str(run.get("status", "")).strip().lower()
+        if run_status in ("queued", "in_progress"):
+            return run_status
+    return "completed"
+
+
 def graphql(query, variables=None, retries=2):
     """Execute a GraphQL query via gh api.
 

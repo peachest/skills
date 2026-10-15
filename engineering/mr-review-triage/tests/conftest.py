@@ -19,31 +19,60 @@ FAKE_BIN = TESTS_DIR / "fake_bin"
 PULL_SCRIPT = SKILL_DIR / "scripts" / "ocr-pull-discussions.py"
 POST_SCRIPT = SKILL_DIR / "scripts" / "ocr-post-labels.py"
 VERDICT_SCRIPT = SKILL_DIR / "scripts" / "verdict.py"
-
-# ocr_platform (underscore name) is importable directly for unit-level checks
-# of the exported triage_state_dir helper; hyphen-named scripts stay subprocess-only.
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
+VERIFY_SCRIPT = SKILL_DIR / "scripts" / "ocr-verify-resolved.py"
 
 
-def run_pull(*args, platform="gitlab"):
-    """Run ocr-pull-discussions.py against the offline API stub."""
+def _stub_env(platform, routes=None):
+    """Env for a subprocess run against the offline API stub.
+
+    routes: explicit route-table path. Pipeline-status tests bring their own
+    per-state table because the GitLab pipeline status lives in the same
+    MR-detail response the gate queries.
+    """
     env = os.environ.copy()
     env["PATH"] = f"{FAKE_BIN}{os.pathsep}{env['PATH']}"
     env["OCR_PLATFORM"] = platform
     # ocr r1 F4: the GitHub fixture's bot comments are github-actions[bot]; a
     # caller-env OCR_BOT_LOGIN would flip _is_github_reviewer and drop them.
     env["OCR_BOT_LOGIN"] = "github-actions[bot]"
-    env["FAKE_API_ROUTES"] = str(FIXTURES_DIR / platform / "routes.json")
+    env["FAKE_API_ROUTES"] = str(
+        routes or (FIXTURES_DIR / platform / "routes.json"))
     if platform == "gitlab":
         env["CI_PROJECT_ID"] = "22412"
     else:
         env["GITHUB_REPOSITORY"] = "owner/repo"
+    return env
+
+# ocr_platform (underscore name) is importable directly for unit-level checks
+# of the exported triage_state_dir helper; hyphen-named scripts stay subprocess-only.
+sys.path.insert(0, str(SKILL_DIR / "scripts"))
+
+
+def run_pull(*args, platform="gitlab", routes=None, cwd=None):
+    """Run ocr-pull-discussions.py against the offline API stub."""
     return subprocess.run(
         [sys.executable, str(PULL_SCRIPT), *args],
         capture_output=True,
         text=True,
-        env=env,
+        env=_stub_env(platform, routes),
         timeout=60,
+        cwd=cwd,
+    )
+
+
+def run_verify(*args, platform="gitlab", routes=None, cwd=None):
+    """Run ocr-verify-resolved.py against the offline API stub.
+
+    cwd matters for the default pull state file — triage_state_dir() derives
+    .triage/<MR>/issues.json from the working directory.
+    """
+    return subprocess.run(
+        [sys.executable, str(VERIFY_SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        env=_stub_env(platform, routes),
+        timeout=60,
+        cwd=cwd,
     )
 
 
