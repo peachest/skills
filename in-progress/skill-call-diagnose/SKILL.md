@@ -45,11 +45,21 @@ python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --i
 
 (Skip if the extract skill already built one.) One line per entry: role, tool calls with arg sizes, result sizes, per-turn usage. This index is the only map the axis sub-agents need of a multi-MB trace — they read raw lines only where it points.
 
+### 3b. Relay enrichment (optional deep-analysis path)
+
+Skip by default — the pipeline runs on the pi session JSONL. Run only when the user explicitly asks, or the diagnosis question is performance / latency / token cost (a complaint like "太慢/太贵" qualifies — offer the option):
+
+```bash
+python3 ~/.pi/agent/skills/skill-call-extract/scripts/relay-enrich.py <trace-file> > relay-enrich.json
+```
+
+Attaches the session's NeMo Relay ATIF data: token totals + cache-hit rate, per-step wall latency / model / reasoning_effort / usage, per-tool-call duration + attempt_index + status. No trajectory (pre-2026-09-14 or gateway down) → `"status": "no-relay-data"`, exit 0 — note it and continue on the JSONL-only path. When produced, hand its path to the axis children as a fifth input.
+
 ### 4. Spawn the three axes in parallel
 
 First verify the analysis agent exists (`subagent({ action: "list" })`): a read-only agent that can read/search files (e.g. `delegate`-style). If none is available, run the three axes inline in sequence and note the degradation in the report.
 
-Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). Adherence additionally gets the contract path list from step 2; Sedimentation additionally gets the open-pattern list from step 2b — both the target skill's and `_cross-skill/` — each entry as `P-### (or X-###) + 根因 + 现象一行`, plus the wiki patterns.md paths themselves (public repo, readable) in case deeper context is needed.
+Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets the same four things**: the trace file path, the trace index (file path or full content), `references/trace-signals.md` and the extract skill's `references/session-jsonl.md` (absolute installed paths — sub-agents have fresh context, a bare "the reference docs" leaves them blind). When step 3b produced a relay enrichment, its path is a fifth input. Adherence additionally gets the contract path list from step 2; Sedimentation additionally gets the open-pattern list from step 2b — both the target skill's and `_cross-skill/` — each entry as `P-### (or X-###) + 根因 + 现象一行`, plus the wiki patterns.md paths themselves (public repo, readable) in case deeper context is needed.
 
 Each brief demands: findings each cited by entry index, quantified waste with its arithmetic named, report in Chinese (the final report is user-facing), under 400 words.
 
@@ -57,11 +67,13 @@ Each brief demands: findings each cited by entry index, quantified waste with it
 
 > Ground truth: the target skill's SKILL.md and every doc it references (paths listed below — read them all). The trace is the session file at `<path>`; navigate with the trace index, read raw entries only where it points.
 >
-> Reconstruct the executed flow: which documented phases/steps ran, in what order, with which prescribed tools. Tag every contract step with an evidence state: **followed** (trace shows it ran), **violated** (trace shows it did not), or **documented-but-unobservable** (the doc requires it but the trace cannot show it — e.g. an internal judgment with no tool footprint). Then report: (a) **violated steps** — what the doc required, what the trace shows instead, entry indices; distinguish a step the doc made optional from a violation of a mandatory one; (b) **documented-but-unobservable steps** — listed separately, never counted as violations; (c) **improvised alternatives** — where the agent replaced a prescribed tool/flow with its own; (d) one line on what was followed correctly. A step whose precondition made skipping it *legal* (e.g. the doc gates it on document size) still counts as followed — note the gate, don't flag it. 报告用中文，每条发现标注 entry 序号。
+> Reconstruct the executed flow: which documented phases/steps ran, in what order, with which prescribed tools. Tag every contract step with an evidence state: **followed** (trace shows it ran), **violated** (trace shows it did not), or **documented-but-unobservable** (the doc requires it but the trace cannot show it — e.g. an internal judgment with no tool footprint). Then report: (a) **violated steps** — what the doc required, what the trace shows instead, entry indices; distinguish a step the doc made optional from a violation of a mandatory one; (b) **documented-but-unobservable steps** — listed separately, never counted as violations; (c) **improvised alternatives** — where the agent replaced a prescribed tool/flow with its own; (d) one line on what was followed correctly. A step whose precondition made skipping it *legal* (e.g. the doc gates it on document size) still counts as followed — note the gate, don't flag it. If a relay enrichment was provided (path above), check `step_summary.model_switches` / `effort_switches` and the per-step `model_name` / `reasoning_effort`: a mid-session model or effort switch is a plausible cause of adherence drift — name it where it coincides with a violation. 报告用中文，每条发现标注 entry 序号。
 
 #### Axis 2 — Friction
 
 > The trace is the session file at `<path>`; navigate with the trace index. Hunt the waste signals defined in the trace-signals reference: re-emitted payloads, tool failure loops, verbose error echo, prefix-cache collapse, wall-clock stalls.
+>
+> If a relay enrichment was provided (path above), use it for the cost arithmetic — it is supplementary evidence; pi entry indices remain the citation standard: (a) **cache amortization** — compare per-step `cached_tokens` vs `prompt_tokens` on the turns after the skill injection: the SKILL.md body paid once and cache-amortized (high hit rate) vs re-paid every turn (cache collapse) is the verdict; (b) **turn latency** — `agent_turn_latency` (p50/p90/p99/max) plus per-step `wall_from_prev_s` pin real wall-clock stalls; (c) **LLM-level attempt retries** — per-tool-call `attempt_index` > 0 and `duration_s` separate gateway/harness retries from agent-initiated retries.
 >
 > Per friction cluster report: what happened, entry indices, and a cost estimate that names its arithmetic — wasted output tokens (duplicate rounds × output), context re-read (sum of in= on cache-collapse turns), minutes stalled. Attribute every cluster to one of seven causes: **Harness** (pi/extension/provider plumbing), **Repository** (repo state the skill could not foresee — missing files, dirty worktree), **Model** (retry loops, verbose output, reasoning depth), **Requirement** (the ask itself was ambiguous/conflicting), **External** (network, internal services, CI), **Task complexity** (inherent to the job, nobody's fault), **Unknown** (evidence insufficient — say so, don't guess). 报告用中文，每条发现标注 entry 序号、量化成本和归因类别。
 

@@ -47,6 +47,16 @@ python3 scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
 
 **Done when**: the trace index exists as a file, with `truncated: false` (or the truncation noted — cap 600 entries).
 
+### 6. Relay enrichment (optional deep-analysis path)
+
+The pipeline above runs entirely on the pi session JSONL — this step is opt-in, run it only when the user explicitly asks for token-cost / latency / cache-hit analysis, and mention the option when delivering a trace whose consumer will face such questions:
+
+```bash
+python3 scripts/relay-enrich.py <session-id-or-jsonl-path> > relay-enrich.json
+```
+
+Joins the session's NeMo Relay ATIF trajectory (`~/data/nemo-relay`, coverage from 2026-09-14, gateway-lived): token totals + cache-hit rate, per-step wall latency / model / reasoning_effort / usage, per-tool-call duration + attempt_index + status. No matching trajectory → `"status": "no-relay-data"`, exit 0 — report the note and move on; never block the JSONL pipeline on relay (red line: pi JSONL stays the primary source, and content hashes for version anchoring always use the JSONL original text).
+
 ### 5. Anchor the skill version
 
 Different sessions in the result list ran **different versions of the skill** — the shared checkout moves under them. Before any comparison or eval extraction, resolve what each session actually ran:
@@ -71,6 +81,7 @@ The consumer (typically `/skill:skill-call-diagnose`) receives:
 2. The **trace index** path — the per-entry map
 3. Per-session stats from the triage list (usage totals feed cost estimates)
 4. The **version anchor** — per-session skill@commit / uncommitted / third-party verdict from step 5; a cross-session comparison is only valid between sessions anchored to the same version
+5. The **relay enrichment** (only when step 6 was run) — its output path, or an explicit no-relay-data note
 
 `references/session-jsonl.md` is the format primer (entry structure, marker, usage fields) — consumers reading the raw trace should read it too.
 

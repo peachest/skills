@@ -43,6 +43,8 @@ python3 scripts/find-tool-calls.py --dump <session-file> --tool <tool> \
 
 For diagnosing *how the agent used* the tool, run a second dump without `--errors-only` — successes and fallback workarounds are evidence too; produce both when in doubt.
 
+**Relay enrichment (optional)**: when the consumer needs per-call latency or retry depth (user asked, or the diagnose skill's waste/failure axes require it), also run `python3 ~/.pi/agent/skills/skill-call-extract/scripts/relay-enrich.py <session-file> > relay-enrich.json`. It attaches per-tool-call `duration_s` / `attempt_index` / `status` from the NeMo Relay ATIF trajectory (coverage from 2026-09-14; `"status": "no-relay-data"` on miss — non-blocking, pi JSONL stays the primary source). Deliver it alongside the dump when produced.
+
 **Done when**: the dump file exists with the expected `matched_calls` count.
 
 ## Deliverable contract
