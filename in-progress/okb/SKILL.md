@@ -68,7 +68,7 @@ type: concept            # concept | reference
 title: ...
 description: ...         # one-line factual summary, ≤40 chars, naming the key entity
 tags: [ ... ]
-status: draft            # draft | stable | deprecated; promoted by factcheck or user confirmation
+status: draft            # draft | provisional (gold overlay 存在，待人确认) | stable | deprecated; promoted per factcheck step 3 [gate]
 generated: { by: process:okb-distill, at: <ISO 8601> }
 updated: <ISO 8601>      # last concept-aggregation merge
 conflicts_with: []       # slugs of notes contradicting this note; both versions kept
@@ -85,10 +85,10 @@ sources:                 # derivation edge; [^id] footnotes key into these ids
 
 ```yaml
 ---
-status: stable
+status: provisional      # provisional (factcheck pass, awaiting human confirm) | stable | deprecated
 verified:
-  - { by: process:okb-factcheck, at: <ISO 8601>, method: source-walk }
-  - { by: human:<name>, at: <ISO 8601>, method: user-confirmation }
+  - { by: process:okb-factcheck, at: <ISO 8601>, method: source-walk }   # method: mechanical → 可自升 stable
+  # human 确认后追加: { by: human:<name>, at: <ISO 8601>, method: user-confirmation } → status: stable
 verdicts: []              # optional, claim-level: { claim: <quote>, verdict: confirmed|refuted|unverifiable }
 sources:
   - id: <concept-slug>
@@ -121,6 +121,7 @@ Build knowledge for a topic by running these in order. Each step is done on its 
    Verify against the transitive sources (walk the chain to bronze/origin), not parametric memory. Every `verified` event's evidence cites bronze content (or the origin itself) — evidence pointing at a derived document (lesson, addendum, another note) does not close the chain.
    Done when `gold/<topic>/<concept>.md` exists, its `sources[].resource` points at the silver note, and every claim in the silver note is covered by a `verified` event or a `verdicts` entry.
    Verification promotes the silver note `draft → stable`; a one-line user confirmation promotes it too — record it as a `human:` verified event in gold.
+   **[gate][staleness] Gate & freshness**（海博蒸馏-确认-合并借鉴，2026-10-16）：agent 跑完 factcheck 后 gold overlay 标 `status: provisional`（silver 停在 `draft`），**不自动升 stable**——把验证结论呈给用户，一句确认后写入 `human:` verified 事件并升 stable（机器可再生的纯机械事实除外，如 sha256/行号存在性，此类可在 overlay 里注明 `method: mechanical` 自升）。而 silver 的 `stale_after` 不只是被动标记：**每次 distill 触碰该 note 时检查**——已过期的 stable/gold note 不直接合并新事实，先把「续期（re-factcheck 后重设 stale_after）/ 降级（stable→draft，gold overlay 加 superseded 标注）/ 归档（status: deprecated）」三选一呈给用户。
 
 4. **Query** — read notes back out, filtered by `topic`, `status`, or `verified`. If the matched note is gold, descend to its silver note first (gold has no body), then follow body Markdown hyperlinks one hop to pull linked notes in — the link graph is the recall mechanism, bronze is never re-read at query time.
    Done when the matching notes plus their one-hop linked notes are returned, each labeled with `status` and `verified`.
