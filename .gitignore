@@ -23,3 +23,8 @@ vendor/mattpocock/skills/productivity/teach/.venv/
 **/clean-failures.json
 **/dual-failures.json
 *.render-check.png
+
+# Local skill-install artifacts (npx skills chains) and editor dirs
+.agents/
+.claude/
+skills-lock.json
