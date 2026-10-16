@@ -35,7 +35,7 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 - `<name>`：peer 的 agent 名，`[a-z][a-z0-9_-]{0,31}`，必须全局唯一
 - `[repo-cwd]`：peer 的工作目录，缺省用当前目录（`$PWD`）；跨项目派发时必须显式给目标仓路径
 - `--workspace W`：可选。目标 workspace 的 id（`w4`）或 label（`<project-ws>`；精确匹配优先，其次片段匹配，歧义报错列出候选）。**跨项目派发必带**：peer 必须落在目标项目的 ws 里，落错 ws 用户的 topology 就乱了。创建后脚本回读实际 ws id（daemon 迁移会改写前缀，如 `w1B:` → `w1:`），以回读值为准
-- `--prompt-file F`：可选。`F` 为文件路径，或 `-` 从 stdin 读（`echo ... | ... --prompt-file -`，免 /tmp 中转）。prompt 内容若是 bootstrap，按 multi-agent-collab 五段模板写，并带 `/skill:multi-agent-collab` 前缀（仅首条），且必须含父子回传义务条款（见上）
+- `--prompt-file F`：可选。`F` 为文件路径，或 `-` 从 stdin 读（`echo ... | ... --prompt-file -`，免 /tmp 中转）。prompt 内容若是 bootstrap，按 multi-agent-collab 五段模板写，并带 `/skill:multi-agent-collab` 前缀（仅首条）——**skill 名后必须紧跟空格**（首行 `/skill:multi-agent-collab <peer角色词>`，再换行写正文；换行/双换行分隔在 TUI 与 headless 路径均不可靠，pitfall #33），且必须含父子回传义务条款（见上）
 - `--label L`：可选，tab 标签（默认用 name）
 - `--focus`：可选，创建后聚焦新 tab（默认不抢焦点）
 - `--runtime R`：可选。跨 herdr runtime 创建（`herdr --session R ...`），如从 default runtime 会话往 dev runtime 的目标项目 ws 派 peer；不带则打当前 runtime
