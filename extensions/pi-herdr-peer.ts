@@ -105,6 +105,14 @@ export default function (pi: ExtensionAPI) {
 			if (params.steer) args.push("--steer");
 			if (params.runtime) args.push("--runtime", params.runtime);
 			if (params.wait_ms != null) args.push("--wait", String(params.wait_ms));
+			// the script's followUp gate MUST NOT exceed pi.exec's kill timeout:
+			// a SIGKILLed python loses its buffered stdout entirely (empty
+			// "returned non-JSON" — verified 2026-10-16, spec-training lead
+			// session 01a13e8b ×3). Pass the 90s tool gate down via env(1)
+			// (ExecOptions has no env field) so the script returns its
+			// structured exit-4 receipt before we kill it.
+			const envCmd = "env";
+			const envArgs = [`HERDR_FOLLOWUP_MS=${fuMs}`];
 
 			// Deadlock guard (2026-10-08): as a TOOL, this call runs inside our own turn —
 			// a long gate would freeze the turn and hold our agent_status at working,
@@ -114,7 +122,7 @@ export default function (pi: ExtensionAPI) {
 			// to bg_run + CLI herdr-send.py (our turn stays free, peers see us idle).
 			const fuMs = Math.min(Number(process.env.HERDR_FOLLOWUP_MS || 1_800_000), 90_000);
 			const timeout = (params.wait_ms ?? 0) + fuMs + 3 * 60 * 1000;
-			const res = await pi.exec("python3", args, { timeout, signal });
+			const res = await pi.exec(envCmd, [...envArgs, "python3", ...args], { timeout, signal });
 			const raw = res.stdout.trim() || res.stderr.trim();
 			const rawParsed = (() => { try { return JSON.parse(raw); } catch { return null; } })();
 
