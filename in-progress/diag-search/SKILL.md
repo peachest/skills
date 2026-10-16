@@ -46,6 +46,8 @@ Rank the union: label match + keyword match > either alone. zg vector-only parap
 
 A prior note's 根本原因 is the prize — feed it into the current hypothesis list; its red-loop command may shorten the current Phase 1.
 
+**[regression-loop] Read the constraint sections too, not just the answer**（个人版回归闭环的读侧）：每篇命中笔记除根因外必须报告——①「排除的假设」节：这些假设是本轮的**已证伪约束**，当前调查不得重复它们，除非有新证据；②「复现可信度」：参考性复现的排查结论降权使用；③「假设×事实矩阵」的强信号列：判断旧案例与本例是否同一形态的最快依据。旧笔记没有这些节（新模板前写的）→ 正常报告，但注明“无 dead-end 登记”。
+
 ## Done when
 
 - [ ] Every vault note matching the bug's labels has been considered (not just the first hit)
