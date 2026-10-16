@@ -23,6 +23,8 @@ If no dump in hand, get one from the extract skill's installed script (`~/.pi/ag
 python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --index <session-file> > trace-index.json
 ```
 
+**Relay enrichment (optional)**: only when the user explicitly asks for latency/retry-depth analysis, also run `python3 ~/.pi/agent/skills/skill-call-extract/scripts/relay-enrich.py <session-file> > relay-enrich.json` — per-tool-call `duration_s` / `attempt_index` / `status` from the NeMo Relay ATIF trajectory (`no-relay-data` on miss is non-blocking; pi JSONL stays the primary source).
+
 ### 2. Companion-skill gate
 
 Determine whether a skill already documents this tool's usage:
@@ -40,11 +42,11 @@ First verify a read-only analysis agent exists (`subagent({ action: "list" })`);
 
 #### Axis 1 — 失败分类与判责 (Failure taxonomy & blame)
 
-> Ground truth for family classification: `references/error-families.md` (read it first). The calls dump (errors-only variant) lists every failed call. Classify each into a family and assign blame: agent-usage / harness / environment / upstream-tool. For every agent-usage failure, state the one-line correct usage. Companion-skill cross-check (<skill name + path, or "none">): for each failure, is this pit already documented in the companion skill? A documented pit the agent still hit is the strongest finding — report it as `pit-documented-not-read` (or `pit-documented-ignored` if the trace shows the agent read the skill earlier and violated it anyway). 报告用中文，每条发现标注 call_entry 序号。
+> Ground truth for family classification: `references/error-families.md` (read it first). The calls dump (errors-only variant) lists every failed call. Classify each into a family and assign blame: agent-usage / harness / environment / upstream-tool. For every agent-usage failure, state the one-line correct usage. Each verdict needs **text + temporal dual evidence**: the dump's args/result text says what failed, and the trace index timestamps say when — a verdict backed by only one of the two is provisional. If a relay enrichment was provided, its per-call `duration_s` and `status` are the temporal evidence (they survive pi-JSONL clock skew); use them, citing the enrichment step_id. Companion-skill cross-check (<skill name + path, or "none">): for each failure, is this pit already documented in the companion skill? A documented pit the agent still hit is the strongest finding — report it as `pit-documented-not-read` (or `pit-documented-ignored` if the trace shows the agent read the skill earlier and violated it anyway). 报告用中文，每条发现标注 call_entry 序号。
 
 #### Axis 2 — 重试与浪费 (Retry & waste)
 
-> The calls dump (full variant, including successes) plus the trace index are the evidence. Hunt: (a) failed→retried pairs — same tool, adjacent or near-adjacent turns; for each, did the retry change the args or repeat them identically? (b) identical-retry loops (3+ same-shape failures); (c) the workaround that finally succeeded — what did the agent change? (d) wall-clock stalls (call→result gaps far above the tool's normal latency). Per cluster: entry indices, cost arithmetic named — wasted output tokens (failed attempts × their arg_len and surrounding output), context re-reads (sum of `in=` on cache-collapse turns), minutes stalled. 报告用中文，每条发现标注序号和量化成本。
+> The calls dump (full variant, including successes) plus the trace index are the evidence. Hunt: (a) failed→retried pairs — same tool, adjacent or near-adjacent turns; for each, did the retry change the args or repeat them identically? (b) identical-retry loops (3+ same-shape failures); (c) the workaround that finally succeeded — what did the agent change? (d) wall-clock stalls (call→result gaps far above the tool's normal latency). If a relay enrichment was provided: per-call `attempt_index` > 0 exposes **LLM/gateway-level attempt retries** the pi JSONL cannot show (distinguish them from agent-initiated retries), and `duration_s` quantifies the latency long-tail per call. Per cluster: entry indices, cost arithmetic named — wasted output tokens (failed attempts × their arg_len and surrounding output), context re-reads (sum of `in=` on cache-collapse turns), minutes stalled. 报告用中文，每条发现标注序号和量化成本。
 
 #### Axis 3 — 用法与沉淀 (Usage & sedimentation)
 
