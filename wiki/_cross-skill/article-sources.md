@@ -32,9 +32,11 @@ commit → 定位创建 session → 查该 session 的实际输入；文章只�
 
 ## 间接链条（文章 → research → skill，非直接创建）
 
-| skill | 直接触发 | 间接来源 |
+| skill/research | 直接触发 | 间接来源 |
+|-------|---------|---------|
 |-------|---------|---------|
 | skill-call-extract / skill-call-diagnose | 2026-09-07（62bfc5a/8a4adff），session 01a07d09-4d95-77b4-9251-cd82935eb8a2：诊断 peer session 调用 fact-check skill 的 token 浪费摩擦 | 《阿里开源了一套 skill 验证的全流程方法》 mp.weixin.qq.com/s/CIryyflljZlVS4trTbCSDw（2026-08-26，01a03e36/01a03e3c-7a73 → research/skill-eval-landscape，02-session-log-to-eval.md 为概念桥梁） |
+| research/skill-eval-landscape（06/07 门控与案例侧） | 2026-09/10 持续演进（01a07ce2 session） | 《The AI-Native SDLC playbook》 claude.com/blog/the-ai-native-sdlc-playbook（06：门禁语义 + 事故→eval 通道）；SkillGLoW arXiv 2609.02217 全文快照 ~/tmp/skillglow.txt（06：verifier-grounded commit 协议）；《如何把 Skills 变成 Agent 的训练场？小红书 AllSpark 提出 Skill2Env》 mp.weixin.qq.com/s/5KLLtG4nwd03hHuUreBwhQ（arXiv 2609.33772，07：case 有效性门 + 难度模式池 + 迭代加难）—— fetch-article 抓取 2026-10-16，本 session |
 
 ## 无文章来源
 
