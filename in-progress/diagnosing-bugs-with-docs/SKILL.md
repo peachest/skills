@@ -30,7 +30,7 @@ Before building a feedback loop, run `/skill:diag-search` with the bug's compone
 
 **[vault][methods] Phase 0b: Anchor the object**
 
-Before hypothesising, pin down **what object you are investigating** and its aliases across systems (device ID ↔ PCI busid ↔ CRD name ↔ container device node ↔ k8s object; pod 名 ↔ service 名 ↔ 指标 label). Misidentified objects poison every later probe — this is the largest measured failure gap in RCA agent evaluation. If an entity mapping exists in your cross-repo knowledge wiki or the project's CONTEXT.md, read it; otherwise query each system directly and record the alias mapping you confirm — diag-write will persist it.
+Before hypothesising, pin down **what object you are investigating** and its aliases across systems (device ID ↔ PCI busid ↔ CRD name ↔ container device node ↔ k8s object; pod 名 ↔ service 名 ↔ 指标 label). Misidentified objects poison every later probe — this is the largest measured failure gap in RCA agent evaluation. If an entity mapping exists in your cross-repo knowledge wiki or the project's CONTEXT.md, read it — for the kgpu/llmops domains the curated alias table is `~/projects/llmops-wiki/silver/entity-alias/`（含平台组件 deploy→镜像→源码仓映射与 4 个别名陷阱）；otherwise query each system directly and record the alias mapping you confirm — diag-write will persist it.
 
 Methodology reference: `references/debug-methods.md` — two-layer facts/hypotheses discipline, strong-signal ranking, and anti-patterns. Read it before Phase 3; the phase pointers below cite it.
 
