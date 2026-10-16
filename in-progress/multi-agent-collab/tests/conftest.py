@@ -63,14 +63,15 @@ def bootstrap_runtime(session=RUNTIME):
     if server_running(session):
         return False
     env = _clean_env()
+    procs = getattr(bootstrap_runtime, "_procs", [])
     proc = subprocess.Popen(["herdr", "--session", session, "server"],
-                            cwd="/tmp", env=env,
+                            cwd="/tmp", env=env, start_new_session=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    procs.append(proc)
+    bootstrap_runtime._procs = procs
     deadline = time.time() + 20
     while time.time() < deadline:
         if server_running(session):
-            # keep the server process handle for teardown (foreground process)
-            bootstrap_runtime._proc = proc
             return True
         time.sleep(0.5)
     proc.kill()
@@ -88,7 +89,7 @@ def initial_pane(session=RUNTIME):
     return ((d.get("result") or {}).get("root_pane") or {})["pane_id"]
 
 
-def fresh_pane(cwd, session=RUNTIME):
+def fresh_pane(cwd, session):
     """Split a fresh shell pane off the initial one (herdr sessions persist their
     pane/agent layout across server restarts — a reused pane is never an
     'available shell' again, verified 2026-09-23)."""
@@ -102,21 +103,21 @@ def fresh_pane(cwd, session=RUNTIME):
     return pane
 
 
-def spawn_peer(name, cwd):
-    """Start a real pi agent in a FRESH split pane. Returns (pane_id, session_file_placeholder).
+def spawn_peer(name, cwd, session):
+    """Start a real pi agent in a FRESH split pane. Returns pane_id.
 
     herdr agent start on an occupied/persisted pane errors agent_pane_busy
     (verified 2026-09-23) — every peer gets its own split pane.
     """
-    pane = fresh_pane(cwd)
-    d = herdr_json(["agent", "start", name, "--kind", "pi", "--pane", pane], timeout=90)
+    pane = fresh_pane(cwd, session)
+    d = herdr_json(["agent", "start", name, "--kind", "pi", "--pane", pane], timeout=90, session=session)
     agent = (d.get("result") or {}).get("agent") or {}
     assert agent.get("interactive_ready") or agent.get("agent_status"), \
         f"agent start did not reach interactive: {json.dumps(d)[:300]}"
     # wait for pi to boot to idle, then wait until the agent is promptable:
     # `agent wait --until idle` can return before herdr finishes prompt routing —
     # a prompt sent in that window errors agent_not_found (intermittent, verified 2026-09-23)
-    herdr_json(["agent", "wait", pane, "--until", "idle", "--timeout", str(PEER_BOOT_TIMEOUT)], timeout=90)
+    herdr_json(["agent", "wait", pane, "--until", "idle", "--timeout", str(PEER_BOOT_TIMEOUT)], session=session, timeout=90)
     deadline = time.time() + 20
     last = None
     while time.time() < deadline:
@@ -197,16 +198,19 @@ def wait_for(condition, timeout_s, interval=1.0):
     return None
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def e2e_runtime():
-    """One-shot isolated runtime per test run (unique name → no persisted pane
-    layout from previous runs). Teardown stops AND deletes it — zero residue."""
-    bootstrap_runtime(RUNTIME)
-    yield RUNTIME
-    subprocess.run(["herdr", "session", "stop", RUNTIME], capture_output=True, env=_clean_env(), timeout=30)
-    subprocess.run(["herdr", "session", "delete", RUNTIME], capture_output=True, env=_clean_env(), timeout=30)
-    proc = getattr(bootstrap_runtime, "_proc", None)
-    if proc:
+    """One-shot isolated runtime PER TEST (function scope). Verified rationale:
+    sharing a runtime across tests loses late-pane agent registrations (herdr
+    quirk, 2026-10-08/09 — pane visible in split result, agent vanishes from
+    agent list/read a few calls later). Per-test servers cost ~4s to boot and
+    are stopped AND deleted at teardown — zero residue."""
+    name = f"{RUNTIME}-{uuid.uuid4().hex[:6]}"
+    bootstrap_runtime(name)
+    yield name
+    subprocess.run(["herdr", "session", "stop", name], capture_output=True, env=_clean_env(), timeout=30)
+    subprocess.run(["herdr", "session", "delete", name], capture_output=True, env=_clean_env(), timeout=30)
+    for proc in getattr(bootstrap_runtime, "_procs", []):
         try: proc.kill()
         except Exception: pass
 
@@ -217,7 +221,7 @@ def peer(e2e_runtime, tmp_path):
     created = []
 
     def _spawn(name="e2e-peer"):
-        pane = spawn_peer(name, str(tmp_path))
+        pane = spawn_peer(name, str(tmp_path), session=e2e_runtime)
         created.append(pane)
         return {"pane": pane, "name": name}
 
