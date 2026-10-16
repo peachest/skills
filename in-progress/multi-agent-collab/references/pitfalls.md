@@ -58,3 +58,4 @@ Every row was observed in a real session (2026-08 ~ 2026-09). Grouped by categor
 ## Deprecated API (historical)
 
 `herdr mention` / `herdr reply` / `herdr cross` appear only in old memory phrasing; live usage converged on `agent prompt/get/read/list/start` before 2026-08-21. Treat any other verb as suspect.
+| 33 | `herdr-send returned non-JSON: `（空 stderr）被当成"未知失败"盲重试；实为 pi.exec SIGKILL 丢缓冲 | herdr_send 作为工具调用时脚本内部 followUp 门默认 30min，而扩展 pi.exec 在 (90s tool gate + 3min buffer) 处杀 python——SIGKILL 丢掉全部缓冲 stdout（memory 教训复现）→ raw 空 → 扩展抛 non-JSON 空。对账 lead session 01a13e8b：3 次触发（10-15 11:39 / 10-16 06:47、07:04），全部未落地，lead 各自 steer 重发补救成功（零重复投递，重发方向正确但属于盲操作） | 根因修复（扩展）：用 env(1) 把 HERDR_FOLLOWUP_MS=90000 传给脚本（ExecOptions 无 env 字段），脚本在 90s 内返回结构化 exit-4 receipt，扩展"NOT sent"分支接住 → delivered=false + advice。工具调用再遇 non-JSON 空 = 真异常（查 herdr server），steer 重发仍是安全动作（未落地才会 non-JSON？否——steer 瞬时投递不走 30min 门，天然免疫） |
