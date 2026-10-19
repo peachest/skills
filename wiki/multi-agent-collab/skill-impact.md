@@ -41,6 +41,6 @@
 ## 2026-10-19 dispatch contract — MR creation skill routing
 - 提案: create-mr skill 触发率审计（~/tmp/mr-order-rows.json，96 session 裸建 MR）发现派发路径失约——dispatcher 写「push 后建 MR / 开 draft MR」，worker 裸 glab mr create
 - 落点: SKILL.md §The dispatch contract 第 10 要素：派发文本涉及 MR 创建时必须显式要求 worker 走 /skill:create-mr
-- commit: 待填
+- commit: 4c59ea6
 - 验证: 审计数据（2026-10-19，96 未触发中 6 例来自派发路径，10 月失约点）
 - 状态: accepted
