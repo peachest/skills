@@ -169,6 +169,8 @@ A task dispatch to a fresh peer carries nine elements (omit only with a stated r
 8. Agreed artifact paths: "reply with the file path only"
 9. Language directive: reports in English (for agents), conclusions in Chinese (for the user)
 
+10. Skill routing for MR creation: when the dispatch mentions creating an MR (push-then-MR, draft MR, ticket/implement wrap-up MR), the task text must explicitly require the worker to go through `/skill:create-mr` — never bare `glab mr create` (audit 2026-10-19: 96 sessions created MRs without the skill; 6 of the October misses were dispatch-path workers told "push 后建 MR / 开 draft MR" with no skill directive).
+
 Sequenced tasks get an explicit gate: "task 1 first; report and confirm before task 2." Expect the peer to verify your ground truth and push back with file:line evidence — that is the protocol working, not a failure. Expect mid-task clarification questions too: answer them promptly with verified facts — an unanswered question parks the peer for the duration.
 
 **Report-back trigger surface (user ruling)**: the report duty covers more than task completion. A child session must notify its dispatcher unprompted — via the five-part shape, target from the bootstrap's [caller identity] — when it: **finishes work**, **reaches a decision with the user mid-task (especially one that reverses the dispatched direction)**, or **pauses the task**. Dispatchers write the [caller identity] into every bootstrap so this duty is executable; peers must not wait for the user to remind them (real case: a child closed an MR after a user decision, reported to the user only, and stayed silent until nudged).
