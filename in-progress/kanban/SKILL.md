@@ -64,7 +64,8 @@ board card create --title "<phase>：<一句话>" --column Backlog \
   -d "输入指针：issue/spec/map 链接 + blocked-by + 完成判据"
 ```
 
-- **session** = agent|dev（runtime）；**space 一律 new-workspace + space-cwd=目标仓**（勿复用多人 workspace，见 F8）
+- **session** = agent|dev（runtime），**按仓库归属**：skills/pi-mypackage/research 等个人工具仓 → agent；HAMi/<repo-b>/<repo-c> 等 <platform> 业务仓 → dev（用户 2026-10-19 拍板，新仓拿不准就问）
+- **space 一律 new-workspace + space-cwd=目标仓 + space-ref=auto**（勿复用多人 workspace 见 F8；勿留旧 ref 见 F7）
 - 卡描述**只写输入指针**，不写流程 prompt（prompt 在列上）
 - execution 板的卡从 Ready 搬入，指针在 wayfinder 阶段的 comment 里接力
 
