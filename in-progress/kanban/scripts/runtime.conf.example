@@ -1,0 +1,4 @@
+# Copy to runtime.conf (gitignored) and fill in. Never commit real values.
+BOARDS_DIR=/home/you/boards
+PROXY_URL=http://<proxy-host>:<port>
+DEPLOY_CLUSTER=<deploy-cluster-name>
