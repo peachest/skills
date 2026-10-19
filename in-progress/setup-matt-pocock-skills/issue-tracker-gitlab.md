@@ -13,6 +13,14 @@ Remote: `<YOUR_GITLAB_REMOTE>`
 - **添加/移除标签**：`glab issue update <number> --label "..."` / `--unlabel "..."`。多个标签用逗号分隔或重复参数。
 - **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 closing pattern（`Closes #n` / `Fixes #n` / `Resolves #n` 等，全集见「自动关闭的边界」段），push/merge 到**默认分支**后 GitLab 自动 close。**仓库工作分支非默认分支时自动关闭永不触发**，此时 merge 后验证 + 手动关闭是常态而非例外（详见「自动关闭的边界」段）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitLab 未触发），agent 手动 `glab issue close <n>`（先 note 记录原因）。详见 MR 约定段的「merge 后验证」。
 - **更新 issue body**：`glab issue update <n> --description "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--description "$(cat <<'EOF'\n...\nEOF\n)"`。
+
+### Issue body 编辑三层规则
+
+retro 实证：agents 编辑 issue body 常用「`glab issue view` 取 body → str-replace → `update --description` 回写」模式，body 含 markdown 标记（`**bold**`）或全半角差异（中文标点 vs ASCII）时 pattern 静默不命中——实跑 session 中 11 次 MISS/重试。规则：
+
+1. **结构/段落级改动 → 整篇重写**：`glab issue view <n> -F json | jq -r .description` 取原文（注意 view 文本输出带 title/页眉，不能直接回写）→ 修改 → 临时文件（heredoc）→ `--description "$(cat <file>"`。
+2. **str-replace 仅限微调**（typo、单行措辞），且 replace 前必须先 `grep` 验证 pattern 在 body 中唯一存在。
+3. **pattern 未命中时报错**，列出实际上下文（pattern 附近前后几行）并停止，禁止静默跳过当作已完成。
 - **Merge Request**：GitLab 将 PR 称为 "merge request"。使用 `glab mr create`、`glab mr view`、`glab mr note` 等。
 
 `glab` 在仓库中运行时自动推断项目。
