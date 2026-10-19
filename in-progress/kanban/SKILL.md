@@ -43,10 +43,12 @@ ticket 依赖图、spec、map 正典都在 GitLab/GitHub issue 与仓库文档�
 | E2E Tests | auto, fresh | 本地构建（仓内 Dockerfile/Dockerfile.local + nerdctl + `<PROXY_URL>`）→ /skill:argocd-ops 部署 `<部署集群>` 验证 | Code Review | Blocked |
 | Code Review | auto, fresh | ocr 评审；low 丢弃，critical/high/medium = fail | MR & Human Review | Blocked |
 | MR & Human Review | auto, fresh | /skill:create-mr 建 draft MR，卡停 awaiting 等人 | （人拖 Retro） | Blocked |
-| Retro | auto, fresh | /skill:retro 复盘，沉淀进 skill/wiki | Done | Blocked |
+| Retro | auto, **reuse-session** | /skill:retro 复盘（复用卡上最近一次 run 的 session，配合 board comment 链覆盖全程） | Done | Blocked |
 | Done / Blocked | manual | — | | |
 
 所有 prompt 尾部带纪律：**先 `board comment` 再 `board done`；ok=目标达成、fail=未达成（自动入 Blocked）；禁止自行 move/cancel/retry 自己的卡。**
+
+**session 策略**：agent 列一律 fresh-session（每阶段独立上下文，多卡并行不串台）——**唯一例外是 Retro 用 reuse-session**：retro 依赖 session 上下文，fresh 会看不到本 effort 的任何历史；reuse 复用卡上最近一次 run 的 session（MR & Human Review），配合 prompt 里要求的 board comment 链覆盖全程。
 
 ## 流转规则
 

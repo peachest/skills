@@ -65,7 +65,7 @@ flow_board() { # $1 runtime ; one 11-column board, full pipeline same-board
   E2E=$(col "$B" "E2E Tests" auto 5 --fresh-session)
   CR=$(col "$B" "Code Review" auto 6 --fresh-session)
   MR=$(col "$B" "MR & Human Review" auto 7 --fresh-session)
-  RETRO=$(col "$B" Retro auto 8 --fresh-session)
+  RETRO=$(col "$B" Retro auto 8 --reuse-session)
   DONEC=$(col "$B" Done manual 9)
   BLK=$(col "$B" Blocked manual 10)
   board $P column edit "$WAY" --prompt "$P_WAY" --on-success Grilling --on-fail Blocked --json >/dev/null
