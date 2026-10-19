@@ -10,3 +10,4 @@
 - kanban.toml 项目覆盖机制：暂缓。理由：bootstrap 后直接 `column edit` 已覆盖"列集合与 prompt 调整"需求，配置文件解析器暂无第二消费者（2026-10-19 grilling Q6 裁定，用户确认默认模板 + CLI 微调路径）。
 - 2026-10-19 | 迁移修正：runtime 按仓库归属（llmops 业务仓→dev，个人工具仓→agent），xpu 卡 1/2/5 移到 dev-wayfinder board 8 + session=dev + space-ref=auto | 验证：双板 card list 核对通过 | session 2026-10-19
 - 2026-10-19 | 补 runtime 自探测：HERDR_SOCKET_PATH 的目录名即 runtime（sessions/<runtime>/herdr.sock），建卡前探测并与仓库归属规则交叉核对 | 验证：本 session socket=.../sessions/agent/herdr.sock → agent，与 agent list focused 条目一致 | session 2026-10-19
+- 2026-10-19 | 拓扑合并：wayfinder/execution 双板 → 每 runtime 单板 11 列（agent #6 / dev #8），Ready 门取消，Spec on-success 直连 Implement；board 7/9 归档（9 先 cancel awaiting 卡 14 + 迁移卡 14/15） | 根因：TUI 拖动不跨板 + 跨板 on-success 不支持（F9），Ready 人工搬运成本高 | 验证：双板列清单核对（链/prompt 全就位），卡 14 comment 注记 cancel 副作用 | 新增 F11（column edit 无 --position，用 column reorder）、F12（有卡列删不掉/有 open run 板归档不了）
