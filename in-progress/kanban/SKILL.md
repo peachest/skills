@@ -78,13 +78,14 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **F3 派发三要素**：session + space（ref/cwd）+ card 缺一 → run failed。修复：`card edit` 补齐后 `card run retry`。
 - **F4 run 生命周期**：run open 时 `card edit` 被拒（先 cancel）；run done 后 run-scoped comment/done 被拒（"no longer open"）。汇报走 comment + issue 双路。
 - **F5 完成检测**：真完成看 **run outcome**，不看 herdr agent_status（working 可能已 idle）。
-- **F6 `--board` 标志静默失效**：子命令上 `--board <id>` 可能不改变目标，列/卡落到当前选中板。**建列/改列一律先 `board select <id>` 再操作，操作后 `board show <id>` 核对 board_id**（本拓扑创建时实证踩坑）。
+- **F6 `--board` 标志系统性不可信**：任何带 `--board` 的子命令（含 `card list`/`card show` 等只读查询）都可能静默落到别的板，结果看起来正常但数据是别板的（2026-10-19 xpu 迁移两次实锤）。**铁律：一律 `board select <id>` 后裸查/裸操作，查完用返回体的 board_id 字段回验**。
 - **F7 space_ref 过期**：卡引用已删 workspace → run failed，错误里列 known workspaces。修复：`card edit --space-kind new-workspace --space-cwd <repo>`。
 - **F8 多 pane 歧义**：workspace 挂多个活跃 pane 时 dispatch 无法选 cwd → 失败。effort 卡一律专属 new-workspace。
 - **F9 跨板操作双堵（TUI+CLI）**：TUI 拖动不跨板；跨板 on-success 语法 CLI 拒绝；`--destination-board` 用板名报 io error，**用板 id**。跨板搬运唯一路径 = `card move <id> <列> --destination-board <板id>`——这也是 2026-10-19 拍板合并单板的根因。
 - **F10 勿用 `template apply pipeline`**：其 Review 列自带 model_override（不可达路由 → 假 failed 死壳）。本配方手建列，无此问题。
 - **F11 `column edit` 不支持 `--position`**：列重排用 `board column reorder <COL> <pos>`。
-- **F12 有卡列删不掉 / 有 open run 板归档不了**：`column delete` 报 has cards（先安置卡或 `--move-cards-to`）；`board archive` 报 open run（先 cancel）。迁移 awaiting 卡时 cancel 会让状态变 failed——comment 注记真实语义防误读。
+- **F12 有卡列删不掉 / 有 open run 板归档不了**：`column delete` 报 has cards（先安置卡或 `--move-cards-to`）；`board archive` 报 open run（先 cancel）。迁移 awaiting 卡时 cancel 会让状态变 failed——comment 注记真实语义防误读（agent 读注记后行为正确：卡 14 run 只做 CI 巡检未重复建 MR）。
+- **F13 归档板吞卡**：bootstrap 重建会建**新板 id**（旧 id 作废）；归档前不清卡则卡困死在归档板上——归档板不出现在 `board list --all`，但卡 id 仍可 `card show` 寻址；直接 move 报 `archived board must be restored first`。救援路径：`board board restore <id>` → 逐卡 move → 重新 archive。**归档/重建前必须先 `card list` 清点并安置全部卡**。
 
 ## Bootstrap（新节点重建拓扑）
 
