@@ -11,8 +11,16 @@ Remote: `github.internal.example.com/org/repo.git`
 - **列出 issue**：`gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`，配合 `--label` 和 `--state` 过滤。
 - **评论 issue**：`gh issue comment <number> --body "..."`。
 - **添加/移除标签**：`gh issue edit <number> --add-label "..."` / `--remove-label "..."`。多个标签用逗号分隔：`--add-label "wayfinder:map,triage"`。
-- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，**commit/PR 落到默认分支后** GitHub 自动 close（GitHub 与 GitLab 同样仅默认分支触发；仓库工作分支非默认分支时永不自动关闭，merge 后验证 + 手动关闭是常态）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。**例外 2**：PR merge 后 GitHub 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitHub 未触发），agent 手动 `gh issue close <n>`（先 comment 记录原因）。详见 PR 约定段的「merge 后验证」。
+- **关闭**：**禁止** agent 直接调用 `gh issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 PR description 中使用 `Closes #n` / `Fixes #n` / `Resolves #n`，**commit/PR 落到默认分支后** GitHub 自动 close（GitHub 与 GitLab 同样仅默认分支触发；仓库工作分支非默认分支时永不自动关闭，merge 后验证 + 手动关闭是常态）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 PR 时通过 PR description 中的 `Closes #<map>` 关闭。**例外 2**：PR merge 后 GitHub 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitHub 未触发），agent 手动 `gh issue close <n>`（先 comment 记录原因）。详见 PR 约定段的「merge 后验证」。**例外 3**：merge commit 携带多个 `Closes` 引用时 GitHub 只处理第一个，其余 issue 滞留 OPEN（实跑 9 票只自动关了 1 票）——多票同 MR 关闭时，其余票用 `gh issue close -c 'Closed by <merge-sha>'` 补关，视为 commit-body 关闭的合规延伸（平台行为描述，非行为放宽）。
 - **更新 issue body**：`gh issue edit <number> --body "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--body "$(cat <<'EOF'\n...\nEOF\n)"`。
+
+### Issue body 编辑三层规则
+
+retro 实证：agents 编辑 issue body 常用「`gh issue view` 取 body → str-replace → edit 回写」模式，body 含 markdown 标记（`**bold**`）或全半角差异（中文标点 vs ASCII）时 pattern 静默不命中——实跑 session 中 11 次 MISS/重试。规则：
+
+1. **结构/段落级改动 → 整篇重写**：`gh issue view <n> --json body --jq .body` 取原文 → 修改 → 写入临时文件（heredoc）→ `gh issue edit <n> --body-file <file>`。
+2. **str-replace 仅限微调**（typo、单行措辞），且 replace 前必须先 `grep` 验证 pattern 在 body 中唯一存在。
+3. **pattern 未命中时报错**，列出实际上下文（pattern 附近前后几行）并停止，禁止静默跳过当作已完成。
 - **Pull Request**：使用 `gh pr create`、`gh pr view`、`gh pr comment` 等。
 
 `gh` 在仓库中运行时自动推断项目（通过 `git remote`）。
