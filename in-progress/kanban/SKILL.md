@@ -58,13 +58,15 @@ ticket 依赖图、spec、map 正典都在 GitLab/GitHub issue 与仓库文档�
 ## 建卡契约（派发三要素 + 指针）
 
 ```bash
-board --project <BOARDS_DIR> board select <wayfinder板id>
+RT=$(basename "$(dirname "$HERDR_SOCKET_PATH")")   # 自探测 runtime（非 herdr 内则显式传参或问用户）
+board --project <BOARDS_DIR> board select <runtime>-wayfinder 板 id
 board card create --title "<phase>：<一句话>" --column Backlog \
-  --session <runtime> --space-kind new-workspace --space-cwd <目标仓绝对路径> \
+  --session "$RT" --space-kind new-workspace --space-cwd <目标仓绝对路径> \
   -d "输入指针：issue/spec/map 链接 + blocked-by + 完成判据"
 ```
 
 - **session** = agent|dev（runtime），**按仓库归属**：skills/pi-mypackage/research 等个人工具仓 → agent；HAMi/HAMi-WebUI/kube-nodexpu-manager 等 llmops 业务仓 → dev（用户 2026-10-19 拍板，新仓拿不准就问）
+- **自探测 runtime**（在 herdr session 内建卡时先做）：`basename "$(dirname "$HERDR_SOCKET_PATH")"`（socket 路径 `~/.config/herdr/sessions/<runtime>/herdr.sock` 即含 runtime 名）；结果与仓库归属规则交叉核对，不一致或取不到 → 问用户，不要静默猜
 - **space 一律 new-workspace + space-cwd=目标仓 + space-ref=auto**（勿复用多人 workspace 见 F8；勿留旧 ref 见 F7）
 - 卡描述**只写输入指针**，不写流程 prompt（prompt 在列上）
 - execution 板的卡从 Ready 搬入，指针在 wayfinder 阶段的 comment 里接力
