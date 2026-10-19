@@ -77,7 +77,7 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **F2 选择态全局漂移**：不带 `--project` 的命令落到别的 session 切过的板。所有命令显式 `--project`。
 - **F3 派发三要素**：session + space（ref/cwd）+ card 缺一 → run failed。修复：`card edit` 补齐后 `card run retry`。
 - **F4 run 生命周期**：run open 时 `card edit` 被拒（先 cancel）；run done 后 run-scoped comment/done 被拒（"no longer open"）。汇报走 comment + issue 双路。
-- **F5 完成检测**：真完成看 **run outcome**，不看 herdr agent_status（working 可能已 idle）。
+- **F5 完成检测**：真完成看 **run outcome**，不看 herdr agent_status（working 可能已 idle）。监控长期 auto 流水线时配双轨（见「监控双轨」小节），不单依任何一轨。
 - **F6 `--board` 标志系统性不可信**：任何带 `--board` 的子命令（含 `card list`/`card show` 等只读查询）都可能静默落到别的板，结果看起来正常但数据是别板的（2026-10-19 xpu 迁移两次实锤）。**铁律：一律 `board select <id>` 后裸查/裸操作，查完用返回体的 board_id 字段回验**。
 - **F7 space_ref 过期**：卡引用已删 workspace → run failed，错误里列 known workspaces。修复：`card edit --space-kind new-workspace --space-cwd <repo>`。
 - **F8 多 pane 歧义**：workspace 挂多个活跃 pane 时 dispatch 无法选 cwd → 失败。effort 卡一律专属 new-workspace。
@@ -88,6 +88,15 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **F13 归档板吞卡**：bootstrap 重建会建**新板 id**（旧 id 作废）；归档前不清卡则卡困死在归档板上——归档板不出现在 `board list --all`，但卡 id 仍可 `card show` 寻址；直接 move 报 `archived board must be restored first`。救援路径：`board board restore <id>` → 逐卡 move → 重新 archive。**归档/重建前必须先 `card list` 清点并安置全部卡**。
 - **F14 并行派发 SpaceKey 互斥（2026-10-19 pi-events-daemon 五卡实战实锤）**：boardd dispatch 去重键 = `{session, space_kind, space_ref}`（源码 `crates/board-daemon/src/dispatch/pass.rs:28-58` + `board-core/src/model.rs:85-99` SpaceKey::from_card），**不含 space_cwd**——多卡同 `space_ref=auto` 即同 SpaceKey 被互斥串行，改 space-cwd 到不同 worktree 无效。**并行正典配方**（已实测 3 路并行，验证 = active_runs>1）：每卡独立 wt worktree（`wt switch -c <branch> --no-cd`；`-c` 从 main 建时需 `git reset --hard <目标基线>`；node_modules 软链到主检出）+ 每卡唯一 `space_ref`（如 `eda-45-ws`）。
 - **F15 人工推进的 failed 残留**：卡 status 是最后 run outcome 的自动投影，人工 `card move` 推进不可改写——owner 评审替代路径（cancel 死 run + move 推进）必然留 status=failed 壳。防误读用 comment 注记；正典记录在 repo/issue 时，**删卡是唯一干净出口**。
+
+## 监控双轨
+
+长期 auto 流水线（多卡跨多相位）不单依单一机制（2026-10-19 五卡流水线实战确立）：
+
+1. **订阅轨**：pi-events-daemon 挂相位沿 ad-hoc once 订阅——check 用 `board card show <id> --json` 判 column_id（到达目标列 exit 0 / 否则 exit 2 waiting），sessionId 填 owner session，到达即 wake（已到达的卡首探即 passed 补发）。订阅挂错 sessionId 立即 cancel 重挂。
+2. **对照轨**：bg_run 60s 轮询脚本，把各卡状态追加到共享日志（如 /tmp 下固定路径）——其他 agent session 可读，让别的 session 帮我们发现不一致。
+
+双轨价值：订阅误报/漏报可对照发现、daemon 故障有兜底可见性。发现两轨不一致 → 立需求 ticket（报 pi-events-daemon owner）。
 
 ## Bootstrap（新节点重建拓扑）
 
