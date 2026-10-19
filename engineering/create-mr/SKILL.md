@@ -3,8 +3,13 @@ name: create-mr
 description: >
   Create a draft MR/PR for the current work — confirm remote, target branch, and
   feature branch with the user, then push and open a draft MR assigned to the user
-  with a clean title. Use when the user asks to 创建 MR / 提 MR / 开 MR / 创建 PR /
-  提 PR / create a merge request / open a pull request.
+  with a clean title. Use when the user asks to 创建 MR / 提 MR / 开 MR / 开一个 mr /
+  建 mr / 开 draft MR / 创建 PR / 提 PR / 创建 merge request / create a merge
+  request / open a pull request. Also applies when MR creation arrives indirectly:
+  a peer/worker dispatch text that says push 后建 MR / 开 draft MR / MR !N, a
+  ticket/implement flow whose closure step is opening the MR, or a fix/triage
+  skill run that ends with an MR — do not fall back to bare `glab mr create`.
+  (2026-10-19 audit: 96 sessions created MRs without this skill; ~31% trigger rate.)
 ---
 
 # Create MR

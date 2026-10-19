@@ -295,6 +295,11 @@ the verify gate result. Leave changes in the working tree. If `/skill:fix`
 surfaced no new FP patterns or coding insights, skip the reflect step — it is
 `/skill:fix`'s responsibility, not this skill's.
 
+**MR 创建一律转 `/skill:create-mr`**：修复结论需要落地为 MR/PR 时，走
+create-mr 的确认流程（remote / target branch / draft），不要裸 `glab mr create`
+或 `gh pr create`。审计背景（2026-10-19）：全库 96 个 session 裸建 MR 未走
+create-mr，其中 2 个失约点就发生在 triage-mr 会话内（修复顺手裸建）。
+
 ## Checkpoints
 
 | # | When | Show | Decision |
