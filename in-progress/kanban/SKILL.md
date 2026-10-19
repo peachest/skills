@@ -82,10 +82,12 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **F7 space_ref 过期**：卡引用已删 workspace → run failed，错误里列 known workspaces。修复：`card edit --space-kind new-workspace --space-cwd <repo>`。
 - **F8 多 pane 歧义**：workspace 挂多个活跃 pane 时 dispatch 无法选 cwd → 失败。effort 卡一律专属 new-workspace。
 - **F9 跨板操作双堵（TUI+CLI）**：TUI 拖动不跨板；跨板 on-success 语法 CLI 拒绝；`--destination-board` 用板名报 io error，**用板 id**。跨板搬运唯一路径 = `card move <id> <列> --destination-board <板id>`——这也是 2026-10-19 拍板合并单板的根因。
-- **F10 勿用 `template apply pipeline`**：其 Review 列自带 model_override（不可达路由 → 假 failed 死壳）。本配方手建列，无此问题。
+- **F10 勿用 `template apply pipeline`**：其 Review 列自带 `model_override="opus"`——fork 的 pi 会落到本环境不可达的 Bedrock 路由 → run 死壳 → 卡假 failed（idle_expired，非真实工作失败）。修复：`board column edit <Review列> --clear-model`；本配方手建列无此问题。判别特征：卡 failed 但 agent 无任何实质动作/comment，查列 model_override。
 - **F11 `column edit` 不支持 `--position`**：列重排用 `board column reorder <COL> <pos>`。
 - **F12 有卡列删不掉 / 有 open run 板归档不了**：`column delete` 报 has cards（先安置卡或 `--move-cards-to`）；`board archive` 报 open run（先 cancel）。迁移 awaiting 卡时 cancel 会让状态变 failed——comment 注记真实语义防误读（agent 读注记后行为正确：卡 14 run 只做 CI 巡检未重复建 MR）。
 - **F13 归档板吞卡**：bootstrap 重建会建**新板 id**（旧 id 作废）；归档前不清卡则卡困死在归档板上——归档板不出现在 `board list --all`，但卡 id 仍可 `card show` 寻址；直接 move 报 `archived board must be restored first`。救援路径：`board board restore <id>` → 逐卡 move → 重新 archive。**归档/重建前必须先 `card list` 清点并安置全部卡**。
+- **F14 并行派发 SpaceKey 互斥（2026-10-19 pi-events-daemon 五卡实战实锤）**：boardd dispatch 去重键 = `{session, space_kind, space_ref}`（源码 `crates/board-daemon/src/dispatch/pass.rs:28-58` + `board-core/src/model.rs:85-99` SpaceKey::from_card），**不含 space_cwd**——多卡同 `space_ref=auto` 即同 SpaceKey 被互斥串行，改 space-cwd 到不同 worktree 无效。**并行正典配方**（已实测 3 路并行，验证 = active_runs>1）：每卡独立 wt worktree（`wt switch -c <branch> --no-cd`；`-c` 从 main 建时需 `git reset --hard <目标基线>`；node_modules 软链到主检出）+ 每卡唯一 `space_ref`（如 `eda-45-ws`）。
+- **F15 人工推进的 failed 残留**：卡 status 是最后 run outcome 的自动投影，人工 `card move` 推进不可改写——owner 评审替代路径（cancel 死 run + move 推进）必然留 status=failed 壳。防误读用 comment 注记；正典记录在 repo/issue 时，**删卡是唯一干净出口**。
 
 ## Bootstrap（新节点重建拓扑）
 
