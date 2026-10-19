@@ -111,6 +111,7 @@ export default function (pi: ExtensionAPI) {
 			// session 01a13e8b ×3). Pass the 90s tool gate down via env(1)
 			// (ExecOptions has no env field) so the script returns its
 			// structured exit-4 receipt before we kill it.
+			const fuMs = Math.min(Number(process.env.HERDR_FOLLOWUP_MS || 1_800_000), 90_000);
 			const envCmd = "env";
 			const envArgs = [`HERDR_FOLLOWUP_MS=${fuMs}`];
 
@@ -120,7 +121,6 @@ export default function (pi: ExtensionAPI) {
 			// (mutual 30min wait). Tool calls therefore gate for 90s max and return a
 			// structured delivered=false receipt with advice; the full 30min gate belongs
 			// to bg_run + CLI herdr-send.py (our turn stays free, peers see us idle).
-			const fuMs = Math.min(Number(process.env.HERDR_FOLLOWUP_MS || 1_800_000), 90_000);
 			const timeout = (params.wait_ms ?? 0) + fuMs + 3 * 60 * 1000;
 			const res = await pi.exec(envCmd, [...envArgs, "python3", ...args], { timeout, signal });
 			const raw = res.stdout.trim() || res.stderr.trim();
