@@ -16,18 +16,20 @@ ticket 依赖图、spec、map 正典都在 GitLab/GitHub issue 与仓库文档�
 ## 拓扑（单板池，project 无关）
 
 一个专用 project（bootstrap 脚本建在 `<BOARDS_DIR>`，默认 `~/boards`）承载全部 effort，
-**不在各代码仓内建板**。四块板按 runtime × 相位划分：
+**不在各代码仓内建板**。每 runtime 一块 11 列单板（全流程同板流转，TUI 可拖全程）：
 
 ```
 <BOARDS_DIR> project
-├── agent-wayfinder：  Backlog → Wayfinder(auto) → Grilling(auto) → Spec(auto) → Ready(manual) → Blocked
-├── agent-execution：  Implement(auto) → E2E Tests(auto) → Code Review(auto) → MR & Human Review(auto) → Retro(auto) → Done → Blocked
-├── dev-wayfinder / dev-execution：列配方同上
+├── agent：Backlog → Wayfinder(auto) → Grilling(auto) → Spec(auto) → Implement(auto) → E2E Tests(auto)
+│         → Code Review(auto) → MR & Human Review(auto) → Retro(auto) → Done(manual) → Blocked(manual)
+└── dev：列配方同上
 ```
 
-- **给 effort 选 runtime**（agent/dev）后，卡就在该 runtime 的一对板里流转
+- **给 effort 选 runtime**（agent/dev）后，卡就在该 runtime 的板里流转
 - **一 effort 一卡起步**（map/grilling 阶段同卡前进），grilling 需并行多票时拆子卡、依赖写描述
 - 仓 = 卡描述里的指针 + 卡的 space-cwd，不再是 project
+- 历史教训（2026-10-19 拍板合并）：曾拆 wayfinder/execution 双板，但 TUI 拖动不跨板 +
+  跨板 on-success 不支持（F9），Ready 门增加人工搬运成本 → 合并单板
 
 ## 列配方
 
@@ -36,8 +38,7 @@ ticket 依赖图、spec、map 正典都在 GitLab/GitHub issue 与仓库文档�
 | Backlog | manual | — | | |
 | Wayfinder | auto, fresh | /skill:wayfinder → map 落仓，路径写 comment | Grilling | Blocked |
 | Grilling | auto, fresh | /skill:grilling（pane 内多轮问用户），结论写 comment | Spec | Blocked |
-| Spec | auto, fresh | /skill:to-spec → /skill:review-spec → /skill:to-tickets 串行 | Ready | Blocked |
-| Ready | manual | —（跨板门，见流转规则） | | |
+| Spec | auto, fresh | /skill:to-spec → /skill:review-spec → /skill:to-tickets 串行 | Implement | Blocked |
 | Implement | auto, fresh | /skill:implement-spec-in-pipeline implementer | E2E Tests | Blocked |
 | E2E Tests | auto, fresh | 本地构建（仓内 Dockerfile/Dockerfile.local + nerdctl + `<PROXY_URL>`）→ /skill:argocd-ops 部署 `<部署集群>` 验证 | Code Review | Blocked |
 | Code Review | auto, fresh | ocr 评审；low 丢弃，critical/high/medium = fail | MR & Human Review | Blocked |
@@ -50,16 +51,15 @@ ticket 依赖图、spec、map 正典都在 GitLab/GitHub issue 与仓库文档�
 ## 流转规则
 
 1. **auto 链全自动**：run 完成 → `board done --outcome ok|fail` → daemon 按 on-success/on-fail 流转
-2. **跨板门（Ready）**：board CLI 不支持跨板 on-success（实测拒绝 `board/column` 语法）。
-   Spec 完成 → 卡停 Ready → 人或主 session `board card move <id> Implement --destination-board <execution板id>` 搬运（入 auto 列即派发）
-3. **Code Review 不回 Implement**：评审发现问题 → fail 入 Blocked → 人确认修复方案 → 人手动拖回 Code Review 复审（人控循环，无死循环）
-4. **MR 合并后人拖 Retro**，retro run 完成自动进 Done
+2. **Code Review 不回 Implement**：评审发现问题 → fail 入 Blocked → 人确认修复方案 → 人手动拖回 Code Review 复审（人控循环，无死循环）
+3. **MR 合并后人拖 Retro**，retro run 完成自动进 Done
+4. **跳相位**：spec 已就绪的 effort 卡直接从 Backlog 拖进 Implement；wayfinder/grilling 完成后的卡停在原列，由人判断去向
 
 ## 建卡契约（派发三要素 + 指针）
 
 ```bash
 RT=$(basename "$(dirname "$HERDR_SOCKET_PATH")")   # 自探测 runtime（非 herdr 内则显式传参或问用户）
-board --project <BOARDS_DIR> board select <runtime>-wayfinder 板 id
+board --project <BOARDS_DIR> board select <runtime> 板 id
 board card create --title "<phase>：<一句话>" --column Backlog \
   --session "$RT" --space-kind new-workspace --space-cwd <目标仓绝对路径> \
   -d "输入指针：issue/spec/map 链接 + blocked-by + 完成判据"
@@ -69,7 +69,7 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **自探测 runtime**（在 herdr session 内建卡时先做）：`basename "$(dirname "$HERDR_SOCKET_PATH")"`（socket 路径 `~/.config/herdr/sessions/<runtime>/herdr.sock` 即含 runtime 名）；结果与仓库归属规则交叉核对，不一致或取不到 → 问用户，不要静默猜
 - **space 一律 new-workspace + space-cwd=目标仓 + space-ref=auto**（勿复用多人 workspace 见 F8；勿留旧 ref 见 F7）
 - 卡描述**只写输入指针**，不写流程 prompt（prompt 在列上）
-- execution 板的卡从 Ready 搬入，指针在 wayfinder 阶段的 comment 里接力
+- **跳相位**：spec 已就绪的卡直接从 Backlog 拖进 Implement，输入指针写在卡描述
 
 ## 失败规范（动手前对照，出现即按此处置）
 
@@ -81,8 +81,10 @@ board card create --title "<phase>：<一句话>" --column Backlog \
 - **F6 `--board` 标志静默失效**：子命令上 `--board <id>` 可能不改变目标，列/卡落到当前选中板。**建列/改列一律先 `board select <id>` 再操作，操作后 `board show <id>` 核对 board_id**（本拓扑创建时实证踩坑）。
 - **F7 space_ref 过期**：卡引用已删 workspace → run failed，错误里列 known workspaces。修复：`card edit --space-kind new-workspace --space-cwd <repo>`。
 - **F8 多 pane 歧义**：workspace 挂多个活跃 pane 时 dispatch 无法选 cwd → 失败。effort 卡一律专属 new-workspace。
-- **F9 跨板 on-success 不支持**：CLI 拒绝 `board/column` 跨板语法。用 Ready 门 + `card move --destination-board`。
+- **F9 跨板操作双堵（TUI+CLI）**：TUI 拖动不跨板；跨板 on-success 语法 CLI 拒绝；`--destination-board` 用板名报 io error，**用板 id**。跨板搬运唯一路径 = `card move <id> <列> --destination-board <板id>`——这也是 2026-10-19 拍板合并单板的根因。
 - **F10 勿用 `template apply pipeline`**：其 Review 列自带 model_override（不可达路由 → 假 failed 死壳）。本配方手建列，无此问题。
+- **F11 `column edit` 不支持 `--position`**：列重排用 `board column reorder <COL> <pos>`。
+- **F12 有卡列删不掉 / 有 open run 板归档不了**：`column delete` 报 has cards（先安置卡或 `--move-cards-to`）；`board archive` 报 open run（先 cancel）。迁移 awaiting 卡时 cancel 会让状态变 failed——comment 注记真实语义防误读。
 
 ## Bootstrap（新节点重建拓扑）
 

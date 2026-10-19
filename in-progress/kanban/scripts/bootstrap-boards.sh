@@ -51,42 +51,33 @@ print(m[0] if m else '')")
   echo "$id"
 }
 
-wayfinder_board() { # $1 board id ; sets up wayfinder columns+chains+prompts
-  local B=$1 BACKLOG WAY GRILL SPEC READY BLK
+flow_board() { # $1 runtime ; one 11-column board, full pipeline same-board
+  local B IMPL E2E CR MR RETRO DONEC BLK
+  B=$(mkboard "$1")
   board $P board select "$B" >/dev/null
   board $P column delete Todo --yes >/dev/null 2>&1 || true
-  BACKLOG=$(col "$B" Backlog manual 0)
+  col "$B" Backlog manual 0 >/dev/null
+  local WAY GRILL SPEC
   WAY=$(col "$B" Wayfinder auto 1 --fresh-session)
   GRILL=$(col "$B" Grilling auto 2 --fresh-session)
   SPEC=$(col "$B" Spec auto 3 --fresh-session)
-  READY=$(col "$B" Ready manual 4)
-  BLK=$(col "$B" Blocked manual 5)
+  IMPL=$(col "$B" Implement auto 4 --fresh-session)
+  E2E=$(col "$B" "E2E Tests" auto 5 --fresh-session)
+  CR=$(col "$B" "Code Review" auto 6 --fresh-session)
+  MR=$(col "$B" "MR & Human Review" auto 7 --fresh-session)
+  RETRO=$(col "$B" Retro auto 8 --fresh-session)
+  DONEC=$(col "$B" Done manual 9)
+  BLK=$(col "$B" Blocked manual 10)
   board $P column edit "$WAY" --prompt "$P_WAY" --on-success Grilling --on-fail Blocked --json >/dev/null
   board $P column edit "$GRILL" --prompt "$P_GRILL" --on-success Spec --on-fail Blocked --json >/dev/null
-  board $P column edit "$SPEC" --prompt "$P_SPEC" --on-success Ready --on-fail Blocked --json >/dev/null
-}
-
-execution_board() { # $1 board id
-  local B=$1 IMPL E2E CR MR RETRO DONE BLK
-  board $P board select "$B" >/dev/null
-  board $P column delete Todo --yes >/dev/null 2>&1 || true
-  IMPL=$(col "$B" Implement auto 0 --fresh-session)
-  E2E=$(col "$B" "E2E Tests" auto 1 --fresh-session)
-  CR=$(col "$B" "Code Review" auto 2 --fresh-session)
-  MR=$(col "$B" "MR & Human Review" auto 3 --fresh-session)
-  RETRO=$(col "$B" Retro auto 4 --fresh-session)
-  DONE=$(col "$B" Done manual 5)
-  BLK=$(col "$B" Blocked manual 6)
+  board $P column edit "$SPEC" --prompt "$P_SPEC" --on-success Implement --on-fail Blocked --json >/dev/null
   board $P column edit "$IMPL" --prompt "$P_IMPL" --on-success "E2E Tests" --on-fail Blocked --json >/dev/null
   board $P column edit "$E2E" --prompt "$P_E2E" --on-success "Code Review" --on-fail Blocked --json >/dev/null
   board $P column edit "$CR" --prompt "$P_CR" --on-success "MR & Human Review" --on-fail Blocked --json >/dev/null
   board $P column edit "$MR" --prompt "$P_MR" --on-fail Blocked --json >/dev/null
   board $P column edit "$RETRO" --prompt "$P_RETRO" --on-success Done --on-fail Blocked --json >/dev/null
+  echo "$1=#$B"
 }
 
-for RT in agent dev; do
-  W=$(mkboard "$RT-wayfinder"); wayfinder_board "$W"
-  E=$(mkboard "$RT-execution"); execution_board "$E"
-  echo "$RT: wayfinder=#$W execution=#$E"
-done
+for RT in agent dev; do flow_board "$RT"; done
 echo "topology ready at project $BOARDS_DIR"
