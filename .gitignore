@@ -24,6 +24,9 @@ vendor/mattpocock/skills/productivity/teach/.venv/
 **/dual-failures.json
 *.render-check.png
 
+# Orchestration briefs (implement-spec-in-pipeline dispatch records) — repo-local, never commit
+/.scratch/
+
 # Local skill-install artifacts (npx skills chains) and editor dirs
 .agents/
 .claude/
