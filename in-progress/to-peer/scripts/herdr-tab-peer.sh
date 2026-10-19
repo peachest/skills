@@ -47,6 +47,35 @@ if [ -z "$MACHINE" ] && [ -z "${HERDR_ENV:-}" ]; then
 fi
 [ -n "$LABEL" ] || LABEL="$NAME"
 
+# resolve workspace: bare id passes through; otherwise match against workspace list.
+# With no --workspace: infer from cwd — the workspace whose label equals the cwd's
+# tail segment (e.g. /…/skills → "skills" ws). The daemon's bare `tab create`
+# default is the most-recently-active ws, NOT the cwd's project ws (2026-10-19:
+# three skills peers landed in the pi-mypackage ws despite correct cwd), so an
+# inference failure must be loud, never silent. Ambiguous label (two ws sharing
+# a label, e.g. duplicated <project-a>) → ask via stderr, no guess.
+if [ -z "$WORKSPACE" ] && [ -z "$MACHINE" ]; then
+  WS_JSON=$(hr workspace list)
+  CWD_TAIL=$(printf '%s' "$CWD" | sed 's:/*$::' | awk -F/ '{print $NF}')
+  WS_ID=$(printf '%s' "$WS_JSON" | python3 -c "
+import json,sys
+ws=json.load(sys.stdin)['result']['workspaces']
+tail=sys.argv[1]
+m=[w for w in ws if w.get('label')==tail]
+if len(m)==1: print(m[0]['workspace_id'])
+" "$CWD_TAIL") || exit 2
+  if [ -n "$WS_ID" ]; then
+    WORKSPACE="$WS_ID"
+    echo "note: --workspace omitted — inferred $WS_ID from cwd tail '$CWD_TAIL'; pass --workspace explicitly to override" >&2
+  else
+    CANDIDATES=$(printf '%s' "$WS_JSON" | python3 -c "
+import json,sys
+ws=json.load(sys.stdin)['result']['workspaces']
+print(', '.join(w['workspace_id']+'='+w['label'] for w in ws))")
+    echo "WARN: no --workspace and cwd tail '$CWD_TAIL' matches no workspace label; the tab will land in the daemon default ws (often the last-active one). Candidates: $CANDIDATES" >&2
+  fi
+fi
+
 # resolve workspace: bare id passes through; otherwise match against workspace list
 if [ -n "$WORKSPACE" ]; then
   if ! echo "$WORKSPACE" | grep -qE '^w[0-9A-Za-z]+$'; then
