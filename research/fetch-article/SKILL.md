@@ -89,7 +89,10 @@ Downloads audio via WBI-signed API. Only downloads — does NOT transcribe.
 If CC subtitles are available, saves them directly (skip ASR).
 Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
 
-See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR.
+See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR. The
+transcriber's runtime moved (2026-10) to a faster-whisper backend reached
+via SSH tunnel — see its SKILL.md / runtime.conf.example. The old <node-b>
+whisper-asr NodePort backend is deprecated.
 
 ### Zhihu (知乎专栏)
 

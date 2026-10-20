@@ -47,6 +47,23 @@ fi
 # 4. ASR endpoint alive + model present (bypass proxy: internal IP)
 EP="${WHISPER_ENDPOINT:-}"
 MODEL="${WHISPER_MODEL:-}"
+# 4a. If a tunnel backend is configured and the endpoint is not answering,
+#     bring the tunnel up the same way transcribe.sh does, then re-probe.
+if [ -n "${WHISPER_TUNNEL_HOST:-}" ] && [ -n "$EP" ]; then
+  case "$EP" in
+    */v1) models_url="${EP%/}/models" ;;
+    *)    models_url="${EP%/}/v1/models" ;;
+  esac
+  code=$(curl -s --noproxy '*' --max-time 5 -o /dev/null -w '%{http_code}' "$models_url" 2>/dev/null || true)
+  if [ "$code" != "200" ]; then
+    say "WARN  ASR endpoint down, opening tunnel ${WHISPER_TUNNEL_HOST} → ${WHISPER_TUNNEL_REMOTE:-127.0.0.1:8100}"
+    ssh -f -N -L "${WHISPER_TUNNEL_LOCAL_PORT:-18100}:${WHISPER_TUNNEL_REMOTE:-127.0.0.1:8100}" \
+      -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 "$WHISPER_TUNNEL_HOST" \
+      && sleep 1 || fail "ssh tunnel failed (host ${WHISPER_TUNNEL_HOST})"
+  else
+    say "PASS  tunnel already up on 127.0.0.1:${WHISPER_TUNNEL_LOCAL_PORT:-18100}"
+  fi
+fi
 if [ -n "$EP" ]; then
   # WHISPER_ENDPOINT may or may not already end in /v1 — build the models URL once
   case "$EP" in
@@ -81,6 +98,26 @@ if [ -n "$LEP" ]; then
   fi
 else
   say "WARN  CLEAN_LLM_BASEURL unset — Step 3 (clean/dual) unavailable"
+fi
+
+# 4c. Slides OCR endpoint alive + model present (Step 4 dependency)
+OEP="${OCR_LLM_BASEURL:-}"
+OMODEL="${OCR_LLM_MODEL:-}"
+if [ -n "$OEP" ]; then
+  case "$OEP" in
+    */v1) omodels_url="${OEP%/}/models" ;;
+    *)    omodels_url="${OEP%/}/v1/models" ;;
+  esac
+  oresp=$(curl -s --noproxy '*' --max-time 10 -H "Authorization: Bearer ${OCR_LLM_KEY:-}" "$omodels_url" 2>/dev/null || true)
+  if [ -z "$oresp" ]; then
+    fail "OCR endpoint unreachable: $OEP (slides-extract needs it)"
+  elif printf '%s' "$oresp" | grep -q "\"id\":\"$OMODEL\""; then
+    say "PASS  OCR endpoint: $OEP (model $OMODEL)"
+  else
+    fail "OCR endpoint alive but model '$OMODEL' not listed in $omodels_url"
+  fi
+else
+  say "WARN  OCR_LLM_BASEURL unset — Step 4 (slides) unavailable"
 fi
 
 # 5. bilibili reachability (direct first, then via proxy env)

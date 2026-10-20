@@ -37,6 +37,13 @@ bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>/
 set `WHISPER_ENDPOINT` and `WHISPER_MODEL` env vars
 (see [Service Discovery](#service-discovery)).
 
+Current backend: faster-whisper large-v3-turbo on the user's WSL laptop,
+reached through an SSH tunnel (`WHISPER_TUNNEL_*` in runtime.conf) —
+transcribe.sh reuses an existing tunnel or opens one automatically
+(`ssh -f -N -L` + `ExitOnForwardFailure`) and probes before transcribing.
+The original <node-b> whisper-asr NodePort backend is **deprecated**; its
+discovery recipe stays in `runtime.conf.example` for rollback.
+
 The script transcodes MP4 → 16kHz WAV, then either transcribes directly
 (WAV ≤ 25MB) or uses **silence-aware chunking**: detects natural pause
 boundaries via ffmpeg `silencedetect`, partitions at those points
@@ -118,13 +125,46 @@ homophones — every raw ASR segment accounted for.
 ## Service Discovery
 
 If `<SKILL_DIR>/runtime.conf` exists, `transcribe.sh` sources it — no
-env vars needed. To create it, see `runtime.conf.example` for Kubernetes
-discovery steps (`kubectl get svc`, NodePort, `curl /v1/models`).
+env vars needed. To create it, see `runtime.conf.example`.
 
-For non-Kubernetes: set `WHISPER_ENDPOINT` to the service URL and
-`WHISPER_MODEL` to the model ID (query `/v1/models` to discover — vLLM
-uses `/v1`, not `/openai/v1`; the model ID may differ from the name,
-e.g. `atom` instead of `whisper-large-v3`).
+Two backend shapes:
+
+1. **Direct endpoint** (LAN / k8s NodePort): set `WHISPER_ENDPOINT` to the
+   service URL and `WHISPER_MODEL` to the model ID (query `/v1/models` to
+   discover — vLLM uses `/v1`, not `/openai/v1`; the model ID may differ
+   from the name, e.g. `atom` instead of `whisper-large-v3`).
+2. **NAT'd host behind SSH** (e.g. faster-whisper inside WSL, not reachable
+   directly): set `WHISPER_ENDPOINT` to the *local* tunnel side
+   (`http://127.0.0.1:<local-port>/v1`) plus `WHISPER_TUNNEL_HOST` /
+   `WHISPER_TUNNEL_LOCAL_PORT` / `WHISPER_TUNNEL_REMOTE`. transcribe.sh
+   probes the endpoint first and reuses a live tunnel; otherwise opens
+   `ssh -f -N -L <local-port>:<remote> <host>` (ExitOnForwardFailure=yes,
+   ServerAliveInterval=30) and re-probes. A tunnel that comes up but gets
+   no HTTP 200 means the remote service is down — probe it via ssh instead
+   of retrying the tunnel.
+
+The runtime record also carries `OCR_LLM_*` (slides, Step 4) and
+`CLEAN_LLM_*` (cleanup, Step 3) endpoints.
+
+## Slide Extraction (optional)
+
+For talk-style videos, extract the deck alongside the transcript:
+
+```bash
+cd <SKILL_DIR> && uv run python scripts/slides-extract.py <workspace-dir>
+```
+
+Downloads the video (yt-dlp, <node-a> side — WSL has no ffmpeg), cuts frames
+at scene changes (`select='gt(scene,0.3)'`, `SLIDE_SCENE_THRESHOLD`
+overridable; the frame at t=0 always kept), dedups adjacent frames by
+dHash hamming distance (`SLIDE_HASH_THRESHOLD`, default 8), then OCRs each
+kept slide via the vision endpoint in runtime.conf (`OCR_LLM_*`) with a
+verbatim-transcription prompt (structure preserved, numbers never dropped;
+non-slide shots return `[非幻灯片]`). Resumable: OCR results cached in
+`<workspace>/slides/slides.json`.
+
+Done when: `<workspace>/slides/slides.json` (timestamped entries with text)
+and `slides.md` exist, and no kept frame has empty OCR text.
 
 ## Chunking Configuration
 
@@ -143,6 +183,20 @@ OUT=$(python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
   --json | python3 -c "import sys,json; print(json.load(sys.stdin)['raw_path'])") && \
 bash <SKILL_DIR>/scripts/transcribe.sh "$OUT"
 ```
+
+### Merged output (transcript + slides)
+
+With both a transcript and a slides run finished, merge them into one
+readable markdown — cleaned transcript on top, each slide's OCR text
+inserted at its timeline position as a `## [mm:ss 幻灯片]` block:
+
+```bash
+cd <SKILL_DIR> && uv run python scripts/merge-slides.py <workspace-dir>
+```
+
+Writes `transcript.final.md` into the transcript directory. Speech and
+slides are complementary — keep both; do not drop transcript text where a
+slide covers the same content.
 
 ## Environment Check
 
