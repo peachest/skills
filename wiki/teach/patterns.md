@@ -20,9 +20,10 @@
 - 证据: 01a062a0#241 #253 #275 #289 #294 #308 #359
 - 出现: 2026-09-20 okb-diagnose#1 移交
 
-## P-T03 五检链手敲
-- 状态: open
-- 现象: css→prose→beat→nav 检查命令链手拼 3 次；NOTES 里已文档化但每次仍要重新拼装
+## P-T03 五检链手敲（已关闭：run-checks.sh battery 落地）
+- 状态: closed（2026-10-08 原型 → 2026-10-20 补测试+入回归）
+- 解决: assets/run-checks.sh battery（--only/--lesson 子集、findings 落 reviews/checks-<N|all>.txt、verdict 表尾行、分族 exit 矩阵）；实测替代手敲链（specforge 153 次手敲 + 362 次 tail -1 是立项证据）；12 个回归测试覆盖 exit 矩阵/subset/verdict-尾行/SKIP 语义
+- 历史: css→prose→beat→nav 检查命令链手拼 3 次；NOTES 里已文档化但每次仍要重新拼装
 - 根因: 文档化的检查序列没有可执行入口
 - 方案: `check-all.sh` 包装既有检查序列
 - passCheck: 检查以单命令入口调用
