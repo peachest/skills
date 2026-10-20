@@ -6,6 +6,18 @@
 
 当前仓库下放置了我需要的 skills 的代码仓库。
 
+## 仓库资源索引（clone 后先看这里，避免重复查找）
+
+| 资源 | 用途 | 备注 |
+|------|------|------|
+| `scripts/githooks/`（pre-commit / pre-push / post-commit） | gitleaks 凭证拦截 + 提交后自动重装变更的 skill | 依赖 `git config core.hooksPath scripts/githooks`，**该配置不入库，新 clone 必须手动执行一次**（或 `git config --local core.hooksPath scripts/githooks`）；gitleaks 自定义配置在 `~/data/benchmark/config/gitleaks.toml`，缺失时退化为默认规则 |
+| `scripts/sanitize-check.sh` | 推送前脱敏检查（gitleaks + 内部标识 pattern 层） | 推送前必跑，见下方 Git 工作流 |
+| `scripts/check-all-env.sh` | 换节点后的环境自检 | 新节点第一步 |
+| `.github/workflows/tests.yml` | CI：push/PR main 时 `uv run pytest` | 绿是合并标准 |
+| `docs/agents/` | install-skills / skill-authoring / issue-tracker / triage-labels / domain 五份 agent 文档 | 写 skill 前必读 skill-authoring.md |
+| `wiki/` | skill 持久知识层（已知问题/被拒提案） | 改 skill 前后必走，见下方 Skill Wiki 节 |
+| `vendor/mattpocock/` | 上游 subtree 镜像 | 同步规则见下方 Vendor 管理 |
+
 ## 新 skill 归属
 
 新建 skill 一律放在 `in-progress/`，无任何例外，不需要判断主题或成熟度。只有用户明确要求时才移入正式分类目录（如 `productivity/`、`engineering/`）。
