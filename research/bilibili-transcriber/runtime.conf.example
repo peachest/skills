@@ -57,7 +57,13 @@ CLEAN_LLM_KEY=<api-key>
 OCR_LLM_BASEURL=http://<vision-host>:<port>/v1
 OCR_LLM_MODEL=<vision-model-id>
 OCR_LLM_KEY=<api-key>
-# SLIDE_SCENE_THRESHOLD=0.3   # ffmpeg scene-change cut sensitivity (0-1)
-# SLIDE_HASH_THRESHOLD=8      # adjacent-frame dedup, dHash hamming distance
-# Proofreading language: auto-detect (CJK ratio) by default; force with zh|en
-#CLEAN_LANG=en
+# SLIDE_SCENE_THRESHOLD=0.3   # ffmpeg scene-change cut sensitivity (0-1);
+#                             # lower for animation-style transitions
+#
+# Remaining tuning knobs (chunking internals, dedup threshold, proofreading
+# language) have sane code defaults and no documented use case — read the
+# scripts only if you truly need them:
+#   chunking: STRATEGY/CHUNK_SEC/SILENCE_DB/SILENCE_MIN_DUR/TOLERANCE/
+#             MIN_SILENCE_SCORE/MAX_FILESIZE_MB/PARALLEL/METHOD (transcribe.sh)
+#   slides:   SLIDE_HASH_THRESHOLD (slides-extract.py)
+#   cleanup:  CLEAN_LANG (clean-transcripts.py, default auto-detect)

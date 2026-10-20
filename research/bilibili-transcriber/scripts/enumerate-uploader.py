@@ -10,7 +10,7 @@ Requires bilibili-api-python, which ships in the bilibili-cli uv tool:
 A Bilibili credential is REQUIRED (anonymous space-API calls hit risk control
 and return HTTP 412).
 
-Output is sorted by upload time (oldest first); run-queue.sh re-sorts by
+Output is sorted by upload time (oldest first); pipeline-queue.py re-sorts by
 duration anyway. Filter the manifest to taste before queueing.
 """
 
