@@ -90,7 +90,7 @@ Figure sources follow a decision tree: the paper's own figures first (the captio
 2. Render every subfigure of a composite figure.
 3. Before inserting, produce a figure→lesson-position table and give the learner a contact sheet for visual review — model-side verification cannot see the image, so human review closes the loop.
 
-When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor verification rules, repository search traps, and divergence-labeling patterns; read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts (fact-check reviewer, source-extraction scouts, prototype workers, code-archaeology scouts), the scheduling rules, and the lesson-edit fallback.
+When doing code archaeology, adjudicating a paper-code disagreement, or writing a source anchor, read [source-extraction.md](./references/source-extraction.md) for anchor verification rules, repository search traps, divergence-labeling patterns, and the two-phase multi-worker extraction pipeline (seed from framing sections, then section workers seeded with it); read [subagent-dispatch.md](./references/subagent-dispatch.md) for the dispatch contracts (fact-check reviewer, source-extraction scouts, prototype workers, code-archaeology scouts), the scheduling rules, and the lesson-edit fallback.
 
 ## Lessons
 
