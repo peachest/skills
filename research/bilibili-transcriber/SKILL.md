@@ -41,7 +41,7 @@ Current backend: faster-whisper large-v3-turbo on the user's WSL laptop,
 reached through an SSH tunnel (`WHISPER_TUNNEL_*` in runtime.conf) —
 transcribe.sh reuses an existing tunnel or opens one automatically
 (`ssh -f -N -L` + `ExitOnForwardFailure`) and probes before transcribing.
-The original <node-b> whisper-asr NodePort backend is **deprecated**; its
+The original cluster-hosted whisper-asr NodePort backend is **deprecated**; its
 discovery recipe stays in `runtime.conf.example` for rollback.
 
 The script transcodes MP4 → 16kHz WAV, then either transcribes directly
@@ -154,7 +154,7 @@ For talk-style videos, extract the deck alongside the transcript:
 cd <SKILL_DIR> && uv run python scripts/slides-extract.py <workspace-dir>
 ```
 
-Downloads the video (yt-dlp, <node-a> side — WSL has no ffmpeg), cuts frames
+Downloads the video (yt-dlp, agent node side — WSL has no ffmpeg), cuts frames
 at scene changes (`select='gt(scene,0.3)'`, `SLIDE_SCENE_THRESHOLD`
 overridable; the frame at t=0 always kept), dedups adjacent frames by
 dHash hamming distance (`SLIDE_HASH_THRESHOLD`, default 8), then OCRs each
