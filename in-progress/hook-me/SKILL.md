@@ -17,7 +17,9 @@ The **audit** sorts each mined behavior by one question: is this rule naming an 
 - **Encodes a judgment** ("amounts must be integers"; "target branch is X here") → context-dependent constraint → stays a rule.
 - **Neither** → the agent already does it by default → delete.
 
-A candidate that names an event splits by action shape:
+A candidate that names an event also picks a **layer**. Ask who the guarantee must cover: a pi hook gates only this machine's agent lifecycle; a git hook gates every path into the repo — human commits, other sessions, other agents. Agent-only behavior (turn_end validation, kubectl deletes, polling) is pi-hook territory; anything that must never enter the repository (credentials, leaked tokens) belongs at a git hook — a gitleaks-style pre-commit — because the agent-side guard only stops one path of many. The layers stack: credentials run both, the pi guard as the earlier cheaper stop, the git hook as the last-resort gate. Git-hook conventions per repo live in that repo's `tools/git-hooks/` + wt `pre-start` install pattern.
+
+An event-named candidate then splits by action shape:
 
 - **Guard**: block the action (exit 2) when a match condition fires. For danger: destructive commands, unapproved pushes, leaked credentials. Guards must carry a whitelist for legitimate flows that share the same command shape.
 - **Nudge**: inject a reminder without blocking, for verification gaps the agent can still fix in-turn ("claimed done, zero validation ran").
@@ -25,7 +27,7 @@ A candidate that names an event splits by action shape:
 
 ## Definition of done
 
-A candidate spec is done when an implementer could write the hook script without asking a single question. Every spec carries: hook event, match condition (pseudocode), action (guard/nudge/ritual), evidence (raw count, denominator, human-adjudicated true count), false-positive risk with its whitelist, and a coverage check against what already guards or skills already enforce. Nothing is done while a question remains.
+A candidate spec is done when an implementer could write the hook script without asking a single question. Every spec carries: layer (pi hook / git hook / both), hook event, match condition (pseudocode), action (guard/nudge/ritual), evidence (raw count, denominator, human-adjudicated true count), false-positive risk with its whitelist, and a coverage check against what already guards or skills already enforce. Nothing is done while a question remains.
 
 ## Mining reference
 
