@@ -21,7 +21,7 @@
 
 ## 测试
 
-A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present (`uv run pytest` from the skill directory). A green run is the completion criterion for the change; a skill with no tests is exempt.
+A skill may carry tests even though it is primarily documentation — `tests/` and a `pyproject.toml` sit beside the `SKILL.md`. After modifying any skill, run its tests if present. A green run is the completion criterion for the change; a skill with no tests is exempt. Test invocation follows the two-tier rule in `docs/agents/skill-authoring.md`（Python environment tiers）: pytest-only skills 用共享 venv（`uv run --project <repo-root> pytest <skill>/tests`），有运行时依赖的 skill 用自己的 `<SKILL_DIR>/.venv`（`uv run --project <SKILL_DIR> pytest tests`）。
 
 ## Git 工作流
 
@@ -51,6 +51,8 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 ## 运行时与环境（脚本型 skill）
 
 Script skill 的 runtime/环境约定（runtime.conf 模式、check-env.sh、敏感数据规则）全在 `docs/agents/skill-authoring.md`：创建或改造 script skill、把 skill 移出 in-progress、或提交任何含 endpoint/域名/配置的文件前必读（本仓库为 public）。换节点第一步：`bash scripts/check-all-env.sh`。
+
+**写/改任何 skill 前必须先读 `docs/agents/skill-authoring.md`**（硬性前置，不是建议）：其中的 Pipeline discipline 节（subprocess 失败必须响、uv run 锁死、一键入口+聚合退出码、跨 skill import 声明、输出形状 e2e 验证）为 Required 级约定，reviewer 按此文逐条检查。
 
 ## Agent skills
 

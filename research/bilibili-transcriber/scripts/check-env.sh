@@ -37,10 +37,12 @@ done
 if command -v python3 > /dev/null 2>&1; then
   if python3 -c "import requests, numpy, aiohttp" 2>/dev/null; then
     say "PASS  python3 deps: requests+numpy+aiohttp ($(command -v python3))"
-  elif [ -x "$SKILL_DIR/.venv/bin/python" ]; then
-    fail "python3 on PATH lacks deps — run scripts via 'cd $SKILL_DIR && uv run ...' (or: uv sync)"
+  elif [ -x "$SKILL_DIR/.venv/bin/python" ] && "$SKILL_DIR/.venv/bin/python" -c "import requests, numpy, aiohttp" 2>/dev/null; then
+    # tier-2 runtime: deps live in the skill venv — correct per convention,
+    # only the bare-python3 shortcut is unavailable
+    say "PASS  deps in skill venv ($(command -v python3) lacks them — invoke via 'cd $SKILL_DIR && uv run ...')"
   else
-    fail "python3 lacks requests/numpy/aiohttp — cd $SKILL_DIR && uv sync, then use 'uv run'"
+    fail "no python with requests/numpy/aiohttp — cd $SKILL_DIR && uv sync, then use 'uv run'"
   fi
 fi
 

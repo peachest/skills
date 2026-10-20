@@ -1,0 +1,11 @@
+[project]
+name = "skills-test-env"
+version = "0.1.0"
+description = "Shared test venv for pytest-only skills in this repo. Skills with real runtime deps keep their own <skill-dir>/.venv (see docs/agents/skill-authoring.md, 'Python environment tiers')."
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+# rootdir stays the skill dir when invoked as: uv run --project <repo-root> pytest <skill>/tests
