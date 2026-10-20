@@ -1,0 +1,34 @@
+# pdf skill — runtime dependencies
+#
+# The skill repo ships NO venv/venv binaries. All Python deps are ephemeral
+# uv-run environments (`uv run --with <pkg>`, cached by uv after first pull).
+# Copy this file to runtime.conf and adjust only if your node differs.
+#
+# Requires: uv on PATH. Node proxy (if pulling from PyPI for the first time):
+#   export http_proxy=<NODE-HTTP-PROXY> https_proxy=<NODE-HTTP-PROXY>  # see node ops docs
+
+# --- md/HTML → PDF chain (system CLI + one uv tool) -------------------------
+# pandoc: system package, >= 3.0. NOTE: uv "pandoc" packages are a trap —
+#         never `uv tool run pandoc`; use the system CLI only.
+#   apt install pandoc
+# weasyprint: HTML→PDF engine, on PATH after install.
+#   uv tool install weasyprint --with pymupdf
+
+# --- per-scenario ephemeral deps (uv run --with X, zero-install) ------------
+# text extract / split / merge / rotate:  pypdf
+#   uv run --with pypdf python -c "import pypdf"
+# PDF→images / rendering / metadata:      pymupdf
+#   uv run --with pymupdf python -c "import pymupdf"
+# images→PDF:                             img2pdf
+#   uv run --with img2pdf img2pdf --help
+# OCR (only for scanned PDFs):            tesseract system pkg + python libs
+#   apt install tesseract-ocr tesseract-ocr-chi-sim
+#   uv run --with pymupdf pytesseract python -c "import pytesseract"
+
+# --- fonts (CJK rendering in weasyprint) ------------------------------------
+# minimum: any zh font via fc-list :lang=zh
+#   mkdir -p ~/.fonts && curl -sL --retry 3 -o ~/.fonts/NotoSansSC.ttf \
+#     "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf" && fc-cache -f
+# preferred body font: Maple Mono Normal NF CN (see SKILL.md bootstrap)
+
+# Verify everything: bash <skill-dir>/scripts/check-env.sh
