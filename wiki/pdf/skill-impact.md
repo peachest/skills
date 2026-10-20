@@ -6,3 +6,10 @@
 - 验证: check-env.sh 6 项全绿（uv/pandoc/weasyprint/中文字体/pymupdf/pypdf）；自测 ①md→PDF（中文+表格+图片内联+代码块）24K/1页 ②pypdf 提取同一 PDF 中文正确；源仓 vs 安装副本 diff 一致；全库 grep 无 /skill:export-pdf 残留（lock 已清）
 - 状态: accepted
 - 关联: export-pdf 原 key facts 全部并入 pdf/SKILL.md（逐项 grep 核对覆盖）；blog skill 的博客 PDF 默认样式说明随之指向 pdf skill
+
+## 2026-10-20 文本提取切换 markitdown（用户指令）
+- 提案: PDF→文本首选链从 pypdf 换成 markitdown（保标题/结构，直接产 Markdown，兼收 docx/xlsx/pptx）；pypdf 降级为纯文本备选+页操作（拆/合/旋转）专用
+- 落点: SKILL.md 场景路由表+提取节重写+description；runtime.conf.example；check-env.sh 第 5 项改 markitdown[pdf]（FAIL），pypdf 降为 WARN
+- 验证: 本机实测 `uv run --with 'markitdown[pdf]' markitdown test.pdf` 成功（底层 pdfminer-six，标题层级保留）；check-env 7 项全绿；源仓 vs 安装副本 diff 一致
+- 状态: accepted
+- 坑位记录: ①裸 markitdown 缺 [pdf] extra 抛 MissingDependencyException ②转换失败退出码仍为 0——必须检查输出非空而非 exit code
