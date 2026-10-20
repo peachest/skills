@@ -92,43 +92,11 @@ OKB arbitration order (see the okb skill). The lesson then carries the
 outcome — the ruling itself stays in the fact base, not in learner-facing
 text.
 
-## Knowledge-point extraction (two-phase, multi-worker)
+## Knowledge-point extraction
 
-For full-paper extraction with parallel workers, run the two-phase pipeline
-(field-validated on DFlash: three-strategy comparison, 16 workers total).
-Phase A owns the whole picture; phase B owns section depth.
-
-**Phase A — seed (abstract + intro + related, one worker):** extract every
-term the framing establishes (own coinages AND inherited vocabulary — later
-workers need both), each with layer tag, lineage cite, and anchor. Then the
-routing step that makes the whole design work: every framing-level claim
-that is asserted but not defined gets an explicit deferral route —
-`[deferred to <section>]` (e.g. "losslessness asserted, defined nowhere —
-flagged for downstream"). Field result: 8 deferrals routed, all correctly
-closed by phase B; the one true paper-wide gap (losslessness never defined)
-was carried and flagged across all downstream workers instead of being
-silently dropped.
-
-**Phase B — sections (one worker per section group, seeded):** each worker
-receives the seed glossary in its prompt. Rules: seed terms are referenced
-`[seed]`, never re-defined; mechanism details that sharpen a seed term are
-`[extends: <seed term>]`; new terms and section decisions are extracted
-normally; negative space closes the seed's routed deferrals and adds its
-own. Field result: cross-worker duplicate definitions dropped from 15
-(independent section-parallel) to 2 (legitimate extends).
-
-**Merger:** seed is canonical; extends hang off their seed terms; a term
-defined twice with different definitions = conflict marker for adjudication.
-
-**Strategy selection:** two-phase is the default for papers with sections.
-Whole-paper single-pass is acceptable only for decisions/ADRs (decision
-skeletons were 4/4 stable across runs — but glossary terms are not: single-
-pass recall was 47%, four-sample union +115%). Section-parallel without a
-seed is superseded — it had the highest recall on framing-lineage terms but
-paid 15 duplicate definitions for it.
-
-**Layer tags on terms:** `[paper-only|code-only|both|interpretation]` — and
-when the source is a survey/brief rather than a paper+code pair, remap the
-axis to the source's own structure and record the remap in the glossary
-header (field finding: four values don't cover vision-document terms; add a
-fifth tag or an explicit note rather than forcing a fit).
+Full-paper extraction with parallel workers (two-phase seed pipeline,
+layer tags, negative-space routing, sampling strategy) is owned by the
+**knowledge-point-extraction** skill — teach is one of its consumers. When
+extracting a paper or research source for a course fact base, run that
+skill's pipeline; its output (anchored glossary + decision drafts + routed
+gaps) feeds this skill's fact base and the anchor check.
