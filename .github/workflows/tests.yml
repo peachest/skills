@@ -21,3 +21,5 @@ jobs:
         run: |
           cd engineering/mr-review-triage
           uv run pytest tests -q
+          cd ../../in-progress/teach
+          uv run pytest -q
