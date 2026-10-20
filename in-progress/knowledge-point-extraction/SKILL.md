@@ -30,6 +30,7 @@ Before extracting, classify the source — it determines the lens:
 | Blog post / research brief | interpretation, synthesis, positions | `[interpretation]` unless it cites a primary source — then cite that source inline |
 | Vision document / roadmap | forward-looking vocabulary with no implementation | `[vision]` — do NOT force into paper/code values |
 | Project repository | modules, interfaces, git-history decisions | covered by the **domain-modeling** skill (codebase lens) — point consumers there instead of duplicating |
+| **Repository history** (codegraph + git log) | hidden knowledge points that live only in commit messages and hot-file churn | `[code-only]` — see Repository-history mining below |
 
 The layer tag answers "where does this knowledge come from", which drives
 later arbitration (paper > code > interpretation is the common order — but
@@ -116,6 +117,43 @@ Every term and decision carries a source anchor. For LaTeX sources:
 `file:line`. For briefs: `report §section`. For blogs: article locator.
 Anchors must be re-checkable — a fact-check pass re-reads the cited line
 and expects the claim there. Never cite a line you did not read.
+
+## Repository-history mining (codegraph × RepoMem)
+
+A repository's own history is a knowledge-point mine the paper-and-blog
+pipeline never touches: the fixes, the mistakes, the design fights, and the
+hot files. Map the RepoMem idea onto it (field-proven on HAMi, 645 commits/yr):
+
+| RepoMem | Code-repo counterpart |
+|---|---|
+| episodic memory (patches + issues) | `git log` messages, especially fix commits — the "why it broke and how" lives nowhere else |
+| semantic memory (hot files) | churn ranking: `git log --name-only \| sort \| uniq -c \| sort -rn` — the files where the project's complexity concentrates |
+| retrieval interfaces | **codegraph** query/explore/callers/impact over the indexed symbols — the structured index that commit text alone can't give |
+| leak-proofing window | search history BEFORE the current design settled, not after (design fights are the knowledge; the settled state hides them) |
+
+**Extraction recipe (episode → knowledge point):**
+
+1. **Hot files** from churn ranking are the mining front — each hot file
+   carries a thread of episodes.
+2. **Fix commits are the richest episodes**: field case (HAMi `c7841994`) —
+   a commit message alone documents an int32-overflow bug class (memory
+   multiplied by per-backend factor ×256/×512 wraps past MaxInt32, passes
+   the totalmem check vacuously, pod binds with Memreq=0), the fix shape
+   (reject at admission), and the follow-up evolution (`a2dd191b` changed
+   the contract to `(request, error)` so each backend distinguishes invalid
+   from absent — a two-episode design-fight arc across backends).
+3. **Anchor as `[commit <hash>]` + `[codegraph <symbol>]`**: the commit is
+   the episodic anchor, the symbol is the structural anchor — both
+   re-checkable. The knowledge point is the RULE the episode teaches
+   (e.g. "resource conversion must return an error, never clamp"), stated
+   with both anchors.
+4. **Layer-tag them `[code-only]`**: this knowledge exists nowhere else —
+   not in docs, not in papers. It is exactly the class P-T06 was opened for
+   (knowledge invisible to the paper pipeline).
+
+Suites like this turn a repo from "code I read when needed" into
+"memory I can query" — the extraction output plugs into the same fact base
+as paper extractions, with the layer tag preserving provenance.
 
 ## Speech transcripts (talk/video sources)
 
