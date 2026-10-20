@@ -11,7 +11,7 @@ Two independent worker pools connected by a directory queue, fully decoupled:
 - Crash-safe and resumable: on startup, in-flight jobs are requeued; completed
   transcripts are skipped, so the queue is idempotent.
 - status.jsonl: one JSON line per terminal state (ok / fetch_failed /
-  transcribe_failed), same schema as run-queue.sh.
+  transcribe_failed), same schema as the legacy run-queue.sh.
 - ASR workers default to 1 to keep the shared whisper service single-stream;
   raise with --asr-workers only if the service can take it.
 
@@ -22,7 +22,7 @@ Usage:
 --fetch-cmd / --transcribe-cmd default to the skill's fetch.py / transcribe.sh
 and exist for testing (stub commands) and advanced use.
 
-Environment: same requirements as run-queue.sh — PATH must include a python
+Environment: same requirements as run.sh/pipeline-queue — PATH must include a python
 with requests+numpy (batch venv), and runtime.conf must point at the whisper
 endpoint. Commands run with stdin=/dev/null (see the stdin-swallow lesson).
 """
@@ -138,7 +138,7 @@ def main() -> int:
         tr_cmd = f"bash {skill_dir}/scripts/transcribe.sh {{dir}}"
 
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
-    manifest.sort(key=lambda v: v["duration"])  # shortest first, same as run-queue.sh
+    manifest.sort(key=lambda v: v["duration"])  # shortest first, same as the legacy run-queue.sh
 
     q = Queue(base)
     q.requeue_inflight()
@@ -221,7 +221,7 @@ def main() -> int:
             rc, tail = _run(cmd, base, base / "workspaces" / f"{bv}.tr2.log")
             if rc == 0:
                 os.rename(q.q / Q_READY / f"asr-{bv}", q.q / Q_DONE / bv)
-                # cleanup intermediate WAVs (same as run-queue.sh)
+                # cleanup intermediate WAVs (same as the legacy run-queue.sh)
                 for wav in ws.glob("*.wav"):
                     wav.unlink(missing_ok=True)
                 for wav in (ws / "faster-whisper" / "chunks").glob("*.wav"):

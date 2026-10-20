@@ -10,29 +10,50 @@ description: |
 ## Pipeline
 
 ```text
-fetch-article (download audio) → this skill (transcribe) → LLM (clean)
+fetch-article (download audio) → this skill (transcribe → slides → merge)
 ```
 
-### Step 1: Download Audio
+### One-shot entry (RECOMMENDED)
+
+The whole chain in one command — creates the venv if missing (`uv sync`),
+runs every python stage through `uv run --project <SKILL_DIR>` (never bare
+python3), and prints all artifact paths at the end:
+
+```bash
+bash <SKILL_DIR>/scripts/run.sh "https://www.bilibili.com/video/BV1xx/" [outdir]
+# flags: --no-slides / --no-merge
+```
+
+Exit codes (also written to `<outdir>/.done`): 0 = all stages ok,
+2 = transcript ok but slides/merge failed, 3 = fetch/transcribe failed.
+
+Per-stage control and the cleaning/bilingual/re-clean tooling are below —
+drop to them only when you need to run or re-run a single stage.
+
+### Stage 1: Download Audio
 
 ```bash
 python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
   "https://www.bilibili.com/video/BV1xx/" --json
 ```
 
-Done when: JSON output contains `raw_path` pointing to a workspace dir
-with `audio.mp4` and `metadata.json`.
+Done when: JSON output contains `raw_path` (the `article.json` file
+inside the workspace dir — use its parent directory as the workspace)
+with `audio.mp4` and `metadata.json` alongside.
 
-### Step 2: Transcribe
+### Stage 2: Transcribe
 
 ```bash
 bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>/
 ```
 
-`chunk_transcribe.py` needs `numpy` — if the system `python3` lacks it, set
-`PYTHON=<venv-or-uv-run-python>` when invoking (see `runtime.conf.example`).
+Prefer `run.sh` (locks every python stage to `uv run --project <SKILL_DIR>`);
+when invoking `transcribe.sh` directly, run it via
+`cd <SKILL_DIR> && uv run bash scripts/transcribe.sh` so the venv deps
+(numpy for chunking) are present.
 
-`<workspace-dir>` is the `raw_path` from Step 1. The script loads
+`<workspace-dir>` is the parent dir of the `raw_path` file from Stage 1.
+The script loads
 `<SKILL_DIR>/runtime.conf` for endpoint/model automatically; if absent,
 set `WHISPER_ENDPOINT` and `WHISPER_MODEL` env vars
 (see [Service Discovery](#service-discovery)).
@@ -55,7 +76,7 @@ Done when: `references/transcripts/bilibili/{date}-{title}-{BV}/transcript.md`
 exists with raw ASR text, and the console reports chunk boundaries and
 any low-confidence segments (`avg_logprob < -1.0`).
 
-### Step 3: Clean the Transcript (LLM)
+### Stage 3: Clean the Transcript (LLM)
 
 The raw transcript is continuous text without punctuation. Two automated
 paths — both need `CLEAN_LLM_BASEURL` / `CLEAN_LLM_MODEL` (+ optional
@@ -156,47 +177,38 @@ cd <SKILL_DIR> && uv run python scripts/slides-extract.py <workspace-dir>
 
 Downloads the video (yt-dlp, agent node side — WSL has no ffmpeg), cuts frames
 at scene changes (`select='gt(scene,0.3)'`, `SLIDE_SCENE_THRESHOLD`
-overridable; the frame at t=0 always kept), dedups adjacent frames by
-dHash hamming distance (`SLIDE_HASH_THRESHOLD`, default 8), then OCRs each
-kept slide via the vision endpoint in runtime.conf (`OCR_LLM_*`) with a
-verbatim-transcription prompt (structure preserved, numbers never dropped;
-non-slide shots return `[非幻灯片]`). Resumable: OCR results cached in
-`<workspace>/slides/slides.json`.
+overridable — lower it for animation-style transitions; the frame at t=0
+always kept), dedups adjacent frames by dHash hamming distance (code
+default 8), then OCRs each kept slide via the vision endpoint in
+runtime.conf (`OCR_LLM_*`) with a verbatim-transcription prompt (structure
+preserved, numbers never dropped; non-slide shots return `[非幻灯片]`).
+Resumable: OCR results cached in `<workspace>/slides/slides.json`.
 
 Done when: `<workspace>/slides/slides.json` (timestamped entries with text)
 and `slides.md` exist, and no kept frame has empty OCR text.
 
+Merging with the transcript (automatic as run.sh's stage 4; standalone
+re-run after editing slides/OCR results):
+
+```bash
+cd <SKILL_DIR> && uv run python scripts/merge-slides.py <workspace-dir> \
+  --transcript-dir <references/transcripts/.../BV...>
+```
+
+Writes `transcript.final.md` into the transcript directory: cleaned
+transcript on top, raw segments on a timeline with each slide's OCR text
+inserted as `## [mm:ss 幻灯片]` blocks. Speech and slides are complementary —
+keep both; do not drop transcript text where a slide covers the same content.
+
 ## Chunking Configuration
 
-`STRATEGY` selects the partition algorithm — see
-[`references/chunking.md`](references/chunking.md) for comparison.
-Remaining defaults (`CHUNK_SEC=600`, `SILENCE_DB=-30`, `TOLERANCE=60`,
-`MAX_FILESIZE_MB=25`, `PARALLEL=4`) are sensible for 60-120 minute
-Mandarin tech talks. Override via env vars or `transcribe.sh` flags.
-
-## Full Pipeline (one-liner)
-
-```bash
-BVID="BV1xx..." && \
-OUT=$(python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
-  "https://www.bilibili.com/video/$BVID/" \
-  --json | python3 -c "import sys,json; print(json.load(sys.stdin)['raw_path'])") && \
-bash <SKILL_DIR>/scripts/transcribe.sh "$OUT"
-```
-
-### Merged output (transcript + slides)
-
-With both a transcript and a slides run finished, merge them into one
-readable markdown — cleaned transcript on top, each slide's OCR text
-inserted at its timeline position as a `## [mm:ss 幻灯片]` block:
-
-```bash
-cd <SKILL_DIR> && uv run python scripts/merge-slides.py <workspace-dir>
-```
-
-Writes `transcript.final.md` into the transcript directory. Speech and
-slides are complementary — keep both; do not drop transcript text where a
-slide covers the same content.
+Internal chunking knobs (`STRATEGY`, `CHUNK_SEC`, `SILENCE_DB`, `TOLERANCE`,
+`PARALLEL`, …) keep sane code defaults for 60-120 minute Mandarin tech talks
+— no historical session ever needed to override them, so they are no longer
+documented as user-facing config (override via env vars only if a run
+surprises you; the four partition algorithms — dp/greedy/weighted/threshold —
+are implemented in `chunk_transcribe.py`, comparison in
+[`references/chunking.md`](references/chunking.md)).
 
 ## Environment Check
 
@@ -229,16 +241,12 @@ filter it to taste, then run the resumable queue.
 
 # 2. Filter the manifest (jq / python) — drop vlogs, keep the teaching videos
 
-# 3. Queue — pipeline version (RECOMMENDED): fetch and ASR run as independent
-#    worker pools connected by queues/ (pending → ready → done); downloads of
-#    upcoming videos overlap ASR of the current one, crash-safe via atomic
-#    rename claims + startup requeue, resumable, same status.jsonl schema.
+# 3. Queue — producer/consumer pipeline (fetch workers and ASR workers are
+#    decoupled: downloads of upcoming videos overlap ASR of the current one),
+#    crash-safe via atomic rename claims + startup requeue, resumable:
 mkdir -p ~/research/<topic> && cd ~/research/<topic>
 uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/pipeline-queue.py "$PWD" manifest.json \
   --fetch-workers 2 --asr-workers 1
-
-#    Serial fallback (simpler, no pipelining):
-#    bash <SKILL_DIR>/scripts/run-queue.sh "$PWD" manifest.json
 ```
 
 The queue runs on the skill's uv env (`uv sync` once in `<SKILL_DIR>`; every

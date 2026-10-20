@@ -44,14 +44,6 @@ def load_segments(workspace: Path) -> list[dict]:
     return sorted(segs, key=lambda s: s.get("start", 0))
 
 
-def find_transcript_dir(project_root: Path, bvid: str) -> Path | None:
-    base = project_root / "references" / "transcripts"
-    if not base.is_dir():
-        return None
-    hits = [d for d in base.rglob("*") if d.is_dir() and bvid in d.name]
-    return hits[-1] if hits else None
-
-
 def transcript_body(md_path: Path) -> str:
     """Body text below the header table + --- divider of transcript.md."""
     text = md_path.read_text(encoding="utf-8")
@@ -117,10 +109,22 @@ def format_timeline(segments: list[dict], slides: list[dict]) -> str:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        sys.exit(f"Usage: {sys.argv[0]} <workspace-dir>")
+        sys.exit(f"Usage: {sys.argv[0]} <workspace-dir> [--transcript-dir <dir>]")
     workspace = Path(sys.argv[1])
     if not workspace.is_dir():
         sys.exit(f"FAIL workspace not found: {workspace}")
+    args = sys.argv[2:]
+    if "--transcript-dir" in args:
+        i = args.index("--transcript-dir")
+        td = Path(args[i + 1]) if i + 1 < len(args) else None
+        if not td or not td.is_dir():
+            sys.exit(f"FAIL --transcript-dir not a directory: {td}")
+    else:
+        # no silent cwd-dependent fallback: state the expectation and fail
+        meta0 = json.loads((workspace / "metadata.json").read_text(encoding="utf-8"))
+        sys.exit(f"FAIL --transcript-dir required (expected the "
+                 f"references/transcripts/**/{meta0.get('bvid', '?')} dir "
+                 f"written by transcribe.sh; cwd-dependent lookup removed)")
     meta = json.loads((workspace / "metadata.json").read_text(encoding="utf-8"))
     bvid = meta.get("bvid", "")
     title = meta.get("title", bvid)
@@ -129,7 +133,6 @@ def main() -> None:
         sys.exit("FAIL no slides/slides.json — run slides-extract.py first")
     slides = json.loads(slides_path.read_text(encoding="utf-8"))
 
-    td = find_transcript_dir(Path.cwd(), bvid) or workspace
     segments = load_segments(workspace)
     if not segments:
         sys.exit(f"FAIL no verbose_json segments under {workspace}/*/chunks/transcripts/")
