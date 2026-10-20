@@ -1,6 +1,6 @@
 ---
 name: pdf
-description: Unified PDF toolkit — export Markdown/HTML to PDF, extract text, split/merge/rotate/delete pages, PDF↔image conversion, and OCR. Use when the user asks to 导出 PDF / md 转 pdf / export to PDF / generate a PDF, 提取 PDF 文本 / PDF 文字识别 / parse a PDF, 合并/拆分/旋转/删除 PDF 页面 / split merge rotate PDF pages, PDF 转图片 / 图片转 PDF / pdf to images, or PDF OCR / 扫描件识别. All Python deps run through `uv run --with` — no venv to maintain. Carries vetted toolchain facts (the `uv tool run` pandoc trap, Chinese font strategy, pypdf as the verified text-extraction path) so the agent does not re-derive them.
+description: Unified PDF toolkit — export Markdown/HTML to PDF, extract text, split/merge/rotate/delete pages, PDF↔image conversion, and OCR. Use when the user asks to 导出 PDF / md 转 pdf / export to PDF / generate a PDF, 提取 PDF 文本 / PDF 文字识别 / parse a PDF, 合并/拆分/旋转/删除 PDF 页面 / split merge rotate PDF pages, PDF 转图片 / 图片转 PDF / pdf to images, or PDF OCR / 扫描件识别. All Python deps run through `uv run --with` — no venv to maintain. Carries vetted toolchain facts (the `uv tool run` pandoc trap, Chinese font strategy, markitdown[pdf] as the verified text-extraction path) so the agent does not re-derive them.
 ---
 
 # PDF Toolkit
@@ -25,8 +25,10 @@ every FAIL line is its own setup command; fix and re-run until green.
 |---|---|---|
 | md → PDF (single file or directory) | pandoc + weasyprint | `bash <SKILL_DIR>/scripts/export-pdf.sh <file.md\|dir>` |
 | HTML → PDF | weasyprint CLI | `weasyprint page.html out.pdf` |
-| PDF → text | pypdf | `uv run --with pypdf python -c '...'` (snippet below) |
+| PDF → Markdown（保标题/结构，首选） | markitdown | `uv run --with 'markitdown[pdf]' markitdown in.pdf > out.md` |
+| PDF → 纯文本（快，无结构） | pypdf | `uv run --with pypdf python -c '...'`（snippet below） |
 | split / merge / rotate / delete pages | pypdf | `uv run --with pypdf python -c '...'` (snippets below) |
+| docx/xlsx/pptx → Markdown | markitdown | 同上，markitdown 自动按扩展名路由转换器 |
 | PDF → images, page rendering, metadata | pymupdf | `uv run --with pymupdf python -c '...'` |
 | images → PDF | img2pdf | `uv run --with img2pdf img2pdf *.png -o out.pdf` |
 | scanned PDF OCR | tesseract (system) + pytesseract/pymupdf | see OCR section |
@@ -63,7 +65,15 @@ unzip -o -q MapleMonoNormal-NF-CN.zip \
 fc-cache -f
 ```
 
-## Text extraction (pypdf)
+## Text extraction
+
+**首选 markitdown**（微软“万物转 Markdown”，保住标题层级/结构，直接产出可投喂 LLM 的 md）：
+
+```bash
+uv run --with 'markitdown[pdf]' markitdown input.pdf > input.md
+```
+
+**备选 pypdf 纯文本**（更快、依赖更轻，只要文字不要结构时用）：
 
 ```bash
 uv run --with pypdf python -c '
@@ -139,9 +149,12 @@ with open("input.txt", "w") as out:
   *Python* `pandoc` package, which shadows the system pandoc CLI and behaves
   differently. Always use system pandoc, with weasyprint provided separately
   via `uv tool install weasyprint`.
-- **pypdf via `uv run --with pypdf` is the verified text-extraction path** on
-  these nodes: `pdftotext` (poppler) is not installed and system python3 has
-  no pip — uv-run is the only sane route.
+- **markitdown 必须 `[pdf]` extra**：裸 `markitdown` 遇到 PDF 抛
+  MissingDependencyException（PdfConverter 缺 pdfminer-six 等依赖）。且 CLI
+  转换失败时**退出码仍为 0**——脚本里要检查输出文件非空，不能只看 exit code。
+- **markitdown via `uv run --with 'markitdown[pdf]'` 是已验证的文本提取路径**
+  （底层 pdfminer-six；本节点 pdftotext 不存在、python3 无 pip，uv-run 是唯一
+  正道）。pypdf 仍用于纯文本提取和页操作（拆/合/旋转）。
 - **`--embed-resources` is a no-op for PDF** output. Image self-containment
   is handled by pandoc's internal MediaBag. Do not add the flag.
 - **Do not add `--number-sections`** when the source already hand-numbers

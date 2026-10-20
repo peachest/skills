@@ -15,7 +15,11 @@
 #   uv tool install weasyprint --with pymupdf
 
 # --- per-scenario ephemeral deps (uv run --with X, zero-install) ------------
-# text extract / split / merge / rotate:  pypdf
+# text extraction (Markdown, first choice):  markitdown[pdf]  — NOTE the [pdf]
+#   extra is mandatory (bare markitdown fails on PDF); CLI exits 0 even on
+#   conversion failure — check output non-empty, not exit code.
+#   uv run --with 'markitdown[pdf]' markitdown input.pdf > out.md
+# plain-text fallback / split / merge / rotate: pypdf
 #   uv run --with pypdf python -c "import pypdf"
 # PDF→images / rendering / metadata:      pymupdf
 #   uv run --with pymupdf python -c "import pymupdf"

@@ -60,12 +60,19 @@ else
     echo "WARN pymupdf unavailable — page counts show '?', PDF→images fails. Fix: uv tool install weasyprint --with pymupdf (or check network/proxy for uv run)"
 fi
 
-# 5. pypdf (text extraction / split / merge — ephemeral via uv run)
+# 5. markitdown[pdf] (text extraction, first choice) — ephemeral via uv run
+if uv run --with 'markitdown[pdf]' markitdown --help >/dev/null 2>&1; then
+    echo "PASS markitdown[pdf] (uv run --with, ephemeral)"
+else
+    echo "FAIL markitdown[pdf] unavailable — text extraction broken. Fix: check network/proxy, then: uv run --with 'markitdown[pdf]' markitdown --help"
+    fails=1
+fi
+
+# 6. pypdf (plain-text extraction / split / merge — ephemeral via uv run)
 if uv run --with pypdf python -c 'import pypdf' >/dev/null 2>&1; then
     echo "PASS pypdf (uv run --with, ephemeral)"
 else
-    echo "FAIL pypdf unavailable — text extraction / merge / split broken. Fix: check network/proxy, then: uv run --with pypdf python -c 'import pypdf'"
-    fails=1
+    echo "WARN pypdf unavailable — plain-text fallback & page ops (split/merge/rotate) broken. Fix: uv run --with pypdf python -c 'import pypdf'"
 fi
 
 [ "$fails" -eq 0 ] || exit 1
