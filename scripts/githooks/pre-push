@@ -30,9 +30,23 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     else
         log_opts="$remote_sha..$local_sha"
     fi
-    if ! "${cmd[@]}" --log-opts="$log_opts" >&2; then
-        echo "pre-push: BLOCKED — gitleaks found issues in $local_ref ($log_opts). Remove them (git rebase/filter) and push again." >&2
-        fail=1
+    # Distinguish scan-failure from leak-found: a missing remote_sha object
+    # (e.g. after local gc) makes git log fail inside gitleaks, which is NOT
+    # a leak — refetch and retry instead of blocking the push forever.
+    if ! out=$("${cmd[@]}" --log-opts="$log_opts" 2>&1); then
+        if printf '%s' "$out" | grep -q "leaks found"; then
+            printf '%s\n' "$out" >&2
+            echo "pre-push: BLOCKED — gitleaks found issues in $local_ref ($log_opts). Remove them (git rebase/filter) and push again." >&2
+            fail=1
+        else
+            echo "pre-push: WARN gitleaks scan failed (not a leak finding) for $local_ref — attempting fetch + retry" >&2
+            git fetch --quiet origin 2>/dev/null || true
+            if ! out=$("${cmd[@]}" --log-opts="$log_opts" 2>&1); then
+                printf '%s\n' "$out" >&2
+                echo "pre-push: BLOCKED — gitleaks scan errored twice for $local_ref ($log_opts). Investigate manually (gitleaks git --log-opts='$log_opts')." >&2
+                fail=1
+            fi
+        fi
     fi
 done
 
