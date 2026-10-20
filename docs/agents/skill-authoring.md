@@ -20,9 +20,78 @@ Two classes of skills live here:
 | Requirement | Strength | Applies to |
 | --- | --- | --- |
 | No internal endpoints/secrets in tracked files | **Required** | every skill |
+| Python invocations locked to `uv run` (see Pipeline discipline) | **Required** | script skills with third-party deps |
+| Subprocess failures must surface (see Pipeline discipline) | **Required** | script skills |
+| Single orchestration entry when stages chain (see Pipeline discipline) | **Required** for multi-stage pipelines | script skills |
+| Cross-skill script imports documented (see Pipeline discipline) | **Required** when one skill's script imports another's | script skills |
 | `runtime.conf.example` when node-specific values exist | **Required** | script skills with external deps |
 | `scripts/check-env.sh` | **Required** for heavy external deps (endpoints, credentials, CLIs with auth); suggested otherwise | script skills |
 | Diagnose companion skill (`diagnose-<target>`) | **Suggested** — only when it earns its place | see criteria below |
+
+## Python environment tiers
+
+Skill venvs are either SHARED or skill-local — never one-off sprawl. Two
+tiers cover every case (distilled from the 2026-10-20 venv audit: 46 venvs,
+~1.4GB install-copy duplication, broken non-relocatable copies):
+
+| Tier | Who | Where | Invocation |
+| --- | --- | --- | --- |
+| 1 — shared test venv | pytest-only skills (no runtime deps beyond pytest) | repo root `pyproject.toml` → `<repo-root>/.venv` | `uv run --project <repo-root> pytest <skill-dir>/tests` |
+| 2 — skill-local venv | skills with real runtime deps (e.g. bilibili-transcriber: aiohttp/numpy/pillow) | `<SKILL_DIR>/.venv` via `uv sync` | `uv run --project <SKILL_DIR> ...` (locked by Pipeline discipline #2) |
+
+Rules:
+
+- **Never create a per-skill venv for pytest-only testing** — use tier 1.
+  A new runtime dep that a pytest-only skill genuinely needs is a signal the
+  skill moves to tier 2 (add it to its pyproject, `uv sync`).
+- **Install copies never carry venvs.** venvs are non-relocatable (shebangs
+  hardcode the source path — a copied `.venv` silently invokes the SOURCE
+  repo's interpreter). `npx skills add` copies them anyway, so after any
+  install/sync: `rm -rf ~/.agents/skills/*/.venv`. If a skill's scripts need
+  python at runtime on the consuming side, that is tier-2 territory:
+  document `uv sync` in its SKILL.md, don't ship the venv.
+- **Discoverability**: `check-all-env.sh` (repo root) is the single sweep —
+  it must keep working as skills migrate between tiers. Do not introduce a
+  third location without updating this section first.
+
+## Pipeline discipline (script skills)
+
+Distilled from the bilibili-transcriber retro (2026-10-20, 41-session trace
+analysis). Read this section BEFORE writing or modifying any script skill.
+
+1. **Subprocess failures must surface.** Every `subprocess.run` whose failure
+   changes the outcome must check the return code and exit non-zero. A script
+   that "succeeds" with a degraded silent result (e.g. ffmpeg errored and the
+   script continued with 1 frame instead of 12) is worse than a crash — the
+   agent trusts the empty output. Verified pattern: check `r.returncode != 0`
+   → `sys.exit(f"FAIL ...: {r.stderr[-500:]}")`.
+
+2. **Lock python to `uv run`.** Never document or call bare `python3` for
+   scripts with third-party deps — 41 sessions produced 529 bare-python3
+   calls and 22 numpy ModuleNotFoundErrors before this rule. Canonical form:
+   `uv run --project <SKILL_DIR> python scripts/<x>.py`; the orchestration
+   entry auto-creates the venv (`uv sync`) when `.venv/bin/python` is missing.
+   Do not add PYTHON= config keys — a unified entry makes them dead weight.
+
+3. **One orchestration entry for multi-stage pipelines.** When a skill's
+   stages must run in order (fetch → transcribe → merge), provide
+   `scripts/run.sh <args>` that chains them, prints each artifact's absolute
+   path, and defines aggregated exit codes (0 all ok / 2 partial / 3 nothing
+   usable). For long tasks, write a completion marker containing the exit
+   code (`.done` file) so subscription hooks get signal + verdict from one
+   file. Keep per-stage sections in SKILL.md as manual/advanced fallback.
+
+4. **Document cross-skill script imports.** If your script imports another
+   skill's internal module (e.g. `sys.path.insert(0, ../fetch-article/scripts)`),
+   the SKILL.md must say so AND name the breakage symptom when the dependency
+   is missing. Sibling installs are a hidden dependency: agents cannot see it
+   until it breaks at runtime.
+
+5. **Doc-claimed output shapes need an e2e check.** When editing a skill whose
+   docs describe another script's output format (paths, JSON keys), verify
+   against the real output once (run the smallest stage) before trusting the
+   prose. Docs rot silently: `raw_path` was documented as a directory while
+   the code returns a file path — caught only by an end-to-end run.
 
 ## Sensitive data rules (required, every commit)
 
