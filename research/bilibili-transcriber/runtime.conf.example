@@ -1,6 +1,14 @@
 # bilibili-transcriber Runtime Configuration
 # Copy this file to runtime.conf and fill in your ASR service details.
 #
+# ── Backend shapes ────────────────────────────────────────────
+# 1. Direct endpoint (LAN / k8s NodePort): just set WHISPER_ENDPOINT.
+# 2. NAT'd host (e.g. faster-whisper inside WSL on a laptop): also set the
+#    WHISPER_TUNNEL_* trio below — transcribe.sh reuses an existing ssh
+#    tunnel or brings one up automatically, then probes the endpoint.
+#
+# (DEPRECATED 2026-10) The original backend was a whisper-asr service on a
+#   k3s cluster via NodePort. Discovery steps kept below for reference:
 # How to discover the ASR service on a Kubernetes cluster:
 #   1. Find the service:
 #      sudo kubectl get svc --all-namespaces | grep -i whisper
@@ -13,9 +21,17 @@
 #
 # If the ASR service is not on Kubernetes, just set WHISPER_ENDPOINT
 # to the service URL directly (e.g. http://localhost:8000/v1).
-WHISPER_ENDPOINT=http://<node-ip>:<node-port>/v1
+#
+# ── SSH tunnel shape (NAT'd backend, e.g. WSL) ───────────────
+# WHISPER_ENDPOINT then points at the LOCAL side of the tunnel:
+WHISPER_ENDPOINT=http://127.0.0.1:18100/v1
 WHISPER_MODEL=<model-id>
 WHISPER_LANG=zh
+# ssh -f -N -L <LOCAL_PORT>:<REMOTE> <HOST> is run by transcribe.sh
+# (with ExitOnForwardFailure=yes + ServerAliveInterval=30):
+#WHISPER_TUNNEL_HOST=<ssh-host-from-~/.ssh/config>
+#WHISPER_TUNNEL_LOCAL_PORT=18100
+#WHISPER_TUNNEL_REMOTE=127.0.0.1:8100
 
 # ── LLM cleanup endpoint (Step 3: clean-transcripts.py / dual-transcribe.py) ──
 # Any OpenAI-compatible chat endpoint. Model choice matters:
@@ -33,5 +49,15 @@ WHISPER_LANG=zh
 CLEAN_LLM_BASEURL=http://<llm-host>:<port>/v1
 CLEAN_LLM_MODEL=<fast-chat-model-id>
 CLEAN_LLM_KEY=<api-key>
+
+# ── Slides OCR endpoint (slides-extract.py, Step 4) ──────────
+# Any OpenAI-compatible VISION chat endpoint (must accept image_url
+# content parts). Discovery same as the cleanup endpoint above:
+#   curl -s http://<vision-host>:<port>/v1/models
+OCR_LLM_BASEURL=http://<vision-host>:<port>/v1
+OCR_LLM_MODEL=<vision-model-id>
+OCR_LLM_KEY=<api-key>
+# SLIDE_SCENE_THRESHOLD=0.3   # ffmpeg scene-change cut sensitivity (0-1)
+# SLIDE_HASH_THRESHOLD=8      # adjacent-frame dedup, dHash hamming distance
 # Proofreading language: auto-detect (CJK ratio) by default; force with zh|en
 #CLEAN_LANG=en

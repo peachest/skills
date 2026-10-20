@@ -7,6 +7,7 @@ dependencies = [
     "aiohttp>=3.9",   # clean-transcripts.py / dual-transcribe.py LLM stage
     "numpy",           # chunk_transcribe.py silence-aware chunking
     "requests",        # enumerate-uploader.py / API calls
+    "pillow",         # slides-extract.py dHash adjacent-frame dedup
 ]
 
 [dependency-groups]

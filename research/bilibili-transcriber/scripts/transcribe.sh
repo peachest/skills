@@ -82,6 +82,43 @@ if [ ! -f "$AUDIO_MP4" ]; then
   exit 1
 fi
 
+# ── SSH tunnel: bring up / reuse for NAT'd ASR backends (e.g. WSL) ──
+# runtime.conf:
+#   WHISPER_TUNNEL_HOST=wsl              # ssh host from ~/.ssh/config
+#   WHISPER_TUNNEL_LOCAL_PORT=18100      # local forward port
+#   WHISPER_TUNNEL_REMOTE=127.0.0.1:8100 # service address as seen by the tunnel host
+# With a tunnel configured, WHISPER_ENDPOINT points at the local side
+# (e.g. http://127.0.0.1:18100/v1). Probe-before-connect: reuse an existing
+# tunnel if the endpoint already answers, else establish one and re-probe.
+if [ -n "${WHISPER_TUNNEL_HOST:-}" ]; then
+  TUNNEL_PORT="${WHISPER_TUNNEL_LOCAL_PORT:-18100}"
+  TUNNEL_REMOTE="${WHISPER_TUNNEL_REMOTE:-127.0.0.1:8100}"
+  TUNNEL_URL="http://127.0.0.1:${TUNNEL_PORT}"
+  case "$WHISPER_ENDPOINT" in
+    */v1) TUNNEL_MODELS_URL="${WHISPER_ENDPOINT%/}/models" ;;
+    *)    TUNNEL_MODELS_URL="${WHISPER_ENDPOINT%/}/v1/models" ;;
+  esac
+  probe_asr() { curl -s --noproxy '*' --max-time 5 -o /dev/null -w '%{http_code}' "$TUNNEL_MODELS_URL" 2>/dev/null || true; }
+
+  if [ "$(probe_asr)" = "200" ]; then
+    echo "[tunnel] reusing existing tunnel on 127.0.0.1:${TUNNEL_PORT}"
+  else
+    echo "[tunnel] endpoint not reachable, opening ssh tunnel ${WHISPER_TUNNEL_HOST} → ${TUNNEL_REMOTE}"
+    ssh -f -N -L "${TUNNEL_PORT}:${TUNNEL_REMOTE}" \
+      -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
+      "$WHISPER_TUNNEL_HOST" \
+      || { echo "✗ ssh tunnel failed (check 'ssh ${WHISPER_TUNNEL_HOST}' manually)"; exit 1; }
+    sleep 1
+    CODE=$(probe_asr)
+    if [ "$CODE" != "200" ]; then
+      echo "✗ tunnel up but ASR not answering at ${TUNNEL_MODELS_URL} (http ${CODE:-none})"
+      echo "  Service down on the remote side? Probe it: ssh ${WHISPER_TUNNEL_HOST} curl -s ${TUNNEL_REMOTE}/v1/models"
+      exit 1
+    fi
+    echo "[tunnel] ASR reachable via ${WHISPER_ENDPOINT}"
+  fi
+fi
+
 # ── Determine title and BV id for reference path ──
 TITLE_SLUG="unknown"
 META_JSON="${WORK_DIR}/metadata.json"
