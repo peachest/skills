@@ -1,13 +1,13 @@
 ---
 name: tool-call-diagnose
-description: "Diagnose how a tool was called in pi session traces, along three axes — Failure taxonomy & blame (classify errors into families, blame agent-usage vs harness vs environment, cross-checked against companion skills like pi-subagents for the subagent tool), Retry waste (failed→retried patterns, identical-retry loops, quantified token cost), Usage & sedimentation (habitual anti-patterns across all calls, fallback scripts — propose a new companion skill when none covers the tool). Takes a trace from /skill:tool-call-extract. Use when the user asks 诊断工具调用失败 / why subagent workflowScript or bash glab api calls keep failing, or to audit one tool's usage across sessions."
+description: "Diagnose how a tool was called in pi session traces, along four axes — Failure taxonomy & blame (classify errors into families, blame agent-usage vs harness vs environment, cross-checked against companion skills like pi-subagents for the subagent tool), Retry waste (failed→retried patterns, identical-retry loops, quantified token cost), Usage & sedimentation (habitual anti-patterns across all calls, fallback scripts — propose a new companion skill when none covers the tool), Contract & competition (tool bypass via bash, schema-fit misses, description→behavior gap — repeated same-shape misuse means the tool description failed). Takes a trace from /skill:tool-call-extract. Use when the user asks 诊断工具调用失败 / why subagent workflowScript or bash glab api calls keep failing, or to audit one tool's usage across sessions."
 ---
 
 # Tool Call Diagnose
 
 **Leading word:** the **calls dump** — paired toolCall/toolResult records delivered by `/skill:tool-call-extract`. Every finding cites dump records or trace entry indices (`call_entry 306`, `[307]`); a finding with neither is an opinion, not a finding.
 
-The tool under diagnosis is the **target tool** (`subagent`, `bash`, `edit`, ...). Three axes run as parallel fresh-context sub-agents: 失败分类判责 / 重试浪费 / 用法沉淀. Before any of them runs, one gate decides the whole routing: **does a companion skill already exist for this tool?**
+The tool under diagnosis is the **target tool** (`subagent`, `bash`, `edit`, ...). Four axes run as parallel fresh-context sub-agents: 失败分类判责 / 重试浪费 / 用法沉淀 / 契约与替代. Before any of them runs, one gate decides the whole routing: **does a companion skill already exist for this tool?**
 
 The gate exists because the recurring real-world outcome is: the agent hit pits that a companion skill already documents (pi-subagents documents exactly why `Structured single-child execution cannot be combined with workflowScript` fails) — reading it once would have skipped the failure. Findings of that shape route to behavior fixes, not new documentation.
 
@@ -36,9 +36,9 @@ If a companion skill exists, **read it fully now** — its documented pitfalls a
 
 If no companion skill exists, note it — axis 3 gets a **new-skill mandate** instead of a cross-check baseline.
 
-### 3. Spawn the three axes in parallel
+### 3. Spawn the four axes in parallel
 
-First verify a read-only analysis agent exists (`subagent({ action: "list" })`); if none, run the axes inline in sequence and note the degradation. Spawn with `runs.all`, three children, `context: 'fresh'` each. **Every child gets**: the session file path, both calls dumps (paths), the trace index path, and the absolute paths of this skill's `references/error-families.md` and the extract skill's `references/session-jsonl.md` (fresh context — bare references leave them blind). Each brief demands: findings cited by dump record (`call_entry N`) or trace entry index, quantified waste with its arithmetic named, report in Chinese, under 400 words.
+First verify a read-only analysis agent exists (`subagent({ action: "list" })`); if none, run the axes inline in sequence and note the degradation. Spawn with `runs.all`, four children, `context: 'fresh'` each. **Every child gets**: the session file path, both calls dumps (paths), the trace index path, and the absolute paths of this skill's `references/error-families.md` and the extract skill's `references/session-jsonl.md` (fresh context — bare references leave them blind). Each brief demands: findings cited by dump record (`call_entry N`) or trace entry index, quantified waste with its arithmetic named, report in Chinese, under 400 words.
 
 #### Axis 1 — 失败分类与判责 (Failure taxonomy & blame)
 
@@ -52,9 +52,13 @@ First verify a read-only analysis agent exists (`subagent({ action: "list" })`);
 
 > The calls dump (full variant) shows every call's args. Across successes and failures: (a) habitual anti-patterns — args shapes that are legal but costly (oversized inline commands, redundant flags, re-emitting payloads the tool already holds); (b) fallback behavior — after failures, what did the agent improvise (inline scripts, different tools, manual procedures)? Classify each improv: one-off (fine, leave it) vs repeated pattern (2+ times in this trace) vs persistent gap (the agent needed something no tool/skill provides). <If companion skill exists: name it and list its documented usage rules — flag only what it does NOT cover.> <If no companion skill exists: for every repeated pattern and persistent gap, sketch a new companion-skill proposal — name, trigger description, content outline drawn from this trace's evidence, which call entries it would have saved.> 报告用中文，每条发现标注 call_entry 序号。
 
+#### Axis 4 — 契约与替代 (Contract & competition)
+
+> The calls dump (full variant) plus the raw session jsonl are the evidence. Three checks: (a) **tool bypass** — did the agent route the same need through `bash` instead of the target tool? Count `bash` toolCalls whose args contain the target tool's CLI name (e.g. diagnosing `worktrunk` → grep bash args for `wt `); report bypass ratio and sample entries — a high bypass ratio means the tool's schema or description is harder to use than raw shell. (b) **schema fit** — args shapes outside the schema's intent: enum misses, repeated-verb duplicates (`{command:"switch",args:["switch"]}`), optional fields re-sent with defaults, invalid combinations the schema failed to prevent. (c) **description→behavior gap** — same-shape misuse repeated across turns or days (e.g. duplicate verbs recurring for 3 weeks): a rule the description states but calls keep violating is a description that failed, not an agent fault — propose the schema-level fix (enum tightening, positional hint, shorter description) over re-stating the rule. 报告用中文，每条发现标注 call_entry 序号和 bash 旁路样本。
+
 ### 4. Aggregate
 
-Present the three axis reports under `## 失败分类与判责`, `## 重试与浪费`, `## 用法与沉淀` — verbatim or lightly cleaned. **Do not merge or rerank across axes.** End with per-axis one-liners: findings count + worst finding.
+Present the four axis reports under `## 失败分类与判责`, `## 重试与浪费`, `## 用法与沉淀`, `## 契约与替代` — verbatim or lightly cleaned. **Do not merge or rerank across axes.** End with per-axis one-liners: findings count + worst finding.
 
 ### 5. Classify and route
 
@@ -68,7 +72,7 @@ Routes:
 - **skill-doc** — a companion skill exists; its markdown must change (new pit, clarified usage rule)
 - **new-skill** — no companion skill covers the tool; sediment the patterns into a new skill (axis 3's proposal). New skills go to `~/skills/in-progress/` per repo convention
 - **agent-behavior** — the knowledge exists (companion skill) and the agent didn't use it; fix is a nudge — AGENTS.md rule, or a trigger-description tweak on the companion skill so it fires earlier
-- **harness** — not the agent's fault (tool schema ambiguity, environment, provider); route to the user
+- **harness** — not the agent's fault (tool schema ambiguity, environment, provider); route to the user. Axis 4's schema-fix proposals (enum tightening, description rewrite) land here when the tool is upstream, or as a local patch when the tool is vendored/self-owned
 - **noop** — one-off, not worth a change
 
 Before proposing any fix, check the obvious duplicate: a proposal that just re-states what a companion skill already documents is `agent-behavior`, not `skill-doc`.
@@ -79,7 +83,7 @@ Ask the user which rows to act on. Applied fixes follow the skills-repo conventi
 
 - [ ] Trace + calls dumps (+ trace index) in hand
 - [ ] Companion-skill gate resolved (skill named & read, or explicit "none")
-- [ ] All three axis reports present, every finding carrying call_entry / entry indices
+- [ ] All four axis reports present, every finding carrying call_entry / entry indices
 - [ ] Failure findings carry family + blame; documented-pit hits marked as such
 - [ ] Retry findings carry quantified cost with named arithmetic
 - [ ] Routing table delivered; fixes applied only on user confirmation

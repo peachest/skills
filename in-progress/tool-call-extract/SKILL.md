@@ -47,6 +47,12 @@ For diagnosing *how the agent used* the tool, run a second dump without `--error
 
 **Done when**: the dump file exists with the expected `matched_calls` count.
 
+### 5. Hand off to diagnose (default-on when errors exist)
+
+When the dump contains **any matched errors** (`matched_errors > 0`, or error samples in the triage list), do **not stop at delivery**: announce and continue directly into `/skill:tool-call-diagnose` with the deliverables — the dump already contains everything diagnose needs, and asking the user whether to diagnose what they just asked you to investigate is a wasted turn. Say one line ("N 次错误，继续用 tool-call-diagnose 分轴分析") and invoke the skill in the same session.
+
+Only a **zero-error, data-only delivery** (pure "哪些 session 用过 X" / usage-count questions with no errors) stops here — close with one line: dump 里有错误时可接 `/skill:tool-call-diagnose` 深入分析.
+
 ## Deliverable contract
 
 The consumer (typically `/skill:tool-call-diagnose`) receives:
@@ -54,6 +60,8 @@ The consumer (typically `/skill:tool-call-diagnose`) receives:
 1. The **session file** path — the raw trace
 2. The **calls dump** path(s) — paired call/result records
 3. Per-session stats from the triage list (counts feed scope estimates)
+
+Historical note (2026-10-20 evidence): 27 real extract runs produced only 4 diagnose follow-ups — most uses are standalone data lookups, but error-bearing dumps were also being dropped without diagnosis. The step-5 handoff rule exists to close that gap: errors found → diagnose runs by default, no re-asking.
 
 For the surrounding-turn map (what the agent did between calls), the consumer builds a trace index with the extract skill's sibling: `python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --index <session-file> > trace-index.json`.
 
