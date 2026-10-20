@@ -36,7 +36,11 @@ PROMPT = (
     "2. 逐字转录，不要遗漏任何数字、单位、代码、公式、脚注\n"
     "3. 保持原语言，不翻译\n"
     "4. 如果这张图不是幻灯片（人物、空镜头、过渡画面），只输出：[非幻灯片]"
+    "5. 注意：低分辨率或文字模糊但版式为演示文稿（PPT）的图仍是幻灯片，"
+    "请尽力转录可辨认的文字，不要因为看不清而判为非幻灯片"
 )
+
+NON_SLIDE = "[非幻灯片]"
 
 
 def load_conf() -> dict:
@@ -132,6 +136,16 @@ def download_video_wbi(bvid: str, video: Path) -> Path:
     import adapters.bilibili as bl  # noqa: PLC0415
 
     session = bl._make_session()
+    # 复用 bili CLI 登录态拿 >480p 流（未登录 DASH 上限 480p，OCR 文字可读性差）
+    cred = Path.home() / ".bilibili-cli" / "credential.json"
+    if cred.is_file():
+        try:
+            c = json.loads(cred.read_text(encoding="utf-8"))
+            pairs = {"SESSDATA": c.get("sessdata"), "bili_jct": c.get("bili_jct"),
+                     "DedeUserID": c.get("dedeuserid"), "buvid3": c.get("buvid3")}
+            session.cookies.update({k: v for k, v in pairs.items() if v})
+        except Exception as e:  # noqa: BLE001 — 无凭证/坏文件仍可裸抓 480p
+            print(f"  no bili CLI credential ({e}); downloading unauthenticated")
     nav = session.get("https://api.bilibili.com/x/web-interface/nav", timeout=15).json()
     wbi = nav["data"]["wbi_img"]
     img_key = re.search(r"/wbi/([^/]+)", wbi["img_url"]).group(1)
@@ -160,6 +174,12 @@ def download_video_wbi(bvid: str, video: Path) -> Path:
           f"~{best.get('bandwidth', 0) * 351 // 8 // 1048576}MB")
     bl._download_with_aria2c(url, str(video), str(video.parent))
     return video
+
+
+def ffprobe_duration(video: Path) -> float:
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                        "-of", "csv=p=0", str(video)], capture_output=True, text=True)
+    return float(r.stdout.strip() or 0)
 
 
 def extract_frames(video: Path, out_dir: Path, threshold: float,
@@ -197,6 +217,14 @@ def extract_frames(video: Path, out_dir: Path, threshold: float,
         if grab(t + grab_delay, f):
             frames.append({"file": str(f), "time_sec": t})
     return frames
+
+
+def upscale(image_path: str, factor: int = 2) -> str:
+    """Lanczos 放大后存旁路文件，返回路径（低清帧二次判定用）。"""
+    im = Image.open(image_path)
+    out = image_path + f".{factor}x.jpg"
+    im.resize((im.width * factor, im.height * factor), Image.LANCZOS).save(out, quality=92)
+    return out
 
 
 def ocr_frame(conf: dict, image_path: str, attempts: int = 3) -> str:
@@ -245,6 +273,11 @@ def main() -> None:
 
     print(f"[2/4] scene-cut frames (threshold={threshold})…")
     frames = extract_frames(video, out_dir, threshold)
+    if len(frames) < 3 and ffprobe_duration(video) > 120:
+        # 讲解类视频转场分值低（0.3 阈值下几乎无切点），降阈值重试一次；
+        # 过检由后级 dHash 去重 + OCR [非幻灯片] 判定兜底
+        print(f"  only {len(frames) - 1} cuts in a long video — retrying threshold=0.15")
+        frames = extract_frames(video, out_dir, 0.15)
     print(f"  {len(frames) - 1} scene cuts + t=0 frame")
 
     print(f"[3/4] adjacent-frame dedup (dHash hamming ≤ {hash_threshold})…")
@@ -254,6 +287,8 @@ def main() -> None:
     print("[4/4] OCR via vision LLM…")
     t0 = time.time()
     entries = []
+    def flush():
+        cache_path.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
     for i, f in enumerate(kept, 1):
         cached = cache.get(f["file"])
         if cached and cached.get("text"):
@@ -262,14 +297,23 @@ def main() -> None:
             try:
                 text = ocr_frame(conf, f["file"])
                 status = "ok"
+                if text == NON_SLIDE:
+                    # 二次判定：2x 放大提升小字可读性，仍判非幻灯片才落地
+                    up = upscale(f["file"])
+                    try:
+                        text2 = ocr_frame(conf, up)
+                    finally:
+                        Path(up).unlink(missing_ok=True)
+                    if text2 and text2 != NON_SLIDE:
+                        text, status = text2, "ok (rejudged 2x)"
             except Exception as e:  # noqa: BLE001 — report and continue
                 text, status = "", f"error: {e}"
         entries.append({"file": f["file"], "time_sec": f["time_sec"],
                         "timecode": timecode(f["time_sec"]), "text": text, "status": status})
+        flush()  # 逐帧落盘：中断后重跑已完成的帧直接命中缓存
         print(f"  [{i}/{len(kept)}] {timecode(f['time_sec'])} {status}: {text[:40]!r}")
     ocr_s = time.time() - t0
 
-    cache_path.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
     md = ["# 幻灯片（场景切帧 + 识图）", ""]
     for e in entries:
         md.append(f"## [{e['timecode']} 幻灯片]")

@@ -129,3 +129,19 @@ def test_transcript_body_splits_divider():
         p = Path(d) / "transcript.md"
         p.write_text("# 转录结果\n\n| 字段 | 值 |\n\n---\n\n正文内容", encoding="utf-8")
         assert ms.transcript_body(p) == "正文内容"
+
+
+def test_upscale_2x(tmp_path):
+    from PIL import Image
+    src = tmp_path / "f.jpg"
+    Image.new("RGB", (10, 8), "white").save(src)
+    out = se.upscale(str(src))
+    assert Path(out).exists() and Path(out) != src
+    assert Image.open(out).size == (20, 16)
+    Path(out).unlink()
+
+
+def test_upscale_missing_source(tmp_path):
+    import PIL
+    with pytest.raises(FileNotFoundError):
+        se.upscale(str(tmp_path / "nope.jpg"))
