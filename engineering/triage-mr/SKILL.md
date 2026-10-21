@@ -131,6 +131,7 @@ to Step 4 and report. Failed classified items → fix the cause, re-run
 ```bash
 python3 <SCRIPTS_DIR>/ocr-verify-resolved.py <MR_OR_PR_ID>
 # machine-readable open-thread list: append --json
+# --pull-file <path> overrides the default .triage/<MR>/issues.json mapping source
 ```
 
 Exit 0 = every resolvable thread resolved + CI finished. Exit 1 = open threads

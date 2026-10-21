@@ -18,7 +18,8 @@ python3 <SCRIPTS_DIR>/verdict.py <MR> <no> --class TP|FP|Edge|OOS|Q \
 - `--class` stores `Q` in the state file; consumers normalize (`Q` → `Question`
   before consulting label/resolved maps).
 - `--fix-plan` is required for TP.
-- `--priority` is the string enum `high|medium|low`.
+- `--priority` is the string enum `high|medium|low`; consumed only for TP
+  (other classes ignore it).
 - `--force` replaces an existing entry (matched by `discussion_id` + anchor,
   never ordinal — ordinals reshuffle across pulls; the dedup key survives
   ordinal reshuffling and re-reports under new ids).
