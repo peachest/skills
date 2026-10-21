@@ -43,7 +43,9 @@ python3 <SCRIPTS_DIR>/ocr-post-labels.py <MR_OR_PR_ID> --mode triage \
    history.
 2. Resolve iff the entry's per-item `resolved` field says so — post executes
    the verdict-time decision, never re-judges. Legacy entries without the
-   field fall back to mode maps (`--mode triage` vs default). A thread is
+   field fall back to mode maps (`--mode triage`: TP+FP+OOS resolve, Edge/Q
+   stay open; default mode: TP stays open for tracking, FP/OOS resolve).
+   Mode-map contents: ocr-post-labels.py `_DEFAULT_RESOLVED` / `_TRIAGE_RESOLVED`. A thread is
    never resolved when its reply failed (exit non-zero; `--force` overrides).
 3. `posted: true` written back to the `--classified` file on success.
 
