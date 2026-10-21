@@ -85,7 +85,8 @@ export default function (pi: ExtensionAPI) {
 			to: Type.String({ description: "Target pane id, e.g. w3:p2 (runtime-qualified targets: use runtime param)" }),
 			message: Type.String({ description: "Message body, five-part shape. [caller identity] is auto-prepended — do not write it yourself." }),
 			steer: Type.Optional(Type.Boolean({ description: "true = deliver immediately mid-task (steer). Default false = followUp (wait for idle/done, up to 30min)." })),
-			runtime: Type.Optional(Type.String({ description: "herdr session name when the peer lives in another runtime (default/dev/agent...). Omit for current runtime." })),
+			runtime: Type.Optional(Type.String({ description: "herdr session NAME when the peer lives in another runtime (default/dev/agent...). Omit for current runtime. NEVER pass a machine label here — machines go in the machine param." })),
+			machine: Type.Optional(Type.String({ description: "Saved SSH machine label (herdr machine list, e.g. wsl) for cross-machine peers. Mutually exclusive with runtime — a machine pins its own session. Cross-machine dispatches through the tool use the 90s gate; for the full 30min gate use the CLI script under bg_run." })),
 			wait_ms: Type.Optional(Type.Number({ description: "After sending, wait up to this many ms for the peer's settle state and return it." })),
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -103,7 +104,11 @@ export default function (pi: ExtensionAPI) {
 
 			const args = [join(SCRIPTS, "herdr-send.py"), params.to, msgFile, "--from", from];
 			if (params.steer) args.push("--steer");
-			if (params.runtime) args.push("--runtime", params.runtime);
+			if (params.machine && params.runtime) {
+				throw new Error("--machine and --runtime are mutually exclusive (a machine pins its own session)");
+			}
+			if (params.machine) args.push("--machine", params.machine);
+			else if (params.runtime) args.push("--runtime", params.runtime);
 			if (params.wait_ms != null) args.push("--wait", String(params.wait_ms));
 			// the script's followUp gate MUST NOT exceed pi.exec's kill timeout:
 			// a SIGKILLed python loses its buffered stdout entirely (empty
