@@ -110,9 +110,13 @@ def main():
     # ($HERDR_SESSION) — same-runtime dispatch is the common case; a bare herdr
     # would instead follow HERDR_SOCKET_PATH, which is not always the sender's
     # logical runtime (pitfall #27).
-    runtime = runtime or os.environ.get("HERDR_SESSION")
-    # --machine is mutually exclusive with --session (herdr semantics): the saved
-    # machine entry pins its own session. Target runtime defaults to $HERDR_SESSION.
+    if machine:
+        # $HERDR_SESSION is NOT inherited in machine mode — inheriting it made
+        # every in-herdr cross-machine send fail the mutual-exclusion check
+        # (2026-10-21, w5:p2 whisper dispatch); a machine pins its own session.
+        runtime = None
+    else:
+        runtime = runtime or os.environ.get("HERDR_SESSION")
     if machine and runtime:
         fail(1, "--machine and --runtime are mutually exclusive (a machine pins its session)")
     if machine:
@@ -202,7 +206,7 @@ def main():
     agent = ((d.get("result") or {}).get("agent") or {})
     receipt = {
         "delivered": True,
-        "target": f"{machine}:{runtime}:{target}" if machine else (f"{runtime}:{target}" if runtime else target),
+        "target": f"{machine}:{runtime or 'machine-session'}:{target}" if machine else (f"{runtime}:{target}" if runtime else target),
         "agent_status": agent.get("agent_status"),
         "revision": agent.get("revision"),
         "state_change_seq": agent.get("state_change_seq"),
