@@ -87,3 +87,11 @@
 - passCheck: 调用点文档的 CLI flag 与 schema 与实现一致（本票后以 ocr review 复核）
 - 证据: ocr review r1 F6（templates.md bare-array 死模板，155e956 修复）
 - 出现: 2026-10-15 ocr r1 → absorbed 2026-10-15 spec #57 #65
+
+## P-010 post 追尾：CI 门挡住每轮 post，裁决积压三轮
+- 状态: absorbed-into-skill
+- 现象: "裁决→修复→push"型 MR（每轮修复即 push）上，post 被推迟到 CI 终态之后——而每次 push 又触发新 pipeline + OCR bot 新一轮评审，post 永远排队。实证：ascend MR !6 六轮 146 findings，三轮裁决（47 条）只躺在本地 classified.json，post 仅在 r2 后跑过一次，47 线程零回复滞留远端，用户看出"一直没有 resolve"
+- 根因: 流程语义错误——把 CI 门当成了所有 post 的前置（SKILL.md 原文 "pull and verify run a pipeline timing gate" 被 agent 泛化到 post），而 post 的 join/anchor 校验只针对 pull 快照，与 CI 无关；bot 每-push-追评的机制使"等 CI 再 post"在修复型 MR 上结构性不可满足
+- 方案: SKILL.md 追尾规则——每轮 verdict 后立即 post 当轮条目（--skip-pipeline-check），CI 门只挡 verify 与跨轮 pull；push 触发的新评审由下轮 pull 消费。修复后实测：post --skip-pipeline-check 一次清空 47 条积压（145/145 ok）
+- 证据: session 01a15884 r3-r6（post 调用 13 次中多为 gate exit 2；146 resolvable / 47 open / verdict 145 落盘 99 上墙）
+- 出现: 2026-10-21 diagnose（01a15884 peer 自报"跑步机"）

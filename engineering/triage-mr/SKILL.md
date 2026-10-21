@@ -58,9 +58,10 @@ Platform-specific commands, API endpoints, and data formats:
 
 ## Prerequisites
 
-- MR/PR exists and CI on the head ref has finished — pull and verify run a
-  pipeline timing gate and exit 2 while it is in flight
-  (`--skip-pipeline-check` is the explicit escape hatch).
+- MR/PR exists. CI 门语义：**post 不受 pipeline 门拦截**（join/anchor 校验
+  针对的是 pull 快照，与 CI 无关；当轮裁决后立即 post，见追尾规则）；
+  **pull 与 verify 受门**：CI in-flight 时 exit 2（`--skip-pipeline-check`
+  为显式逃生门，仅用于 post）。
 - Platform CLI authenticated (GitLab: `glab`; GitHub: `gh`). For GitLab with
   multiple configured instances, confirm the target host is authenticated first:
   `glab auth status` — the scripts derive host + token from the selected
@@ -77,11 +78,19 @@ rule); do not search other skill roots.
 
 ```
 pull (pipeline gate; stage to .triage/<MR>/issues.json, never /tmp)
-  → loop { /fix 产出裁决语义 → verdict.py <MR> <no> ... 逐条即时落盘 }
-  → post --mode triage --pull-file（join/anchor/dedup/summary sweep 全脚本内）
+  → loop { /fix 产出裁决语义 → verdict.py <MR> <no> ... 逐条即时落盘
+          → post 当轮已裁决条目（不等 CI；见下方追尾规则） }
   → verify --pull-file（pipeline 完结后再跑；exit 0 = done）
 force-push 后：pull --digest --against 对账 → 新 findings 回到循环
 ```
+
+**追尾规则（CI 门只挡 verify 与跨轮 pull，不挡 post）**：OCR bot 对每次
+push 追评一轮（r1→r6 实证：23→29→24→23→20→26，共 146 条），而修复本身
+又触发新 pipeline。若把 post 推迟到 CI 终态之后，就会出现裁决→push→新
+pipeline→gate 拦截→再 push 的死循环——MR !6 曾因此积压 47 条未 resolve
+线程（三轮裁决只躺在本地）。正确节奏：**每轮 verdict 落盘后立即 post 当轮
+条目（带 `--skip-pipeline-check`），CI 门只挡 verify 与跨轮 pull**；push
+触发的新一轮评审由下一次 pull 消费，不阻塞当轮 post。
 
 State lives in `.triage/<MR_OR_PR_ID>/`: `issues.json` is written by pull,
 `classified.json` is written by `verdict.py` (post updates only its `posted`
