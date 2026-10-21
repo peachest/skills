@@ -105,3 +105,13 @@
 - passCheck: `.triage/<MR>/issues.json` 存在且 verdict/post/verify 都以它 join；post join 对编造 id 的 byte-match hard-fail 有效（已实证拦截）
 - 证据: peer 复盘（并发 session 覆盖 /tmp 快照 → discussion_id 编造 → post 退出码拦截）
 - 出现: 2026-10-21 peer triage 复盘
+
+## P-012 双副本漂移：.agents 安装副本缺新脚本/新 gate，session 在两套脚本间切换
+- 状态: absorbed-into-tooling
+- 现象: peer session 发现 `~/.agents/skills/mr-review-triage` 缺 verdict.py 和 pipeline gate（安装时点早于 spec #57），全程在源仓与安装副本两套脚本间切换，一次误用旧版 pull 在 CI 未完成时拉了过期评审
+- 根因: post-commit hook（scripts/githooks/post-commit）只在 skills 仓 commit 时重装全局副本——脚本在 commit 之间被编辑、或副本安装时点落后于新脚本合入的窗口内，.agents 即为陈旧构建产物；agent 又把两副本当两套可用工具而非"源-产物"关系
+- 方案: 关系正名——`~/skills/engineering/*` 是唯一源，`~/.agents/skills/*` 是 commit 触发重装的构建产物。编辑 skill 脚本后立即 commit（hook 自动重装）或手动 `npx skills add -g <skill根> -a pi -y`；session 发现副本缺脚本/行为不一致时，正解是重装副本，绝不去副本里改脚本或补脚本
+- 触发条件: 跨 session 开发 skill 脚本；或在未 commit 的源改动下直接调用安装副本
+- passCheck: `diff -rq ~/.agents/skills/<name>/ <source>/ | grep -v __pycache__` 为空；调用前 `<source>` 与 `~/.agents` 的脚本清单一致
+- 证据: peer triage 复盘（.agents 版无 verdict.py + 旧 pull 无 gate，session 卡住换脚本）；现状实证 diff 为空（2026-10-21 post-commit 重装链生效）
+- 出现: 2026-10-21 peer triage 复盘
