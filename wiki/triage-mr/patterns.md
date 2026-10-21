@@ -92,6 +92,16 @@
 - 状态: absorbed-into-skill
 - 现象: "裁决→修复→push"型 MR（每轮修复即 push）上，post 被推迟到 CI 终态之后——而每次 push 又触发新 pipeline + OCR bot 新一轮评审，post 永远排队。实证：ascend MR !6 六轮 146 findings，三轮裁决（47 条）只躺在本地 classified.json，post 仅在 r2 后跑过一次，47 线程零回复滞留远端，用户看出"一直没有 resolve"
 - 根因: 流程语义错误——把 CI 门当成了所有 post 的前置（SKILL.md 原文 "pull and verify run a pipeline timing gate" 被 agent 泛化到 post），而 post 的 join/anchor 校验只针对 pull 快照，与 CI 无关；bot 每-push-追评的机制使"等 CI 再 post"在修复型 MR 上结构性不可满足
-- 方案: SKILL.md 追尾规则——每轮 verdict 后立即 post 当轮条目（--skip-pipeline-check），CI 门只挡 verify 与跨轮 pull；push 触发的新评审由下轮 pull 消费。修复后实测：post --skip-pipeline-check 一次清空 47 条积压（145/145 ok）
+- 方案: SKILL.md 追尾规则——每轮 verdict 后立即 post 当轮条目（post 本就不设 CI 门；`--skip-pipeline-check` 是 pull/verify 的逃生门，与 post 无关），CI 门只挡 verify 与跨轮 pull；push 触发的新评审由下轮 pull 消费。修复后实测：post 一次清空 47 条积压（145/145 ok）
 - 证据: session 01a15884 r3-r6（post 调用 13 次中多为 gate exit 2；146 resolvable / 47 open / verdict 145 落盘 99 上墙）
 - 出现: 2026-10-21 diagnose（01a15884 peer 自报"跑步机"）
+
+## P-011 /tmp 暂存 pull 快照：并发覆盖 → discussion_id 编造级联
+- 状态: absorbed-into-skill
+- 现象: triage 第一轮 pull 把 issues.json 重定向到 /tmp/issues.json，被另一并发 session 冲掉；后续步骤找不到状态文件后，agent 编造 discussion_id 继续走流程（而不是停下来修上游），二次失误触发 post join 校验 hard-fail
+- 根因: 两层——①规则违反：SKILL.md 早已规定 stage 到 `.triage/<MR>/issues.json`（该精确路径是 verdict.py/post/verify 的 join 依据），/tmp 既是并发碰撞点又断了脚本寻址；②失败处置错误：脚本 hard-fail = 状态问题，正解是修上游（重 pull / 补 verdict），任何形式的"编造输入继续跑"都会把一个可恢复错误升级为污染
+- 方案: 规则本体已在 triage SKILL.md Step 1（"never /tmp" + join 依据说明）；本条目存违反后果实例供 peer 复盘引用。post.md failure taxonomy 已写死处置铁律："fix upstream (verdict.py / re-pull)"，hand-written API 绕过 = 重造 P-002 事故家族
+- 触发条件: agent 为图方便把 pull stdout 重定向到共享路径；或 hard-fail 后选择编造而非修上游
+- passCheck: `.triage/<MR>/issues.json` 存在且 verdict/post/verify 都以它 join；post join 对编造 id 的 byte-match hard-fail 有效（已实证拦截）
+- 证据: peer 复盘（并发 session 覆盖 /tmp 快照 → discussion_id 编造 → post 退出码拦截）
+- 出现: 2026-10-21 peer triage 复盘
