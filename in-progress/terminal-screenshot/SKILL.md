@@ -41,5 +41,5 @@ node ~/tools/playwright-runner/svg2png.mjs out.svg out.png
 1. 每个用例跑真命令，`<case>-raw.txt` 落盘
 2. `freeze --window --language bash -o <case>.svg < <case>-raw.txt`
 3. `node ~/tools/playwright-runner/svg2png.mjs <abs>.svg <abs>.png`
-4. 自检脚本三查：**宽度**（SVG width 属性 > 最长行像素预算，防裁切）、**完整性**（关键 UUID/字段数与预期一致，防截断）、**一致性**（PNG 与 SVG 重渲染 cmp，防陈旧交付包）
-5. 交付包随最新图同步：改图后重刷下载目录/tar（md5 比对 canonical 源，不要肉眼）
+4. 自检脚本三查（`scripts/shot-verify.sh <dir> <expectations-file>`，退出码 0/1）：**宽度**（SVG width >= 最长行×6.6px 预算，抓像素误用裁切；实测能抓 160px 坏图）、**完整性**（expectations 文件逐行 `<png名> <数量> <UUID...>` 核关键 UUID 在场）、**一致性**（PNG 与 SVG 重渲染 cmp，抓陈旧交付包）。expectations 生成方式：从各用例 raw 原文 grep UUID 集合拼出。
+5. 交付包随最新图同步：改图后重刷下载目录/tar（三查的第 3 查即为此设计，md5/cmp 比对 canonical 源，不要肉眼）
