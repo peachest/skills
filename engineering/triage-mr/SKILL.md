@@ -61,7 +61,8 @@ Platform-specific commands, API endpoints, and data formats:
 - MR/PR exists. CI 门语义：**post 不受 pipeline 门拦截**（join/anchor 校验
   针对的是 pull 快照，与 CI 无关；当轮裁决后立即 post，见追尾规则）；
   **pull 与 verify 受门**：CI in-flight 时 exit 2（`--skip-pipeline-check`
-  为显式逃生门，仅用于 post）。
+  是这两个脚本的逃生门）；**post 不设门**——它的 join/anchor 校验针对 pull
+  快照，与 CI 无关，每轮裁决后直接跑（见追尾规则）。
 - Platform CLI authenticated (GitLab: `glab`; GitHub: `gh`). For GitLab with
   multiple configured instances, confirm the target host is authenticated first:
   `glab auth status` — the scripts derive host + token from the selected
@@ -85,11 +86,10 @@ force-push 后：pull --digest --against 对账 → 新 findings 回到循环
 ```
 
 **追尾规则（CI 门只挡 verify 与跨轮 pull，不挡 post）**：OCR bot 对每次
-push 追评一轮（r1→r6 实证：23→29→24→23→20→26，共 146 条），而修复本身
-又触发新 pipeline。若把 post 推迟到 CI 终态之后，就会出现裁决→push→新
-pipeline→gate 拦截→再 push 的死循环——MR !6 曾因此积压 47 条未 resolve
-线程（三轮裁决只躺在本地）。正确节奏：**每轮 verdict 落盘后立即 post 当轮
-条目（带 `--skip-pipeline-check`），CI 门只挡 verify 与跨轮 pull**；push
+push 追评一轮，而修复本身又触发新 pipeline。post 推迟到 CI 终态之后 =
+裁决→push→新 pipeline→gate 拦截→再 push 的死循环（MR !6 积压 47 条未
+resolve 线程；full evidence: patterns.md P-010）。正确节奏：**每轮 verdict 落盘后立即 post 当轮
+条目——post 本就不设门），CI 门只挡 verify 与跨轮 pull**；push
 触发的新一轮评审由下一次 pull 消费，不阻塞当轮 post。
 
 State lives in `.triage/<MR_OR_PR_ID>/`: `issues.json` is written by pull,
@@ -243,12 +243,17 @@ call bypasses join validation, dedup, and posted bookkeeping, and re-creates
 the incident family this pipeline exists to prevent.
 
 **Completion criterion**: post exits 0 — every finding replied (or deduped) and
-resolved per its verdict, summary sweep clean.
+resolved per its verdict, summary sweep clean. Exception: a non-zero exit
+caused **solely** by ⚠️ error-class summary threads is expected (they never
+resolve by design, gate stays red — human-in-loop); proceed to Step 4 and
+report. Any failed classified item → fix the cause and re-run post
+(idempotent).
 
 ### 4. Verify closure (the gate)
 
 ```bash
 python3 <SCRIPTS_DIR>/ocr-verify-resolved.py <MR_OR_PR_ID>
+# machine-readable open-thread list: append --json
 ```
 
 Exits 0 only when every resolvable thread is resolved and CI on the head ref
@@ -290,9 +295,11 @@ by ordinal:
   run the Step-2 loop on the new ordinals, then re-run Steps 3–4. The refresh
   must be a **full** pull, not the digest output: post join-validates *every*
   classified entry against the pull file, and a digest-only file (new findings
-  only) would fail the round-1 entries. Ordinals are stable across re-pulls;
-  if a `verdict.py` echo names the wrong author or first line, an ordinal
-  shifted — re-check the finding and use `--force` to replace a stale verdict.
+  only) would fail the round-1 entries. Ordinals are single-round pointers —
+  they reshuffle across pulls; cross-round identity is
+  `discussion_id` + anchor (verdict matches on that, never on `no`). If a
+  `verdict.py` echo names the wrong author or first line, the pull file
+  changed under you — re-run the full pull and re-check before any `--force`.
 
 The per-MR directory plus this reconciliation together close the
 stale-classified-file gap.
@@ -315,7 +322,7 @@ create-mr，其中 2 个失约点就发生在 triage-mr 会话内（修复顺手
 |---|------|------|----------|
 | 1 | After Step 1 | Source MR/PR identity + pulled finding count | Proceed to /fix? |
 | 2 | After Step 3 | Post result: per-item replied/deduped/failed + summary sweep outcome | Any failed item? Fix the cause, re-run post (idempotent). |
-| 3 | After Step 4 (gate) | Verify result: 0 open threads, or N open with list | N>0: handle per gate output, re-run gate. 0: done. |
+| 3 | After Step 4 (gate) | Verify result: 0 open threads, or N open with list | N>0: an open `no=` that never went through Step 2 → return to Step 2 for that finding; otherwise fix per gate output, re-run gate. 0: done. |
 
 ## Resuming
 
