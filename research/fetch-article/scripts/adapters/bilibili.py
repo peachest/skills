@@ -116,6 +116,18 @@ def _wbi_sign(params: dict, img_key: str, sub_key: str) -> dict:
 def _make_session() -> requests.Session:
     session = requests.Session()
     session.headers.update(HEADERS)
+    # WBI endpoints (wbi/view etc.) return 412 without buvid cookies; the
+    # finger/spi endpoint issues them without JS. Failure is non-fatal —
+    # unsigned endpoints still work cookieless.
+    try:
+        spi = session.get(
+            "https://api.bilibili.com/x/frontend/finger/spi", timeout=10
+        ).json().get("data", {})
+        if spi.get("b_3"):
+            session.cookies.set("buvid3", spi["b_3"], domain=".bilibili.com")
+            session.cookies.set("buvid4", spi["b_4"], domain=".bilibili.com")
+    except Exception:
+        pass
     retry = Retry(total=3, backoff_factor=1, allowed_methods=["GET"],
                   connect=3, read=2)
     adapter = HTTPAdapter(max_retries=retry)
