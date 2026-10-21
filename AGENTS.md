@@ -28,8 +28,9 @@
 
 ## 安装副本与源仓的关系
 
-- 直接修改 `~/.pi/agent/skills/<name>/`（安装副本）不会同步回本源仓。修 skill 必须改本仓源文件，改完 diff 源仓 vs 安装副本确认一致后，再 `npx skills add -g` 重装。
-- skill "表现不对劲"时，先 `diff ~/.agents/skills/<name>/ <源仓路径>` 排除 stale 副本：`~/.pi` 下可能残留一个旧的真实目录（非 symlink），遮蔽了新版本。
+- 安装链是单向的：本仓源文件 → `npx skills add -g` → `~/.agents/skills/<name>/`。pi 1.3.0 起 `~/.pi/agent/skills` 不在安装链上，不要往彼处安装本仓 skill 或建 symlink；该目录若存在，内容是第三方 pi 包的安装产物（如 pack-leader），与本仓无关。
+- 直接修改 `~/.agents/skills/<name>/`（安装副本）不会同步回本源仓。修 skill 必须改本仓源文件，改完 diff 源仓 vs 安装副本确认一致后，再 `npx skills add -g` 重装。
+- skill “表现不对劲”时，先 `diff ~/.agents/skills/<name>/ <源仓路径>` 排除 stale 副本。
 
 ## 测试
 
@@ -40,7 +41,7 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 多 session 共享本 checkout，直接在 `main` 上提交（无 wip 集成分支）。约定：
 - 提交前 `git status` 确认工作区——只 `git add` 自己本次任务的文件，**禁止 `git add -A`**（会卷入其他 session 的进行中改动）。
 - 提交信息不相关的东西不混入同一 commit（例如 sanitize 修复不与 feature 混提）。
-- 推送前重跑 `bash scripts/sanitize-check.sh`（tracked 模式），含内部标识的文件先修再推。
+- 推送前重跑 `bash scripts/sanitize-check.sh && git push origin main`（tracked 模式只扫未推送区间；全仓审计用 `bash scripts/sanitize-check.sh -a`）。门禁脚本必须独立运行并用 `&&` 串联检查退出码，**禁止放进管道**（`sanitize-check | tail` 的退出码来自 tail，DIRTY 被吞掉就会带病推送）。含内部标识的文件先修再推。
 - 历史遗留的 `feat/*`、`session-*` 分支不受此规范约束。
 
 ## Vendor 管理（mattpocock 上游）

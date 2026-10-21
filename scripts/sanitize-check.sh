@@ -6,9 +6,11 @@
 # don't cover ("gitleaks 通过 ≠ 脱敏完成"). Exit 0 = clean, 1 = findings.
 #
 # Usage:
-#   bash scripts/sanitize-check.sh              # tracked files (committed state)
+#   bash scripts/sanitize-check.sh              # files this push would publish (diff vs origin/main);
+#                                               # fallback to all tracked files if origin/main is unknown
 #   bash scripts/sanitize-check.sh -u           # untracked + modified files (pre-commit batch review)
 #   bash scripts/sanitize-check.sh <paths...>   # explicit files/dirs
+#   bash scripts/sanitize-check.sh -a           # full-repo audit (all tracked files)
 #
 # New internal identifier surfaced in review → append to PATTERNS below.
 # Domain placeholder allowlist (must never match): gitlab.blue.example,
@@ -24,11 +26,19 @@ PATTERNS='<git-host>|<bot-id>|<vendor>|harbor\.trans|\b<platform>\b|\bllm1[0-9]\
 
 mode="tracked"
 if [[ "${1:-}" == "-u" ]]; then mode="untracked"; shift; fi
+if [[ "${1:-}" == "-a" ]]; then mode="all"; shift; fi
 
 if [[ $# -gt 0 ]]; then
     mapfile -t files < <(find "$@" -type f 2>/dev/null)
 elif [[ "$mode" == "untracked" ]]; then
     mapfile -t files < <(git status --porcelain -uall | cut -c4-)
+elif [[ "$mode" == "all" ]]; then
+    mapfile -t files < <(git ls-files)
+elif git rev-parse --verify -q origin/main >/dev/null; then
+    # Push-range scoping (mirrors githooks/pre-push): report only what this
+    # push would publish. Unchanged files with accepted findings (<platform-wiki>
+    # refs etc.) stay green — an always-red gate trains agents to ignore it.
+    mapfile -t files < <(git diff --name-only origin/main...HEAD)
 else
     mapfile -t files < <(git ls-files)
 fi
