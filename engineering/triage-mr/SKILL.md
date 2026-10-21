@@ -55,7 +55,9 @@ post 当轮条目**，CI 门只挡 verify 与跨轮 pull；push 触发的新一�
 State lives in `.triage/<MR_OR_PR_ID>/`: `issues.json` written by pull,
 `classified.json` written by `verdict.py` (post updates only `posted` flags).
 All scripts resolve `.triage/` against the current working directory (realpath)
-— run every command from the same checkout root you staged state in. A run is
+— run every platform call from the same checkout root you staged state in
+(wrong cwd surfaces as 404 from platform endpoints — fix the cwd, the endpoint
+is not broken). A run is
 **not done** when post returns ok — only when the verify gate exits 0.
 
 ### 1. Pull
