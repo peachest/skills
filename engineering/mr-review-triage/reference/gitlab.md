@@ -6,6 +6,17 @@ GitLab 平台的具体命令、API 端点和数据格式。
 
 远程地址含 `gitlab.com` 或自建 GitLab 实例（如 `gitlab.blue.example`、`gitlab.red.example`）时判定为 GitLab。
 
+### 环境变量覆盖
+
+| 变量 | 作用 |
+|------|------|
+| `OCR_PLATFORM=gitlab\|github` | 强制平台（跳过 remote 推导与认证探针） |
+| `OCR_REMOTE=<name>` | 用哪个 git remote 推导 host/token（默认 `origin`；fork 仓 origin 指向上游时指向内部 remote）。显式指定但 remote 不存在 → exit 2 |
+| `CI_PROJECT_ID` / `CI_SERVER_URL` | GitLab 侧项目 id 与实例 host 直接给定 |
+| `GITHUB_REPOSITORY` | GitHub 侧仓库直接给定（优先于 remote 推导；设置后认证探针跳过路径比对） |
+
+边界：`glab mr` 子命令不支持 `--hostname`，从 cwd remote 推导 host——fork 仓的 MR id 推导走脚本 API 路径，env 修不了它。
+
 ```bash
 git remote get-url origin
 # git@gitlab.com:ns/proj.git              → GitLab
