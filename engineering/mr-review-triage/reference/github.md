@@ -4,7 +4,7 @@ GitHub 平台的具体命令、API 端点和数据格式。
 
 ## 平台检测
 
-远程地址含 `github.com` 时判定为 GitHub。
+远程地址含 `github.com` 时判定为 GitHub。环境变量：`GITHUB_REPOSITORY=owner/repo` 直接给定仓库（优先于 remote 推导；设置后认证探针跳过路径比对）、`OCR_REMOTE=<name>` 选哪个 remote 推导（默认 origin）、`OCR_PLATFORM=github` 强制平台。双实例/完整表：[gitlab.md 环境变量覆盖](gitlab.md#环境变量覆盖)。
 
 ```bash
 git remote get-url origin
