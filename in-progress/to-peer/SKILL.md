@@ -14,6 +14,8 @@ argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [
 
 **worktree 归属：谁负责这个工作，worktree 就跟谁（用户拍板 2026-10-22，源自 peer 01a1627d 案例）**：派 peer 修的目标分支不是父 session 当前检出所在的分支时，父 session **不要带迁移地 switch**——用 `wt switch -c <branch> -b <base> --no-cd` 建好 worktree（`--no-cd`：分支/检出/pre-start 装依赖照常，唯独 pi session 不迁移），`wt list` 验证 `@ <路径>` 存在后，把该路径写进 dispatch 文本/`[repo-cwd]`，父 session 留在自己的任务线。带迁移的 switch（无 --no-cd）仅当**父 session 自己要在这个 worktree 里继续工作**时才用——case：01a1627d 在 llm-3.0 worktree 里接到“修 dev 分支 CVE”任务，先无 --no-cd switch 到新建的 dev worktree（父 session 的 llm-3.0 语境被顶掉），再从那里建 peer；正确形态是 --no-cd 建树 → 派发，两步不变换父 session 位置。另：`-b origin/<分支>` 允许基于远端分支建 worktree，无需本地已有同名分支。
 
+**建树后、派发前（2026-10-22 拍板，源自 fix-chain/events 两案）**：① 分支 base 必须是任务票的基线分支（如 feature 分支），默认 main 会漏掉票依赖的已有实现（实证：fix worktree 从 main 建导致 40+ 票实现缺失）；② 预置依赖再派发——node_modules 等装好或从主 checkout 软链，基线测试跑绿（假红会让 peer 把环境问题当代码 bug 排查）；③ 环境预案写进 prompt（registry fallback、corepack 等已知 footgun，hamife-cve 靠预埋预案省一轮试错）。
+
 ## 为什么是新 tab 而不是 split pane
 
 用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。split pane 的旧路径（multi-agent-collab 的 `scripts/herdr-peer.sh`）仅在该 skill 自身被引用且无新 tab 要求时才考虑；用户明确提到 to-peer 或新 tab 时，走本 skill。
@@ -37,8 +39,9 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 - `<name>`：peer 的 agent 名，`[a-z][a-z0-9_-]{0,31}`，必须全局唯一
 - `[repo-cwd]`：peer 的工作目录，缺省用当前目录（`$PWD`）；跨项目派发时必须显式给目标仓路径
 - `--workspace W`：可选。目标 workspace 的 id（`w4`）或 label（`<project-ws>`；精确匹配优先，其次片段匹配，歧义报错列出候选）。创建后脚本回读实际 ws id（daemon 迁移会改写前缀，如 `w1B:` → `w1:`），以回读值为准
-- **ws 自动推断（2026-10-19 加固）**：省略 `--workspace` 时，脚本用 cwd 尾段匹配 ws label（`/…/skills` → `skills` ws）自动推断；匹配唯一则用之（stderr 提示推断结果），无匹配则 WARN 列出候选并落到 daemon 默认 ws。背景：daemon 的裸 `tab create` 默认落在最近活跃 ws，不是 cwd 对应的项目 ws（实证：三个 skills peer 落进了 pi-mypackage ws，cwd 是对的、ws 是错的）——**cwd 正确 ≠ ws 正确，两者独立校验**。label 同名歧义（如两个 speculative-training ws）不猜，报错列出候选。跨 runtime 派发时推断在目标 runtime 的 ws 列表上执行
+- **ws 自动推断（2026-10-19 加固）**：省略 `--workspace` 时，脚本用 cwd 尾段匹配 ws label（`/…/skills` → `skills` ws）自动推断；匹配唯一则用之（stderr 提示推断结果），无匹配则 WARN 列出候选并落到 daemon 默认 ws。背景：daemon 的裸 `tab create` 默认落在最近活跃 ws，不是 cwd 对应的项目 ws（实证：三个 skills peer 落进了 pi-mypackage ws，cwd 是对的、ws 是错的）——**cwd 正确 ≠ ws 正确，两者独立校验**。label 同名歧义（如两个 speculative-training ws）不猜，报错列出候选。跨 runtime 派发时推断在目标 runtime 的 ws 列表上执行。**agent 看到 WARN 或推断失败时，先向用户确认目标 ws 再继续，不静默落默认 ws（2026-10-22 补，源自 ascend 案例：WARN 后未确认，peer 落错 ws 未纠正）**
 - `--prompt-file F`：可选。`F` 为文件路径，或 `-` 从 stdin 读（`echo ... | ... --prompt-file -`，免 /tmp 中转）。prompt 内容若是 bootstrap，按 multi-agent-collab 五段模板写，并带 `/skill:multi-agent-collab` 前缀（仅首条）——**skill 名后必须紧跟空格**（首行 `/skill:multi-agent-collab <peer角色词>`，再换行写正文；换行/双换行分隔在 TUI 与 headless 路径均不可靠，pitfall #33），且必须含父子回传义务条款（见上）
+- **父地址必须写字面值（2026-10-22 拍板，源自 hamife-cve 案例）**：bootstrap [caller identity] 与回传条款里的父 pane 地址必须是显式字面值（`herdr:<session>:<pane>`，用 `herdr_resolve` 或 `herdr agent list` 实测后拼入），禁止写「地址见 caller identity」这类依赖运行时注入的表述——`--prompt-file` 投递**不注入** caller identity，peer 只能靠项目名+时间猜父 pane（实证：hamife-cve 猜中属侥幸；spectraining 首派回报地址写错）
 - `--label L`：可选，tab 标签（默认用 name）
 - `--focus`：可选，创建后聚焦新 tab（默认不抢焦点）
 - `--runtime R`：可选。跨 herdr runtime 创建（`herdr --session R ...`），如从 default runtime 会话往 dev runtime 的目标项目 ws 派 peer；不带则打当前 runtime
