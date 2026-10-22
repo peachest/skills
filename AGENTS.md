@@ -61,6 +61,10 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 - **改 skill 后**：按两段式 commit 记账（规则见 `wiki/README.md` 的 skill-impact 节）：先提交 skill 本体变更，拿到 hash 后再单独 commit 向 `skill-impact.md` 回填一行（提案/落点/commit hash/验证），禁止 "(this commit)" 占位符。用户否决的方案记 rejected（含理由）。行为性修改必记；纯错别字/排版豁免。无 wiki 目录则连同本次修改创建。
 - **写入 sanitize**：wiki 在公共仓库——证据只写 `session-id#entry`，内网域名/项目名/凭证按 `docs/agents/skill-authoring.md` 占位符脱敏，commit 前跑 `bash scripts/sanitize-check.sh`（gitleaks + 内部标识 pattern 层）。
 
+## Recheck scripts
+
+挖掘/诊断/优化 session 留在 `~/tmp` 的复跑验证脚本，收尾时提交到 `recheck/`（脚本 + INDEX.md 一行：验证目标、基线数字、来源 session）。复跑脚本不进 `~/tmp` 裸放；环境锁定或一次性的写明 `shortcut: one-off, <date>` 后留在 tmp。触发器在 session-mining 的 Close：挖到对应 skill/tool 时按 INDEX 复跑并对比基线。
+
 ## 运行时与环境（脚本型 skill）
 
 Script skill 的 runtime/环境约定（runtime.conf 模式、check-env.sh、敏感数据规则）全在 `docs/agents/skill-authoring.md`：创建或改造 script skill、把 skill 移出 in-progress、或提交任何含 endpoint/域名/配置的文件前必读（本仓库为 public）。换节点第一步：`bash scripts/check-all-env.sh`。
