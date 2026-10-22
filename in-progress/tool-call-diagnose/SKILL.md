@@ -1,11 +1,11 @@
 ---
 name: tool-call-diagnose
-description: "Diagnose how a tool was called in pi session traces, along four axes — Failure taxonomy & blame (classify errors into families, blame agent-usage vs harness vs environment, cross-checked against companion skills like pi-subagents for the subagent tool), Retry waste (failed→retried patterns, identical-retry loops, quantified token cost), Usage & sedimentation (habitual anti-patterns across all calls, fallback scripts — propose a new companion skill when none covers the tool), Contract & competition (tool bypass via bash, schema-fit misses, description→behavior gap — repeated same-shape misuse means the tool description failed). Takes a trace from /skill:tool-call-extract. Use when the user asks 诊断工具调用失败 / why subagent workflowScript or bash glab api calls keep failing, or to audit one tool's usage across sessions."
+description: "Diagnose how a tool was called in pi session traces, along four axes — Failure taxonomy & blame (classify errors into families, blame agent-usage vs harness vs environment, cross-checked against companion skills like pi-subagents for the subagent tool), Retry waste (failed→retried patterns, identical-retry loops, quantified token cost), Usage & sedimentation (habitual anti-patterns across all calls, fallback scripts — propose a new companion skill when none covers the tool), Contract & competition (tool bypass via bash, schema-fit misses, description→behavior gap — repeated same-shape misuse means the tool description failed). Takes a trace from /skill:session-mining. Use when the user asks 诊断工具调用失败 / why subagent workflowScript or bash glab api calls keep failing, or to audit one tool's usage across sessions."
 ---
 
 # Tool Call Diagnose
 
-**Leading word:** the **calls dump** — paired toolCall/toolResult records delivered by `/skill:tool-call-extract`. Every finding cites dump records or trace entry indices (`call_entry 306`, `[307]`); a finding with neither is an opinion, not a finding.
+**Leading word:** the **calls dump** — paired toolCall/toolResult records delivered by `/skill:session-mining`. Every finding cites dump records or trace entry indices (`call_entry 306`, `[307]`); a finding with neither is an opinion, not a finding.
 
 The tool under diagnosis is the **target tool** (`subagent`, `bash`, `edit`, ...). Four axes run as parallel fresh-context sub-agents: 失败分类判责 / 重试浪费 / 用法沉淀 / 契约与替代. Before any of them runs, one gate decides the whole routing: **does a companion skill already exist for this tool?**
 
@@ -15,15 +15,15 @@ The gate exists because the recurring real-world outcome is: the agent hit pits 
 
 ### 1. Resolve inputs
 
-Target tool name (required, ask if absent) and the trace: either `/skill:tool-call-extract` deliverables (session file + calls dump + stats), or a session id / symptom the extract skill can resolve. Symptom → filter mapping: "glab api 失败" = `bash --args-contains 'glab api' --errors-only`; "subagent workflowScript 挂" = `subagent --errors-only` (narrow with `--args-contains workflowScript` if noisy).
+Target tool name (required, ask if absent) and the trace: either `/skill:session-mining` deliverables (session file + calls dump + stats), or a session id / symptom the extract skill can resolve. Symptom → filter mapping: "glab api 失败" = `bash --args-contains 'glab api' --errors-only`; "subagent workflowScript 挂" = `subagent --errors-only` (narrow with `--args-contains workflowScript` if noisy).
 
-If no dump in hand, get one from the extract skill's installed script (`~/.pi/agent/skills/tool-call-extract/scripts/find-tool-calls.py`) — search, triage, then dump. Build **two** dumps when diagnosing usage or retries: with and without `--errors-only` (successes and workarounds are evidence). Also build the surrounding-turn trace index:
+If no dump in hand, get one from the extract skill's installed script (`~/.agents/skills/session-mining/scripts/find-tool-calls.py`) — search, triage, then dump. Build **two** dumps when diagnosing usage or retries: with and without `--errors-only` (successes and workarounds are evidence). Also build the surrounding-turn trace index:
 
 ```bash
-python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --index <session-file> > trace-index.json
+python3 ~/.agents/skills/session-mining/scripts/find-skill-sessions.py --index <session-file> > trace-index.json
 ```
 
-**Relay enrichment (optional)**: only when the user explicitly asks for latency/retry-depth analysis, also run `python3 ~/.pi/agent/skills/skill-call-extract/scripts/relay-enrich.py <session-file> > relay-enrich.json` — per-tool-call `duration_s` / `attempt_index` / `status` from the NeMo Relay ATIF trajectory (`no-relay-data` on miss is non-blocking; pi JSONL stays the primary source).
+**Relay enrichment (optional)**: only when the user explicitly asks for latency/retry-depth analysis, also run `python3 ~/.agents/skills/session-mining/scripts/relay-enrich.py <session-file> > relay-enrich.json` — per-tool-call `duration_s` / `attempt_index` / `status` from the NeMo Relay ATIF trajectory (`no-relay-data` on miss is non-blocking; pi JSONL stays the primary source).
 
 ### 2. Companion-skill gate
 

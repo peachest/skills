@@ -1,0 +1,8 @@
+[project]
+name = "session-mining"
+version = "0.1.0"
+description = "Mine pi session logs: skill-name and tool-call retrieval, trace index, calls dump, version anchor, relay enrichment"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest>=8"]

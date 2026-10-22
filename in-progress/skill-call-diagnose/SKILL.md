@@ -1,11 +1,11 @@
 ---
 name: skill-call-diagnose
-description: "Diagnose how a skill executed in a pi session, along three parallel axes — Adherence (did the agent follow the skill's documented workflow?), Friction (tool failures, re-emitted payloads, wasted tokens, cache invalidation), Sedimentation (ad-hoc scripts the agent had to write that the skill should absorb). Takes a trace from /skill:skill-call-extract. Use when the user asks to 诊断 skill 执行过程 / analyze how a skill ran / audit a skill's sessions, or after a session that ran a skill expensively, slowly, or off-script."
+description: "Diagnose how a skill executed in a pi session, along three parallel axes — Adherence (did the agent follow the skill's documented workflow?), Friction (tool failures, re-emitted payloads, wasted tokens, cache invalidation), Sedimentation (ad-hoc scripts the agent had to write that the skill should absorb). Takes a trace from /skill:session-mining. Use when the user asks to 诊断 skill 执行过程 / analyze how a skill ran / audit a skill's sessions, or after a session that ran a skill expensively, slowly, or off-script."
 ---
 
 # Skill Call Diagnose
 
-**Leading word:** the **trace** — the session log under diagnosis, delivered by `/skill:skill-call-extract` as a trace file plus trace index. Every finding cites trace entries (`[31]`, `[37]`) as evidence; a finding with no entry index is an opinion, not a finding.
+**Leading word:** the **trace** — the session log under diagnosis, delivered by `/skill:session-mining` as a trace file plus trace index. Every finding cites trace entries (`[31]`, `[37]`) as evidence; a finding with no entry index is an opinion, not a finding.
 
 The skill under diagnosis is the **target skill**; its SKILL.md and referenced docs are the ground truth for Adherence. Three axes run as parallel fresh-context sub-agents (they never pollute each other), each reporting under 400 words:
 
@@ -19,9 +19,9 @@ Findings do not end in the report: step 5.5 increment-merges them into the persi
 
 ### 1. Resolve inputs
 
-Two things: the **target skill name** (as in its frontmatter — required, ask if absent) and the **trace** (a session file path, or a session id / bare skill name when `/skill:skill-call-extract` has not run yet).
+Two things: the **target skill name** (as in its frontmatter — required, ask if absent) and the **trace** (a session file path, or a session id / bare skill name when `/skill:session-mining` has not run yet).
 
-If no trace is in hand, get one: run the extract skill's script from its installed location (`~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py`) — marker search for a bare skill name, `--session <id>` for an explicit id — and follow its triage flow. If the user already ran `/skill:skill-call-extract`, take its deliverables directly.
+If no trace is in hand, get one: run the extract skill's script from its installed location (`~/.agents/skills/session-mining/scripts/find-skill-sessions.py`) — marker search for a bare skill name, `--session <id>` for an explicit id — and follow its triage flow. If the user already ran `/skill:session-mining`, take its deliverables directly.
 
 ### 2. Load the target skill's contract
 
@@ -40,7 +40,7 @@ No wiki dir for this skill → note "cold start" in the report and proceed (step
 ### 3. Build the trace index
 
 ```bash
-python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
+python3 ~/.agents/skills/session-mining/scripts/find-skill-sessions.py --index <trace-file> > trace-index.json
 ```
 
 (Skip if the extract skill already built one.) One line per entry: role, tool calls with arg sizes, result sizes, per-turn usage. This index is the only map the axis sub-agents need of a multi-MB trace — they read raw lines only where it points.
@@ -50,7 +50,7 @@ python3 ~/.pi/agent/skills/skill-call-extract/scripts/find-skill-sessions.py --i
 Skip by default — the pipeline runs on the pi session JSONL. Run only when the user explicitly asks, or the diagnosis question is performance / latency / token cost (a complaint like "太慢/太贵" qualifies — offer the option):
 
 ```bash
-python3 ~/.pi/agent/skills/skill-call-extract/scripts/relay-enrich.py <trace-file> > relay-enrich.json
+python3 ~/.agents/skills/session-mining/scripts/relay-enrich.py <trace-file> > relay-enrich.json
 ```
 
 Attaches the session's NeMo Relay ATIF data: token totals + cache-hit rate, per-step wall latency / model / reasoning_effort / usage, per-tool-call duration + attempt_index + status. No trajectory (pre-2026-09-14 or gateway down) → `"status": "no-relay-data"`, exit 0 — note it and continue on the JSONL-only path. When produced, hand its path to the axis children as a fifth input.
@@ -122,7 +122,7 @@ Ask the user which rows to act on. For skill-doc / skill-script rows, the fix fl
 
 ## Done when
 
-- [ ] Trace and trace index in hand (via skill-call-extract or its script)
+- [ ] Trace and trace index in hand (via session-mining or its script)
 - [ ] All three axis reports present, every finding carrying entry indices
 - [ ] Friction findings carry quantified cost with named arithmetic
 - [ ] Every sedimentation finding marked one-off / repeated / contract-gap

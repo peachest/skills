@@ -85,7 +85,7 @@ Samples distinctive tokens from the doc on disk, then checks whether assistant t
 
 ## Companion skills
 
-- Trace format questions (toolCall/toolResult shapes, entry structure) → `tool-call-extract`'s `references/session-jsonl.md`
+- Trace format questions (toolCall/toolResult shapes, entry structure) → `session-mining`'s `references/session-jsonl.md`
 - Deciding what to do with a confirmed-dead doc (merge into AGENTS.md vs delete) → the project's own domain docs, not this skill
 
 ## Done when
