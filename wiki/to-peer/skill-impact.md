@@ -58,3 +58,4 @@
 - 证据: 本 session（2026-10-12 审计轮，4+9 skill 三层 diff）
 - 出现: 2026-10-12（人工判定）
 | 2026-10-22 | 新增 worktree 归属规则：派 peer 修非当前检出分支时，父 session 用 `wt switch -c <branch> -b <base> --no-cd` 建树（不迁移自身），@ 路径写进 dispatch；带迁移 switch 仅限父自己要继续工作。源自 peer 01a1627d 案例（llm-3.0 语境被顶掉） | (本次) | SKILL.md diff 人工核对；--no-cd 语义经探针实测（建树/hooks/不迁移三分离） |
+| 2026-10-22 | 使用挖掘落地三条款（73 session/44 次创建挖掘，综合报告 ~/tmp/topeer-cases/00-SYNTHESIS.md）：G1 bootstrap 父 pane 地址必须写字面值（prompt-file 不注入 caller identity，<pkgfix>-cve 猜中属侥幸）；G7 建树后派发前——分支 base 用票基线+预置依赖+基线测试跑绿+环境预案进 prompt（fix-chain/events 两案）；G9 ws 推断 WARN 后先向用户确认（ascend 案例） | 6b45d69 | tests 11/11；gitleaks CLEAN；post-commit 自动重装 installed==source |
