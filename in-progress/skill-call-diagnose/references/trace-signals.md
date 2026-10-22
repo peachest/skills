@@ -3,7 +3,7 @@
 The waste and friction signals a diagnosis hunts in a trace, with the cost
 arithmetic each demands. Entry indices (`[31]`, `[37]`) come from the trace
 index; the session-JSONL format primer (usage fields, entry structure) lives
-in the `skill-call-extract` skill's `references/session-jsonl.md` — read it
+in the `session-mining` skill's `references/session-jsonl.md` — read it
 first if the trace format is unfamiliar.
 
 ## Waste signals

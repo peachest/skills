@@ -21,14 +21,14 @@ history is the honest workload. This skill replays it.
 ## Pipeline
 
 ```text
-tool-call-extract (triage) → extract-queries.py → sample-queries.py
+session-mining (triage) → extract-queries.py → sample-queries.py
 → replay runner (per-comparison script) → stats + eyeball → report
 ```
 
 ### Step 1: Extract historical queries
 
 Find the sessions that invoked the incumbent tool. For triage/stats use the
-`tool-call-extract` skill (`find-tool-calls.py bash --args-contains <cli-name>`).
+`session-mining` skill (`find-tool-calls.py bash --args-contains <cli-name>`).
 For the actual query corpus use the bundled extractor, which walks **all**
 session JSONLs and pulls query strings out of toolCall commands:
 
