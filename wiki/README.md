@@ -55,6 +55,29 @@ wiki/
   覆盖该条目的触发条件；未覆盖不计 absent）
 - 带 `refuted` 标记的条目 → 状态回退 `open`，absent 计数自 refuted 起重算
 
+## skill-impact.md 条目格式
+
+```markdown
+# <skill-name> — Skill Impact
+
+| date | proposal | commit | verification |
+|---|---|---|---|
+| YYYY-MM-DD | 提案内容（含动机与被拒理由） | <hash> | 验证方式与结果 |
+```
+
+### 两段式 commit（禁止 "(this commit)" 占位符）
+
+skill 修改与台账记账分两个 commit：
+
+1. **Commit 1**：只含 skill 本体变更（SKILL.md / scripts / agents/）。此时不写
+   skill-impact 行——commit hash 还不存在，提前写只能写占位符。
+2. **Commit 2**：拿到 Commit 1 的 hash 后，向 `skill-impact.md` 回填台账行
+   （commit 列写 Commit 1 的 hash），单独提交。台账行属于 wiki 层，不触发
+   post-commit 的 skill 重装，无副作用。
+
+同一 session 连续多次改同一 skill 时，可合并为一个台账行（commit 列写区间
+`<hash1>..<hashN>` 或主 hash），但仍须在最后一个 skill commit 落地后回填。
+
 ## sanitize 规则（公共仓库，写入前强制）
 
 1. 内网域名 / IP → 占位符（`docs/agents/skill-authoring.md`：
