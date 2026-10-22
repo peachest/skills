@@ -28,7 +28,7 @@
 
 ## 安装副本与源仓的关系
 
-- 安装链是单向的：本仓源文件 → `npx skills add -g` → `~/.agents/skills/<name>/`。pi 1.3.0 起 `~/.pi/agent/skills` 不在安装链上，不要往彼处安装本仓 skill 或建 symlink；该目录若存在，内容是第三方 pi 包的安装产物（如 pack-leader），与本仓无关。
+- 安装链是单向的：本仓源文件 → `npx skills add -g` → `~/.agents/skills/<name>/`。pi 的 skill 扫描链同时覆盖 `~/.pi/agent/skills` 与 `~/.agents/skills`，但本仓 skill 只经 npx 装 ~/.agents，**不要往 ~/.pi/agent/skills 装本仓 skill 或建 symlink**（会双份加载）；该目录的正确用途是存放不属于本仓的第三方 skill（如 pack-leader）。
 - 直接修改 `~/.agents/skills/<name>/`（安装副本）不会同步回本源仓。修 skill 必须改本仓源文件，改完 diff 源仓 vs 安装副本确认一致后，再 `npx skills add -g` 重装。
 - skill “表现不对劲”时，先 `diff ~/.agents/skills/<name>/ <源仓路径>` 排除 stale 副本。
 
