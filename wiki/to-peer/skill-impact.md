@@ -57,3 +57,4 @@
 - 教训: sanitize 提交只改源仓不重装 = 安装副本长期携带已删除的内网数据；上游同步 checklist 的"同步后重装"步骤必须指定 in-progress overlay 为安装源，npx update 会用上游版覆盖 overlay 安装副本
 - 证据: 本 session（2026-10-12 审计轮，4+9 skill 三层 diff）
 - 出现: 2026-10-12（人工判定）
+| 2026-10-22 | 新增 worktree 归属规则：派 peer 修非当前检出分支时，父 session 用 `wt switch -c <branch> -b <base> --no-cd` 建树（不迁移自身），@ 路径写进 dispatch；带迁移 switch 仅限父自己要继续工作。源自 peer 01a1627d 案例（llm-3.0 语境被顶掉） | (本次) | SKILL.md diff 人工核对；--no-cd 语义经探针实测（建树/hooks/不迁移三分离） |

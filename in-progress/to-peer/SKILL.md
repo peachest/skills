@@ -12,6 +12,8 @@ argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [
 
 **父子回传义务（用户拍板）**：to-peer 派生的 session 本质上存在父子关系（派发方 = 父）。子 session 的 bootstrap prompt 必须含回传条款：**完成工作、与用户达成决策（尤其是推翻原任务方向的决策）、或任务暂停时，主动按五段格式通知父 session（地址取自 [caller identity]），不等用户提醒**。case：hami-fix peer 与用户讨论后关闭 MR !24，只向用户汇报即静默，用户主动提醒后才通知父 session。没写 prompt-file 时，后续用 multi-agent-collab 派任务时同规则附带此条款。
 
+**worktree 归属：谁负责这个工作，worktree 就跟谁（用户拍板 2026-10-22，源自 peer 01a1627d 案例）**：派 peer 修的目标分支不是父 session 当前检出所在的分支时，父 session **不要带迁移地 switch**——用 `wt switch -c <branch> -b <base> --no-cd` 建好 worktree（`--no-cd`：分支/检出/pre-start 装依赖照常，唯独 pi session 不迁移），`wt list` 验证 `@ <路径>` 存在后，把该路径写进 dispatch 文本/`[repo-cwd]`，父 session 留在自己的任务线。带迁移的 switch（无 --no-cd）仅当**父 session 自己要在这个 worktree 里继续工作**时才用——case：01a1627d 在 llm-3.0 worktree 里接到“修 dev 分支 CVE”任务，先无 --no-cd switch 到新建的 dev worktree（父 session 的 llm-3.0 语境被顶掉），再从那里建 peer；正确形态是 --no-cd 建树 → 派发，两步不变换父 session 位置。另：`-b origin/<分支>` 允许基于远端分支建 worktree，无需本地已有同名分支。
+
 ## 为什么是新 tab 而不是 split pane
 
 用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。split pane 的旧路径（multi-agent-collab 的 `scripts/herdr-peer.sh`）仅在该 skill 自身被引用且无新 tab 要求时才考虑；用户明确提到 to-peer 或新 tab 时，走本 skill。
