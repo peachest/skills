@@ -1,6 +1,6 @@
 ---
 name: skill-call-diagnose
-description: "Diagnose how a skill executed in a pi session, along three parallel axes — Adherence (did the agent follow the skill's documented workflow?), Friction (tool failures, re-emitted payloads, wasted tokens, cache invalidation), Sedimentation (ad-hoc scripts the agent had to write that the skill should absorb). Takes a trace from /skill:session-mining. Use when the user asks to 诊断 skill 执行过程 / analyze how a skill ran / audit a skill's sessions, or after a session that ran a skill expensively, slowly, or off-script."
+description: "Diagnose how a skill executed in a pi session — three parallel axes: Adherence (followed the documented workflow?), Friction (failures, re-emissions, wasted tokens, cache collapse), Sedimentation (ad-hoc scripts the skill should absorb). Takes a trace + index from /skill:session-mining. Use when the user asks 诊断 skill 执行过程 / audit a skill's sessions / skill ran expensive, slow, or off-script — execution quality of a run. Workflow or usage reports about a skill belong to session-mining's recipes."
 ---
 
 # Skill Call Diagnose
@@ -22,6 +22,8 @@ Findings do not end in the report: step 5.5 increment-merges them into the persi
 Two things: the **target skill name** (as in its frontmatter — required, ask if absent) and the **trace** (a session file path, or a session id / bare skill name when `/skill:session-mining` has not run yet).
 
 If no trace is in hand, get one: run the extract skill's script from its installed location (`~/.agents/skills/session-mining/scripts/find-skill-sessions.py`) — marker search for a bare skill name, `--session <id>` for an explicit id — and follow its triage flow. If the user already ran `/skill:session-mining`, take its deliverables directly.
+
+Multi-trace runs are first-class: triage N sessions of one target skill, anchor each version (`version-anchor.py`), then run one axis set per trace — or split axes across traces — and aggregate per trace in step 5.
 
 ### 2. Load the target skill's contract
 
@@ -115,6 +117,8 @@ Friction findings arrive pre-attributed (step 4 seven-way taxonomy); attribution
 - **noop** — one-off, not worth a change
 
 Before proposing any fix, read `~/skills/wiki/<target-skill>/skill-impact.md` — missing file means no rejected proposals to avoid. A proposal whose shape matches a rejected one must not be re-proposed unless new evidence overturns the original rejection rationale.
+
+Fixes survive one **challenger** round before reaching the user: a fresh read-only agent attacks each proposed fix, and every version claim in its brief is checked with `~/.agents/skills/session-mining/scripts/version-anchor.py` — a ghost-version argument (the attack cites contract text the trace's version never had) kills the fix. Survivors go to the user with the objections attached; killed fixes land in skill-impact.md as rejected（含理由）.
 
 Ask the user which rows to act on. For skill-doc / skill-script rows, the fix flow is the skills-repo convention: edit the source copy, run its tests (`uv run pytest` from the skill dir), gitleaks, commit, reinstall with `npx skills add -g ./<path> -a pi -y`. Do not reinstall while a live session is mid-run on that skill — the running session already holds the old body in memory, but avoid churn. After each applied fix, append a row to `skill-impact.md` (提案 / 落点 / commit / 验证命令与结果) — the 落点 cell names the skill@commit, and when an eval suite exists the 验证 cell records case-id + pass rate alongside the verdict (version anchor: fixes must stay traceable to the version they were verified against).
 

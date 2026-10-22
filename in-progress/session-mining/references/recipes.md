@@ -63,13 +63,18 @@ adjacent successful one — the fix (a missing flag, an ordering constraint) is
 usually already executed somewhere. Strip business-logic exit≠0 from the
 error set by hand. (wt failure history → AGENTS.md rules)
 
+## Diagnose lanes (multi-session error matrix)
+
+When the deliverable is a dump matrix and the errors need diagnosis, brief one fresh lane per axis over the whole matrix (failure blame / retry waste / sedimentation / contract), each naming its sessions — the tool-call-diagnose four-axis briefs are the template, per-trace aggregation replaces per-cluster. Errors from a product in active development get a "当时态" caveat in the brief: the failure may already be fixed.
+
 ## Monthly baseline
 
 errors-only triage → enumerate → loop `--dump` into `~/tmp/<topic>/` →
 attribute every error → write the baseline numbers (N errors / M sessions /
 K root causes) into an evidence doc → next month, rerun and diff. Root causes
-feed resident rules (AGENTS.md), not the mining report. Same incident in main
-session + fork counts once. (subagent 28-error baseline)
+feed resident rules (AGENTS.md), not the mining report. Same run tallies the
+extract→diagnose conversion rate — the step-5 efficacy metric. Same incident
+in main session + fork counts once. (subagent 28-error baseline)
 
 ## Bucket navigation quickset
 
@@ -77,4 +82,5 @@ session + fork counts once. (subagent 28-error baseline)
 `parentSession` first-line field walks cross-bucket lineage · wt-migration =
 command timestamp vs filename timestamp · `npm view <pkg> time --json` dates
 upstream drift · sqlite read-only queries over `store.db` reach state the
-JSONL never held.
+JSONL never held · a skill contract read via `ctx_execute head` is invisible
+to both marker and read-load signals — count real toolCalls.

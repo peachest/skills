@@ -1,6 +1,6 @@
 ---
 name: tool-call-diagnose
-description: "Diagnose how a tool was called in pi session traces, along four axes — Failure taxonomy & blame (classify errors into families, blame agent-usage vs harness vs environment, cross-checked against companion skills like pi-subagents for the subagent tool), Retry waste (failed→retried patterns, identical-retry loops, quantified token cost), Usage & sedimentation (habitual anti-patterns across all calls, fallback scripts — propose a new companion skill when none covers the tool), Contract & competition (tool bypass via bash, schema-fit misses, description→behavior gap — repeated same-shape misuse means the tool description failed). Takes a trace from /skill:session-mining. Use when the user asks 诊断工具调用失败 / why subagent workflowScript or bash glab api calls keep failing, or to audit one tool's usage across sessions."
+description: "Diagnose how a tool was called in pi session traces — four axes: failure blame (agent/harness/environment/upstream, text+temporal evidence), retry waste (identical-retry loops, token-quantified), usage sedimentation (fallback scripts → companion-skill proposals), contract & competition (bash bypass, schema fit, description→behavior gap). Takes calls dumps from /skill:session-mining. Use when the user asks 诊断工具调用失败 / why X keeps failing / audit a tool's calls — errors needing attribution to a run. Usage portraits and shape clustering over many sessions belong to session-mining's recipes."
 ---
 
 # Tool Call Diagnose
@@ -17,7 +17,7 @@ The gate exists because the recurring real-world outcome is: the agent hit pits 
 
 Target tool name (required, ask if absent) and the trace: either `/skill:session-mining` deliverables (session file + calls dump + stats), or a session id / symptom the extract skill can resolve. Symptom → filter mapping: "glab api 失败" = `bash --args-contains 'glab api' --errors-only`; "subagent workflowScript 挂" = `subagent --errors-only` (narrow with `--args-contains workflowScript` if noisy).
 
-If no dump in hand, get one from the extract skill's installed script (`~/.agents/skills/session-mining/scripts/find-tool-calls.py`) — search, triage, then dump. Build **two** dumps when diagnosing usage or retries: with and without `--errors-only` (successes and workarounds are evidence). Also build the surrounding-turn trace index:
+If no dump in hand, get one from the extract skill's installed script (`~/.agents/skills/session-mining/scripts/find-tool-calls.py`) — search, triage, then dump. Build **two** dumps when diagnosing usage or retries: with and without `--errors-only` (successes and workarounds are evidence). Arriving with a multi-session dump matrix (usage mining, design input)? Skip the single-trace framing: run the four axes as lanes over the matrix, one brief per axis naming its sessions. Also build the surrounding-turn trace index:
 
 ```bash
 python3 ~/.agents/skills/session-mining/scripts/find-skill-sessions.py --index <session-file> > trace-index.json
