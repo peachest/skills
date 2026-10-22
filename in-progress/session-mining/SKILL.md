@@ -42,6 +42,8 @@ Errors needing **attribution** (blame a run, a contract, an agent) → announce 
 
 **Deliverables**: trace file path · trace index or calls dump path(s) · triage stats · version verdict per compared session · relay enrichment (when run).
 
+**Recheck sweep**: before closing, scan `~/skills/recheck/INDEX.md` for rows targeting the mined skill/tool — rerun those scripts, diff against the baseline column, and report drift in the deliverable.
+
 **Done when**
 - [ ] Route chosen against the table and stated (recipes carry their own done-when)
 - [ ] Every triage match has a verdict (chosen / skipped with reason)
