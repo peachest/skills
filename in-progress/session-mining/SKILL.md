@@ -24,7 +24,7 @@ Script routes never cover the recipe rows: "who failed" is audit-shaped, "what s
 
 ## 2. Shared skeleton
 
-1. **Triage** — run the route, write the candidate JSON to `~/tmp/<topic>-sessions.json`. Noise signature: low marker count + high entry count + scattered tool histogram = incidental injection. Strings from the skill's own body inflate string matches; count real `toolCall` entries.
+1. **Triage** — run the route, write the candidate JSON to `~/tmp/<topic>-sessions.json`; later funnel stages filter that file incrementally, never re-walk the corpus. Noise signature: low marker count + high entry count + scattered tool histogram = incidental injection. Strings from the skill's own body inflate string matches; count real `toolCall` entries.
 2. **Anchor versions** — before any cross-session comparison: `python3 <SKILL_DIR>/scripts/version-anchor.py <session.jsonl> [--skill <name>]`. `commit` / `uncommitted` (`matches_current_file: false` = ghost version, findings cite bytes that exist nowhere else) / `third-party`. Skill name ≠ trigger name — a wrapper skill's injection anchors to the wrapper.
 3. **Index or dump** —
    ```bash
@@ -33,7 +33,7 @@ Script routes never cover the recipe rows: "who failed" is audit-shaped, "what s
    ```
    Index caps at 600 entries (`truncated: true` — long files: filter by time window, not entry number). Dump takes the tool name as a positional arg. **Success/fail dual dump is standard** for usage questions: errors-only misses the fix already sitting in an adjacent successful call (recovery-chain diff).
 4. **Aggregate, never re-read** — pair calls to results by `toolCallId` (`isError` lives on the message); probe the JSONL structure with one real record before writing a parser (zero-row parsers shipped twice). Line-grep pre-filter, write big outputs to files, return only histograms + samples. `isError: false` still hides runtime errors — sample it.
-5. **Deep-read via lanes** — fresh-context subagents per theme, each briefed with: entry-structure pointer (`references/session-jsonl.md`), output contract (report to file, ≤30-line receipt), known-findings list. Dump files are the lane input; the main context reads only the summary table.
+5. **Deep-read via lanes** — fresh-context subagents per theme. Batch lane fanout goes through a scripted workflow (`runs.all`, fresh context, task text only — a seed of the parent conversation costs ~40K tokens per lane for nothing); bg_delegate is for lanes that need the parent's in-session findings or async wake. Each lane brief carries: entry-structure pointer (`references/session-jsonl.md`), output contract (report to file, ≤30-line receipt), and known-findings in handoff shape — what this effort found, what remains open, the lane's first action. Dump files are the lane input; the main context reads only the summary table.
 6. **Relay enrichment (opt-in)** — only when the consumer will face token/latency/cache questions: `python3 <SKILL_DIR>/scripts/relay-enrich.py <session-or-id> > relay-enrich.json`. `no-relay-data` → note it and move on; the JSONL pipeline never blocks on relay.
 
 ## 3. Close
