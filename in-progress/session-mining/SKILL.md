@@ -38,7 +38,7 @@ Script routes never cover the recipe rows: "who failed" is audit-shaped, "what s
 
 ## 3. Close
 
-Errors in the dump → announce and continue into `/skill:tool-call-diagnose` in the same session (one line: "N 次错误，继续分轴分析"). Zero-error data-only delivery closes with the diagnose pointer. Skill-execution traces go to `/skill:skill-call-diagnose` the same way.
+Errors needing **attribution** (blame a run, a contract, an agent) → announce and continue into `/skill:tool-call-diagnose` in the same session (one line: "N 次错误，继续分轴分析"). Errors as **portrait material** (usage mining, design input, active-development churn) are recorded in the deliverable, not diagnosed. Multi-session dump matrices skip the single-trace contract — brief the four axes as lanes over the matrix (`references/recipes.md`). Skill-execution traces go to `/skill:skill-call-diagnose` the same way.
 
 **Deliverables**: trace file path · trace index or calls dump path(s) · triage stats · version verdict per compared session · relay enrichment (when run).
 
