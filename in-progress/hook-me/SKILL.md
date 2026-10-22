@@ -42,12 +42,17 @@ Six signals, each mapped to its hook event:
 5. **Repeated oral rules**: the same operational instruction the user gives in ≥3 distinct sessions. Each gets its own audit verdict.
 6. **Post-edit mechanics** (tool_result): deterministic follow-ups like gofmt after `.go` edits, `make manifests` after CRD type edits. Coverage ratio decides nudge vs noise.
 
-Four method laws, learned from a two-stage mining run (coarse scan over 908 sessions, then per-repo deep dives):
+Five method laws, learned from a two-stage mining run (coarse scan over 908 sessions, then per-repo deep dives) and hardened by a full-corpus round (73 repos, 1520+ sessions):
 
 - **Denominator**: a frequency without its denominator is a minority habit dressed as a rule. `×11 sessions` means nothing until divided by the repo's session count — a 15% coverage "ritual" is not a ritual.
 - **Human adjudication**: machine clustering finds candidates; only hand-read samples produce counts. Expect keyword clusters to shrink 5-8× after filtering misfires.
 - **Cross-repo consensus**: a candidate independently nominated by two repos' miners outweighs any single-repo frequency; a single-repo-only candidate with purely preventive evidence ranks last.
 - **Reject ledger**: record every rejected candidate with its reason in `NOTES.md`. Unrecorded rejections get re-proposed by the next mining run.
+- **Self-exclusion**: mining sessions pollute their own evidence pool — the workers' own reports text became 15 fake danger hits in a later batch (round-4 finding). Hard-exclude session transcript paths matching the mining dispatch itself before counting.
+- **Clone stratification**: harness template clones inflate a repo's session count with identical content — sglang-slo-analysis was 54/62 clones. Before counting a big repo, stratify sessions by template similarity and use only the human-written subset as the denominator.
+- **Dispatch-shape filter**: peer dispatches contribute keyword noise beyond `[caller identity]` — `peer …` prefixed messages too (round-4). Filter all known dispatch shapes before keyword clustering.
+- **Claim lexicon**: completion-claim detection uses Chinese compound verbs (`完成声明`/`搞定`/`全绿`); the English token `done` false-positives on prose like "what's been done".
+- **Cwd-only grouping**: slug-directory matching systematically undercounts — a residual sweep of 66 unassigned files moved kube's coverage gap from 21% to 30% (round-4). Group every session by the cwd field of its first line; slug dirs are only a storage layout.
 
 ## Parallel mining (multi-repo)
 
