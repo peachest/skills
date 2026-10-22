@@ -42,7 +42,7 @@ Errors needing **attribution** (blame a run, a contract, an agent) → announce 
 
 **Deliverables**: trace file path · trace index or calls dump path(s) · triage stats · version verdict per compared session · relay enrichment (when run).
 
-**Recheck sweep**: before closing, scan `~/skills/recheck/INDEX.md` for rows targeting the mined skill/tool — rerun those scripts, diff against the baseline column, and report drift in the deliverable.
+**Recheck sweep**: before closing, scan `~/skills/recheck/INDEX.md` for rows targeting the mined skill/tool — rerun those scripts, diff against the baseline column, and report drift in the deliverable. **Window discipline**: portraits over a bounded window (recent-20) answer "how is it used now" but miss population-level phenomena — one-off schema-era error families, rare-but-repeated anti-patterns, unknown-identifier inventories. When the deliverable feeds a redesign (companion skill, named agents, guard rules), cross-check a full-corpus scan or an independent miner's dump before ranking candidates (2026-10-22: a recent-20 four-axis pass missed the top sedimentation candidate — 315+ repeated hand-rolled dispatches — that a same-topic full-corpus peer scan had already ranked).
 
 **Done when**
 - [ ] Route chosen against the table and stated (recipes carry their own done-when)
