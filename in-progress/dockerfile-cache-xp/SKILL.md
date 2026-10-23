@@ -21,7 +21,8 @@ Check for these cost killers in order of impact:
 | 2 | **Missing GOCACHE mount** | `--mount=type=cache` only on GOMODCACHE | Add `--mount=type=cache,target=/root/.cache/go-build` to the build RUN |
 | 3 | **Version ARG churn** | `ARG VERSION/TIME/COMMIT` consumed inside build RUN | Dummy-value them (`${VERSION:-dev}`) so layer cache survives |
 | 4 | **CGO when not needed** | `CGO_ENABLED=1` (or unset) for a pure-Go service | `CGO_ENABLED=0` if the binary doesn't dlopen anything — verify against what CI/Makefile does first |
-| 5 | **Runtime base drift** | final FROM on a base that's 404/unreachable on this node (e.g. `golang-runner:1.20-alpine3.19`) | `ARG RUNTIME_IMAGE` declared **before the first FROM** (global scope), default = CI base for ADR-0007 parity; alpine-only `apk` steps get a `command -v apk` guard so ubuntu overrides also build |
+| 5 | **Non-hermetic build step** | build RUN without `GOPROXY=off` | `go mod download all` (plain download leaves zips missing → warm builds silently hit the network) + `env GOPROXY=off` in the build RUN. Passing = cache complete; failing = missing (fails fast instead of mysterious +45s) |
+| 6 | **Runtime base drift** | final FROM on a base that's 404/unreachable on this node (e.g. `golang-runner:1.20-alpine3.19`) | `ARG RUNTIME_IMAGE` declared **before the first FROM** (global scope), default = CI base for ADR-0007 parity; alpine-only `apk` steps get a `command -v apk` guard so ubuntu overrides also build. For a CGO_ENABLED=0 binary, `<ns>/base/alpine-runner:3.19` halves image size vs ubuntu-runner (163MB vs 329MB measured) |
 
 Rules of thumb from the measurement runs:
 - `go mod download` as a separate RUN costs ~0 in steady state (layer only re-runs when go.mod changes) — don't bother merging it.
