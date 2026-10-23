@@ -30,21 +30,32 @@ is a cleaned-up diff, not a findings list.
    (another repo's release, a CI image rebuild), not by an invariant of
    this code. Signal: the comment's subject is the rollout ("!33
    onward", "the rebuilt image picks this up") rather than something
-   this file maintains. Once the event lands the warning is permanent
-   noise. Handling: one-line pointer, or drop it and let the MR/issue
-   trail carry the history. Ask "is this fact still true?" before "is
-   it needed?" — and when the invariant matters but the stated fact
-   went stale, **rewrite** it to the current truth; rewriting ranks
-   equal to deletion.
+   this file maintains. **Status snapshots belong here too**: "image is
+   at 0 CVE (scanned 2026-10-23)", "currently 0 vulnerabilities" —
+   the subject is an external object's scanned state, not something
+   this file maintains, and a snapshot ages into a lie, not just noise
+   (readers trust it after reality moved on). Once the event lands the
+   warning is permanent noise. Handling: one-line pointer, or drop it
+   and let the MR/issue trail carry the history. Ask "is this fact
+   still true?" before "is it needed?" — and when the invariant
+   matters but the stated fact went stale, **rewrite** it to the
+   current truth; rewriting ranks equal to deletion. Rewrite needs a
+   stable invariant to carry: a status snapshot has none (security
+   posture drifts by design), so snapshots are deleted, never
+   "updated" to a newer snapshot.
 
 **History lives in git, not comments.** Authorship, dates, change
 history, and "which MR/commit produced this" are one blame away —
 editors surface per-line blame and agents can trace the log — so
 comments shed those duties entirely. A comment whose only job is
 documenting the change that produced the code gets deleted; the blame
-*is* that record. Comments carry only what is not derivable from the
-surrounding context, the docs, or the git history: the decision that
-cannot be reverse-engineered.
+*is* that record. Action narrations on config lines ("tighten to a
+blocking gate", "re-enable after the rebuild") are the same disease in
+miniature — the diff beside the comment *is* the action — and they live
+on yaml/CI lines where the scanner is blind, so the sweep catches them
+by eye. Comments carry only what is not derivable from the surrounding
+context, the docs, or the git history: the decision that cannot be
+reverse-engineered.
 
 ## Load-bearing patterns (keep regardless of length)
 
@@ -74,7 +85,10 @@ cannot be reverse-engineered.
 Rule of thumb: every comment keeps its **one non-obvious fact** — the
 invariant a reader cannot derive from the code. Zero non-obvious facts →
 single summary line. A comment that survives with zero cuts is a valid
-ruling; trimming is judgment, not a quota.
+ruling; trimming is judgment, not a quota. Gate for config/CI one-liners
+(scanner-blind zone): a comment earns its place by being a decision or
+an explanation that cannot be obtained directly — never a status
+snapshot and never an action narration.
 
 ## Workflow
 
