@@ -1,6 +1,6 @@
 ---
 name: comment-trim
-description: Find functions whose doc comment is as long as or longer than the body, trim the redundant comment lines in place, and fold the result back — the full discover→classify→edit→verify workflow, not just an audit report. Use when the user says 清理冗余注释 / 简化注释 / comments longer than code, or before pushing a PR that introduced new files with doc comments.
+description: Find functions whose doc comment is as long as or longer than the body, trim the redundant comment lines in place, and fold the result back — the full discover→classify→edit→verify workflow, not just an audit report. Also sweeps author-environment traces (machine names, local paths, intranet endpoints) out of comments and commit messages before they enter the remote repo. Use when the user says 清理冗余注释 / 简化注释 / comments longer than code, 清理本地环境痕迹 / 本地信息泄漏 / environment traces, or before pushing a PR that introduced new files with doc comments.
 ---
 
 # comment-trim
@@ -102,15 +102,45 @@ ruling; trimming is judgment, not a quota.
 3. **Apply the edits** with the edit tool, comment-only — never touch code
    lines in the same pass.
 
-4. **Sweep for unresolvable references** while in there (same pass, near
-   zero cost). Classes to remove from resident comments: internal node
-   names, company domains, short-form spec refs without a repo path,
-   local-process references (grilling Q numbers, local tracker
-   map/ticket ids, wayfinder), and review-finding hashes (for the latter,
-   state the problem it solved directly instead of the pointer). Keep:
-   full-path refs (org/repo#N) and external-repo MR/issue numbers —
-   durable cross-repo facts. Found most often in comments and bench/test
-   files.
+4. **Sweep for environment traces and unresolvable references** while in
+   there (same pass, near zero cost). Two families:
+
+   **Environment traces** — anything that only resolves on the author's
+   machine and must not enter the remote repo. Grep the PR-introduced
+   files (`grep -rnE` with the patterns below); hits get a ruling like
+   any ⚠️ row, not an automatic cut:
+
+   - machine/node identifiers and their qualifier words — hostnames,
+     node names, 本机 / 本节点 / 本地节点 / "local machine". Rewrite
+     to the neutral fact that still holds ("本机有 buildkit 0.32.2" →
+     "buildkit 0.32.2 on dev machines"); delete the sentence when the
+     machine name was the only content.
+   - personal absolute paths (/Users/<you>, /home/<you>, /mnt/...,
+     C:\Users\...) — replace with the repo-relative path or "the
+     project checkout".
+   - intranet-only endpoints — internal IPs, registry URLs, domains
+     that do not resolve outside the dev environment.
+   - author residue — local usernames, machine-specific tool paths,
+     local service ports.
+
+   Prefer rewrite over delete: generalize the wording, keep the
+   technical fact.
+
+   **Unresolvable references** — company domains, short-form spec refs
+   without a repo path, local-process references (grilling Q numbers,
+   local tracker map/ticket ids, wayfinder), and review-finding hashes
+   (for the latter, state the problem it solved directly instead of the
+   pointer). Keep: full-path refs (org/repo#N) and external-repo
+   MR/issue numbers — durable cross-repo facts. Found most often in
+   comments, bench/test files, script headers, and docs (README,
+   AGENTS.md).
+
+   **Commit messages carry the same traces** ("verified on 本机...",
+   local paths in reproduction steps) and travel with the repo the same
+   way — sweep `git log --format=%B <base>..HEAD` with the same
+   patterns. Unpushed commits: reword inside the step-6 autosquash
+   rebase. Already pushed: same rule as files — ask the user first
+   (rewriting published history is a force-push).
 
 5. **Verify**: build, test, lint the touched packages once — comment-only
    edits still run the checks; they catch a stray edit that hit code.
