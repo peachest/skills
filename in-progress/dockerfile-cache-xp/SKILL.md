@@ -5,7 +5,7 @@ description: Audit and optimize a repo's Dockerfile.local for local build speed 
 
 # Dockerfile Cache XP
 
-Speed up the "edit code → rebuild image locally" loop. The measured prize (llm12, 2026-10-23): warm rebuild 20.2s → 2.3s (Go service) and 19.9s → 4.7s (CGO service). Full playbook and provenance: llmops-wiki `silver/local-image-build/`.
+Speed up the "edit code → rebuild image locally" loop. The measured prize (2026-10-23): warm rebuild 20.2s → 2.3s (Go service) and 19.9s → 4.7s (CGO service). Full playbook and provenance: the internal knowledge wiki, note `silver/local-image-build/`.
 
 ## Step 0 — Scope check
 
@@ -57,10 +57,10 @@ Integrity rules:
 
 Apply the winning combination, run the timed build twice, run the smoke. Keep the runtime stage byte-compatible with the CI Dockerfile unless an ARG override is explicitly documented (ADR-0007 pattern: local and CI images must give the same trivy verdict).
 
-Commit as `ci: ...` with the before/after numbers in the message, and write the measured numbers back to llmops-wiki `silver/local-image-build/README.md`.
+Commit as `ci: ...` with the before/after numbers in the message, and write the measured numbers back to the internal knowledge wiki note `silver/local-image-build/`.
 
 ## Known traps
 
-- **export data version mismatch**: a golangci-lint binary built with go≤1.27.2 fails typecheck (v5>v4) against a GOCACHE written by go1.27.3+. Fixed 2026-10-23 on llm12 by building golangci-lint v2.15.0 from source with the host toolchain. New lint versions also carry rule drift (revive magic-number etc.) — check `.golangci.yml` pinning before blaming code.
+- **export data version mismatch**: a golangci-lint binary built with go≤1.27.2 fails typecheck (v5>v4) against a GOCACHE written by go1.27.3+. Fixed 2026-10-23 on the affected node by building golangci-lint v2.15.0 from source with the host toolchain. New lint versions also carry rule drift (revive magic-number etc.) — check `.golangci.yml` pinning before blaming code.
 - **Bare repos + extensions.worktreeConfig**: enabling it on a bare repo breaks worktree detection ("must be run in a work tree"). To bypass hooks in one worktree of a bare repo, point `core.hooksPath` at a directory that doesn't exist in that branch instead.
 - **`git reset --hard` wipes uncommitted experiment state** — commit before any reset during measurement loops.
