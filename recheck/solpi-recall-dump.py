@@ -28,6 +28,7 @@ for f in glob.glob(root + '/*/*.jsonl'):
                 results[m.get('toolCallId')] = (m.get('isError', False), len(text or ''), (text or '')[:100])
 
 print('real obs_recall calls (30d):', len(calls))
+if len(calls) == 0: import sys; sys.exit('ZERO-RESULT: no obs_recall calls parsed - structure or filter drifted')
 paired = [results[ci] for _,ci,_ in calls if ci in results]
 print('paired results:', len(paired))
 err = sum(1 for v in paired if v[0])

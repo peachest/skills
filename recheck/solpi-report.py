@@ -69,6 +69,7 @@ for r in sp:
     if r["obs_count"] and r["n_req"] > 1:
         replay_saved += (r["obs_tokens"]/max(r["obs_count"],1)) * max(r["n_req"]-1,0) - HANDLE_TOKENS*max(r["n_req"]-1,0)
 print(f"Observation Pack: {n_obs} observations archived, {tot_obs:,} tokens pulled out of replay")
+if n_obs < 100000: import sys; sys.exit('ZERO-RESULT: archived count collapsed, ledger parse or structure drifted')
 print(f"  rough replay saving ≈ {int(max(replay_saved,0)):,} tokens (archived tokens re-sent per later request, minus ~{HANDLE_TOKENS}/req handle cost)")
 print(f"Action Fusion: {sum(r['af_used'] for r in sp)} fused edit/write+command turns saved (1 model call each)")
 print()

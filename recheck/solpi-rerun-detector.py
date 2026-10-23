@@ -72,14 +72,7 @@ for f in glob.glob(root + '/*/*.jsonl'):
     # pass 2: for each archived result, find later identical (tool,args) call
     for i,(ts,kind,d) in enumerate(events):
         if kind!='result' or not d['archived']: continue
-        for j in range(i+1, len(events)):
-            ts2, k2, d2 = events[j]
-            if k2=='call' and d2['tool']=='obs_recall':
-                break  # recalled before rerun -> not an incident
-            if k2=='call' and d2['tool']==d['tool'] and d2['args']==events[i][2].get('args_ref','') and False:
-                pass
-        # need args of the original call: find its call event
-    # build callId->args map
+        # build callId->args map
     args_by_id = {ev[2]['callId']: ev[2]['args'] for ev in events if ev[1]=='call'}
     for i,(ts,kind,d) in enumerate(events):
         if kind!='result' or not d['archived']: continue
