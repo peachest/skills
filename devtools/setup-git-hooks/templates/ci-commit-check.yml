@@ -22,3 +22,5 @@ tw-commit-check:
         echo "无 diff base（存量历史豁免），跳过"; exit 0
       fi
       bash tools/git-hooks/commit-msg --ci "$BASE" "$CI_COMMIT_SHA"
+      # 钩子脚本自身回归保护：与本地 selftest 同一实现
+      bash tools/git-hooks/selftest.sh

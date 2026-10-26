@@ -16,7 +16,7 @@ cd "$repo_root" || exit 1
 
 zero=0000000000000000000000000000000000000000
 checked=""
-build_base="/tmp/build-example-plugin"
+build_base="/tmp/build-ppu-device-plugin"
 
 # 清理上次失败的残留
 git worktree prune 2>/dev/null
@@ -57,7 +57,7 @@ clone_replace_deps() {
 # go1.26.5 之类升级后即消失）；~/go/bin 提供 golangci-lint 等 make 依赖。
 # PATH 幂等，置于循环外只拼一次；删除远端分支的推送不需要 go，
 # 故 command -v 检查放在循环内 skip 之后（见下）。
-export PATH="${HOME:-/nonexistent}/sdk/go/bin:${HOME:-/nonexistent}/go/bin:${PATH:-}"   # PATH 同样防 set -u 未绑定   # HOME 缺失环境（CI 容器）set -u 下不炸，走 command -v 兜底报错
+export PATH="${HOME:+$HOME/sdk/go/bin:}${HOME:+$HOME/go/bin:}${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"   # HOME/PATH 防未绑定；末段缺省避免 PATH 未设时尾冒号（空元素=当前目录）
 
 # stdin 每行: <local ref> <local sha> <remote ref> <remote sha>
 while read -r _local_ref local_sha _remote_ref _remote_sha; do

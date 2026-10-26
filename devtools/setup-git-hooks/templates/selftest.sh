@@ -3,6 +3,7 @@
 # 全部断言对临时目录的副本执行，源文件只读；CI 可选跑：bash tools/git-hooks/selftest.sh
 set -uo pipefail
 cd "$(dirname "$0")"
+HDIR="$PWD"                    # hooks 目录绝对路径（后续测试段会 cd 走）
 HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
 pass=0; fail=0
 T=$(mktemp -d)
@@ -45,10 +46,14 @@ cd "$D" || exit 1
 git config user.name t && git config user.email t@t
 mkdir -p .hooks && git config core.hooksPath "$D/.hooks"   # 隔离外部全局/系统级钩子
 c() { git commit -q --allow-empty -m "$1" || { echo "FAIL: seed commit 失败: $1"; exit 1; }; }
+# 根提交占位：BAD~1 必须存在，否则 --ci BAD~1 走 fail-closed 恒 1，断言空转（r7 no14）
+c "feat: initial"
 c "seed bad"
+BAD=$(git rev-parse HEAD)   # bad 定位后后续 seed 让范围可达
 c "feat: good"
-c "feat: seed3"   # HEAD~2 需要至少 3 个 commit
-bash "$HOOK" --ci HEAD~3 HEAD >/dev/null 2>&1   # 含 seed bad 的范围
+c "feat: seed3"
+c "feat: seed4"
+bash "$HOOK" --ci "$BAD~1" HEAD >/dev/null 2>&1   # bad~1..HEAD 含 bad（范围含左端点后第一条起）
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 范围报 bad"; }
 GOOD=$(git rev-list --all --grep="feat: good" -n1)   # 按 subject 定位，不依赖 commit 序数
 bash "$HOOK" --ci "$GOOD~1" "$GOOD" >/dev/null 2>&1
@@ -59,14 +64,39 @@ bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
 # fail-closed：不可达范围
 bash "$HOOK" --ci 0000000000000000000000000000000000000000 HEAD >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: fail-closed 不可达范围"; }
-# --ci 范围内含 0x1e 的 commit → fail-closed（前置拒绝路径）
-git commit -q --allow-empty -m "feat: with $'\x1e' embedded" 2>/dev/null || git commit -q --allow-empty -m "feat: with control char"
-bash "$HOOK" --ci HEAD~4 HEAD >/dev/null 2>&1
+# --ci 范围内含 0x1e 的 commit → fail-closed（用 printf 写 0x1e 进 commit message，
+# -m "$'\x1e'" 双引号不展开；此前的字面文本 seed 无 0x1e，已删——误导性死代码 r7 no15）
+git commit -q --allow-empty -m "feat: clean after bad" || { echo "FAIL: clean seed 失败"; exit 1; }
+LC_ALL=C git commit -q --allow-empty -m "$(printf 'feat: evil \x1e tail')" || { echo "FAIL: 0x1e commit 失败"; exit 1; }
+EVIL=$(git rev-parse HEAD)
+bash "$HOOK" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 应拒 0x1e 提交"; }
-# log 行为：NO_COLOR 下无 ESC；warn 走 stderr
-out=$(NO_COLOR=1 bash -c "source $PWD/common.sh 2>/dev/null; log_warn x" 2>&1)
-[[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未生效"; }
-out_w=$(bash -c "source $PWD/common.sh; log_warn w" 2>/dev/null); out_e=$(bash -c "source $PWD/common.sh; log_warn w" 2>&1 >/dev/null)
+# 颜色路径：非 TTY 管道下用 FORCE_COLOR 注入验证着色可达，NO_COLOR 优先压过（r7 no19）
+out=$(FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
+[[ "$out" == *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: FORCE_COLOR 未生效"; }
+out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
+[[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未压过 FORCE_COLOR"; }
+out_w=$(bash -c "source $T/common.sh; log_warn w" 2>/dev/null); out_e=$(bash -c "source $T/common.sh; log_warn w" 2>&1 >/dev/null)
 [[ -z "$out_w" && -n "$out_e" ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr"; }
+# install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
+# cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
+IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
+    && cp "$HDIR"/{install.sh,commit-msg,pre-commit,pre-push,common.sh} "$IT/tools/git-hooks/" \
+    || { echo "FAIL: install 测试环境准备失败"; exit 1; }
+(cd "$IT" && bash tools/git-hooks/install.sh >/dev/null 2>&1 && [ "$(git -C "$IT" config --get core.hooksPath)" = "tools/git-hooks" ])
+[ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh hooksPath 写入"; }
+rm -rf "$IT"
+# 迁移清理分支：worktree 级 hooksPath 覆盖应被 install.sh 清除（r7 no7，本迁移核心逻辑）
+IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" \
+    && cp "$HDIR"/{install.sh,commit-msg,common.sh} "$IT2/tools/git-hooks/" \
+    || { echo "FAIL: 迁移用例环境准备失败"; exit 1; }
+git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init" || { echo "FAIL: 迁移用例 seed 失败"; exit 1; }
+git -C "$IT2" config extensions.worktreeConfig true
+WT=$(mktemp -d)
+git -C "$IT2" worktree add --detach "$WT" HEAD >/dev/null 2>&1 || { echo "FAIL: 迁移用例 worktree 创建失败"; exit 1; }
+git -C "$WT" config --worktree core.hooksPath "/stale/hooks"   # 模拟旧 install-hooks.sh 残留
+(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
+[ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 未清除 worktree 级 hooksPath"; }
+rm -rf "$IT2" "$WT"
 echo "selftest: $pass pass, $fail fail"
 exit $fail

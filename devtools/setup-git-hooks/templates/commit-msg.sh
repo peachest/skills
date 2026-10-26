@@ -36,8 +36,10 @@ validate_one() {
     fi
 
     # 重复 Signed-off-by 查重先于豁免：豁免免的是格式约束，不免全仓查重规则
-    # （"Merge branch x" 标题藏重复 signoff 不应放过）
-    if [ -n "$(printf '%s\n' "$full_msg" | grep '^Signed-off-by: ' | sort | uniq -d)" ]; then
+    # （"Merge branch x" 标题藏重复 signoff 不应放过）。
+    # 宽松匹配：-i 大小写不敏感 + 折叠多空格 + 统一小写——
+    # "Signed-off-by:  X"/"signed-off-by: x" 变体与正典行判重（git 自身对 trailer 宽容）
+    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:[ ]+' | tr -s ' \t' ' ' | tr '[:upper:]' '[:lower:]' | sort | uniq -d)" ]; then
         log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi
@@ -95,7 +97,7 @@ validate_range() {
     local log_out
     log_out=$(git log --format='%H%x09%B%x09%x1e' "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
-    # 空范围：rebase 后 diff-base 已含于 tip 是合法场景（WARN 不 fail），但需可见
+    # 空范围：tip 已含于 base（tip 为 base 祖先或相等，如 rebase 后旧 diff-base）是合法场景（WARN 不 fail），但需可见
     [ -z "$log_out" ] && { log_warn "范围 $base..$tip 为空——确认 base 是否正确（正常 MR 非空）"; return 0; }
 
     # 单次 git log 批量取全文（%B），逐 commit 文本拆分校验（避免逐 commit 起子进程取数）
@@ -107,7 +109,10 @@ validate_range() {
         else
             body+=$'\n'"$line"
         fi
-        if [[ "$line" == *$'\x1e' ]]; then
+        # 终止符白名单：合法记录尾 = "%B 尾随换行后的独立行 \t\x1e"（或无 %B 内容时裸 \x1e）。
+        # 行内任意位置含 0x1e 的其他形态（bot no10：伪记录切分绕过 signoff 查重）走内容级拒绝；
+        # body 行末恰为 0x1e 的伪终结（r7 no8）由尾部兜底捕获：伪终结后后续内容累积在 body/sha 残留非空
+        if [[ "$line" == $'\t\x1e' || "$line" == $'\x1e' ]]; then
             body="${body%$'\x1e'}"
             # 消息内容内嵌 0x1e（解析终止符）会伪造记录对齐——内容级拒绝
             if [[ "$body" == *$'\x1e'* ]]; then
@@ -117,18 +122,21 @@ validate_range() {
                 continue
             fi
             first_line="${body%%$'\n'*}"
-            first_line=$(printf '%s' "$first_line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            # 只去尾随空白与 \r：不裁前导空白——" Merge branch x"/" feat: x" 縣空格
+            # 属格式违规，与 CI 拒绝口径一致（r7 no11）
+            first_line=$(printf '%s' "$first_line" | sed 's/\r$//;s/[[:space:]]*$//')
             if ! validate_one "$first_line" "$body"; then
-                log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\010\013\014\016-\037')"
+                log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\013\016-\037')"
                 bad=1
             fi
             sha=""
             body=""
         fi
     done <<< "$log_out"
-    # 残记录兜底：消息内嵌 0x1e 会提前终结记录，剩余行沦为永不校验的残记录
-    # （如把重复 Signed-off-by 藏在残记录里绕过查重）——fail-closed
-    if [ -n "$sha" ]; then
+    # 残记录兜底：消息内嵌 0x1e 会提前终结记录（含行末 0x1e 伪终结），剩余内容
+    # 沦为永不校验的残记录（如把重复 Signed-off-by 藏在残记录里绕过查重）——
+    # 判 sha 或 body 任一非空即 fail-closed（r7 no8）
+    if [ -n "$sha" ] || [ -n "$body" ]; then
         log_error "提交信息包含非法控制字符 0x1e（record 未终结，剩余内容未校验）"
         bad=1
     fi
@@ -148,7 +156,8 @@ case "${1:-}" in
             log_error "提交信息包含非法控制字符 0x1e（与 CI 校验协议冲突）"
             exit 1
         fi
-        first_line=$(head -n1 "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        # 不裁前导空白（r7 no11，同 --ci 口径）
+        first_line=$(head -n1 "$1" | sed 's/\r$//;s/[[:space:]]*$//')
         validate_one "$first_line" "$(cat "$1")" || exit 1
         log_info "提交信息格式正确。"
         ;;

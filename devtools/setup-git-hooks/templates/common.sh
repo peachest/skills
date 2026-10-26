@@ -5,8 +5,9 @@
 #   如 pre-push 对 wiki.py check 的 rc=$? 捕获在 -e 下直接终止钩子）。
 
 # 颜色：两流均为 TTY 才着色（交叉重定向如 2>err.log 时任一"或"判断都会
-# 让转义符漏进非 TTY 流）；遵循 NO_COLOR 约定
-if [[ -t 1 && -t 2 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+# 让转义符漏进非 TTY 流）；NO_COLOR 约定优先；FORCE_COLOR 显式开色（供
+# selftest 在非 TTY 管道环境注入验证着色路径，r7 no19）
+if [[ -z "${NO_COLOR:-}" ]] && { [[ -t 1 && -t 2 ]] || [[ -n "${FORCE_COLOR:-}" ]]; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
     YELLOW=$'\033[1;33m'
@@ -20,6 +21,6 @@ fi
 
 # printf 而非 echo -e：消息含外部输入（commit subject、clone 报错），
 # echo -e 会解释其中的反斜杠序列
-log_info()  { printf '%s\n' "[INFO] ${GREEN}$*${NC}"; }
-log_warn()  { printf '%s\n' "[WARN] ${YELLOW}$*${NC}" >&2; }
-log_error() { printf '%s\n' "[ERROR] ${RED}$*${NC}" >&2; }
+log_info()  { local IFS=' '; printf '%s\n' "[INFO] ${GREEN}$*${NC}"; }
+log_warn()  { local IFS=' '; printf '%s\n' "[WARN] ${YELLOW}$*${NC}" >&2; }
+log_error() { local IFS=' '; printf '%s\n' "[ERROR] ${RED}$*${NC}" >&2; }
