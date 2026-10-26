@@ -22,7 +22,7 @@ argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [
 
 ## 失败即回 skill（红线，2026-10-26 拍板，源自 10-26 绕过案）
 
-任何创建报错（agent 重名、identity_conflict、ws 断言失败等）时，**唯一合法动作是带着脚本的结构化错误回到本 skill 的路径重试或向用户升级**——禁止绕过 skill 手打裸 `herdr tab create` / `agent start`。实证：2026-10-26 一案，skill 护栏齐全（ws 推断+WARN+回读），但 herdr_peer 重名报错后 agent 图省事裸打 CLI 不带 --workspace，tab 落进 <repo-c> ws（最近活跃 ws），把修复过的 lesson 犯了第二遍。知识护栏在重试压力下会失效——重名的正确处置是：脚本已自动报出已有持有者，**复用 vs 新名字由用户裁决**，不要自行选路。
+任何创建报错（agent 重名、identity_conflict、ws 断言失败等）时，**唯一合法动作是带着脚本的结构化错误回到本 skill 的路径重试或向用户升级**——禁止绕过 skill 手打裸 `herdr tab create` / `agent start`。实证：2026-10-26 一案，skill 护栏齐全（ws 推断+WARN+回读），但 herdr_peer 重名报错后 agent 图省事裸打 CLI 不带 --workspace，tab 落进非目标项目 ws（最近活跃 ws），把修复过的 lesson 犯了第二遍。知识护栏在重试压力下会失效——重名的正确处置是：脚本已自动报出已有持有者，**复用 vs 新名字由用户裁决**，不要自行选路。
 
 ## 身份登记（2026-10-26）
 
