@@ -9,7 +9,7 @@
 
 set -uo pipefail   # 入口自行声明（common.sh 不带副作用）；不用 -e：pre-push 需捕获 wiki.py 的设计内退出码
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
-source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
+source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 repo_root=$(git rev-parse --show-toplevel) || exit 1
 cd "$repo_root" || exit 1

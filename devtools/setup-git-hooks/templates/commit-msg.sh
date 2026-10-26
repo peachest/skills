@@ -51,7 +51,7 @@ validate_one() {
     # r19 no197 措辞对齐实现：并非"统一小写"）
     # POSIX 可移植：\+ 是 GNU BRE 扩展（BSD 按字面 +，r12 no82）；不整行小写——仅大小写
     # 不同的两个不同签署人会被误判重复（r12 no82）；判重本身对大小写敏感是刻意取舍
-    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
+    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by[[:space:]]*:' | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
         log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi

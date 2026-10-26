@@ -99,7 +99,6 @@ printf 'x\n' > "$D/revtmp" && git -C "$D" add revtmp \
     || { echo >&2 "FAIL: revert 前置 seed 失败"; exit 1; }
 git -C "$D" revert --no-edit HEAD >/dev/null 2>&1 || { echo >&2 "FAIL: revert seed 失败"; exit 1; }
 TREV=$(git -C "$D" rev-parse HEAD)
-[ "$(git -C "$D" show -s --format=%s "$TREV")" = Revert-x ] || true   # revert subject 形态仅提示，不作断言
 bash "$HOOK" --ci "$TREV~1" "$TREV" >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应放行真 git revert 提交（r20 no215）"; }
 # Merge 反伪造（r18 no181·medium）：手写 "Merge branch 'x'" 主题的普通提交 → CI 拒绝
@@ -114,7 +113,7 @@ git -C "$D" checkout -q - || { echo >&2 "FAIL: 回原分支失败（r19 no210：
 git -C "$D" merge -q --no-ff --no-edit mbranch >/dev/null 2>&1 || { echo >&2 "FAIL: 反伪造用例 merge seed 失败" >&2; exit 1; }
 MERGE=$(git -C "$D" rev-parse HEAD)
 # 环境断言（r19 no210·medium）：MERGE 必须真为 merge（2 parent），否则断言测的是 conventional 直通
-[ "$(git -C "$D" rev-list --parents -n1 "$MERGE" | wc -w)" = "3" ] || { echo >&2 "FAIL: MERGE 非 merge commit（环境假阳性防护）" >&2; exit 1; }
+[ "$(git -C "$D" rev-list --parents -n1 "$MERGE" | wc -w | tr -d "[:space:]")" = "3" ] || { echo >&2 "FAIL: MERGE 非 merge commit（环境假阳性防护）" >&2; exit 1; }   # tr 剥空白（BSD wc 前导空格，r21 no241）
 bash "$HOOK" --ci "$MERGE~1" "$MERGE" >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应放行真 merge commit" >&2; }
 # fail-closed：不可达范围
@@ -135,7 +134,16 @@ out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn x' _ "
 [[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: NO_COLOR 未压过 FORCE_COLOR" >&2; }
 out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>&1 >/dev/null)
 [[ -z "$out_w" && "$out_e" == *"[WARN]"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: log_warn 未走 stderr 或输出非 log_warn（r13 no108）" >&2; }
+# UTF-8 locale 分支（r21 no232·medium）：CI 未设 LANG 恒走字节剥除分支，UTF-8
+# 分支在门禁中零覆盖——LC_ALL=C.UTF-8 用例锁定两字节替换 + 多字节字符保留
+out=$(LC_ALL=C.UTF-8 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xe5\x8d\x81')" 2>&1)
+case "$out" in *$'\xc2\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支未替换 C1 CSI" ;; *"x?[31my"*$(printf '\xe5\x8d\x81')*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支用例输出异常（多字节字符被误伤？）" ;; esac
 # ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
+# FORCE_COLOR 关断值边界（r21 no233）：0/off/FALSE 不开色
+for v in 0 off FALSE; do
+    out=$(FORCE_COLOR=$v bash -c 'source "$1" 2>/dev/null; log_warn x' _ "$T/common.sh" 2>&1)
+    case "$out" in *$'\033'*) fail=$((fail+1)); echo >&2 "FAIL: FORCE_COLOR=$v 应不强制开色" ;; *) pass=$((pass+1)) ;; esac
+done
 out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\033[31my')" 2>&1)   # 传参形式（r17 no173 同 no142）
 case "$out" in *$'\033'*) fail=$((fail+1)); echo >&2 "FAIL: log_warn 未剥离 ESC" >&2 ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: ESC 用例输出异常: $out" >&2 ;; esac   # [ 转义（r15 no141：未闭合 [ 按字面是冷门巧合语义）
 # UTF-8 C1 定点剥除（r17 no158）：8 位 CSI/OSC 起始符不得透传

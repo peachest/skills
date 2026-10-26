@@ -33,9 +33,9 @@ case "$HOOKS_DIR" in /*) echo "错误: HOOKS_DIR 必须为相对路径（见上�
 
 # 否则 chmod 失败后配置已落盘，git 会静默跳过无执行位的钩子（检查反而被关闭），
 # 且提前退出会短路末尾的聚合诊断报告。保留 chmod 错误输出便于诊断（只读挂载/EACCES）
-# 遍历目录（钩子目录即事实源，新增钩子自动纳入）；非钩子文件跳过。
-# git 只按精确文件名识别钩子（均无扩展名），*.sh 必为辅助脚本——排除即不变式，
-# 新增辅助脚本无需维护清单
+# 遍历目录（钩子目录即事实源，新增钩子自动纳入）；仅排除 *.sh/*.md。
+# 不变式（r21 no231 措辞对齐）：目录内应只放钩子与 *.sh/*.md 辅助文件——其他
+# 无扩展名文件也会被 chmod +x（git 按精确文件名识别钩子，无扩展名是钩子约定）
 for hook in "$HOOKS_DIR"/*; do
     [ -f "$hook" ] || continue   # 跳过子目录（glob 字面量已被上方 -d 拦，防御空目录场景）
     case "${hook##*/}" in
@@ -100,7 +100,7 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
     CALLBACK_FAILED=0
 fi
 
-git config core.hooksPath "$HOOKS_DIR" || { echo "错误: core.hooksPath 写入失败（配置只读/损坏/并发锁？）" >&2; exit 1; }   # 一致风格诊断（r16 no152）
+git config --replace-all core.hooksPath "$HOOKS_DIR" || { echo "错误: core.hooksPath 写入失败（配置只读/损坏/并发锁？）" >&2; exit 1; }   # --replace-all 消除存量多值失败模式（r21 no230），键不存在时等同普通写入
 # 写入后校验各 worktree 的实际生效值（worktree 级优先于 clone 级）：
 # 清理失败或存量覆盖（extensions.worktreeConfig 未启用而 worktree config 已有值）都会让
 # clone 级写入对个别 worktree 无效——逐仓校验并显式暴露，不做静默降级（r8 no8548）。
@@ -126,7 +126,7 @@ CALLBACK_FAILED=0
 # 清理失败/校验不匹配 = 真实错误（与头部边界声明一致：仅目录缺失属 fail-open），exit 1
 # 让 wt pre-start / Makefile setup 调用方能感知（r9 no 3627/5b6d）
 if [ "${clean_fail:-0}" = 1 ] || [ "${wt_mismatch:-0}" = 1 ]; then
-    echo "错误: 存在 worktree 级 hooksPath 覆盖未被清除（worktree 级优先，钩子不会指向 $HOOKS_DIR）——请修复权限后重跑本脚本（幂等），或手动：git -C <worktree> config --worktree --unset-all core.hooksPath" >&2   # 同键多值时单 --unset 必败（r12 no86）；重跑恢复路径（r16 no151）
+    echo "错误: 存在 worktree 级 hooksPath 覆盖未被清除，或实际生效值仍非 $HOOKS_DIR（成因：worktree 级残留 / 环境级 GIT_CONFIG_* 覆盖 / local include 链 / 值格式差异，见上方各 worktree 校验警告的实际值）——worktree 级残留请修复权限后重跑本脚本（幂等）或手动 git -C <worktree> config --worktree --unset-all core.hooksPath；其余成因请检查对应配置源" >&2   # 按成因区分（r21 no229：wt_mismatch 不止清理失败一种）
     exit 1
 fi
 echo "✓ core.hooksPath = $HOOKS_DIR（本 clone 主检出与全部 worktree 生效）"

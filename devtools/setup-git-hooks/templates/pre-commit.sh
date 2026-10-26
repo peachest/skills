@@ -6,7 +6,7 @@
 
 set -euo pipefail   # 入口自行声明（common.sh 不带副作用）；本钩子全部检查为 if/exit 结构，-e 可安全兜住未来新增检查的未防护失败
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
-source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
+source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
@@ -18,7 +18,8 @@ read_fail=0   # 读取失败与格式失败分列，末尾提示按因区分（r
 # fail-loud：读取失败即拦截，不再依赖 diff 双空判等
 fmt_tmp=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
 fmt_out=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }   # 0600 副文件（r20 no220：重定向创建为 644 且有 symlink 竞争窗口）
-trap 'rm -f "$fmt_tmp" "$fmt_out"' EXIT INT TERM HUP   # 信号也清理（EXIT trap 不覆盖未捕获信号，r20 no220）
+trap 'rm -f "$fmt_tmp" "$fmt_out"' EXIT   # 兜底清理
+trap 'rm -f "$fmt_tmp" "$fmt_out"; exit 130' INT TERM HUP   # 信号清理后显式退出（r20 no220/r21 no236：不退出会继续运行重建 0644 临时文件）
 # 文件清单先取再校验退出码：进程替换吞退出码会让 git 失败时静默跳过全部检查
 # （fail-open 与本文件 fail-loud 原则矛盾，r18 no188）。
 # 已知限制（r18 no187，同 install.sh 口径）：按行解析无法表示含换行的文件名；
@@ -57,13 +58,18 @@ fi
 # 1. staged Go 文件 → gofmt 检查
 while IFS= read -r f; do
     [ -z "$f" ] && continue
+    case "$(git ls-files -s -- "$f" | awk '{print $1}')" in
+        120000|160000) continue ;;   # symlink/gitlink（r21 no235·medium）：show 输出的是目标路径/commit 内容，格式检查无意义且必误拦
+    esac
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
         read_fail=1
         fail=1
         continue
     fi
-    gofmt_err=$(gofmt "$fmt_tmp" > "$fmt_out" 2>&1) || true
+    # 2>&1 在 > 之前：stderr 进命令替换、stdout 落文件（r21 no234·medium：原顺序把
+    # stderr 一并写文件，gofmt_err 恒空，语法错误分支不可达）
+    gofmt_err=$(gofmt "$fmt_tmp" 2>&1 > "$fmt_out") || true
     if [ -n "$gofmt_err" ]; then
         # 语法错误与格式差异区分（r20 no223）：make fmt 修不了语法错误
         log_error "gofmt 解析失败（语法错误？WIP 提交请用 --no-verify）: $f"
@@ -82,6 +88,9 @@ done <<< "$files_go"
 while IFS= read -r f; do
     [ -z "$f" ] && continue
     # 同 Go 链路口径（r16 no167）：失败 fail-loud；临时文件保字节原样（r16 no165）
+    case "$(git ls-files -s -- "$f" | awk '{print $1}')" in
+        120000|160000) continue ;;   # symlink/gitlink（r21 no235）
+    esac
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
         read_fail=1
@@ -99,7 +108,7 @@ if [ "$fail" -ne 0 ]; then
     # 提示按失败原因区分（r19 no209）：读取失败应重新 add 而非 make fmt；
     # make fmt 只覆盖 hgml/ 范围，仓外 .c/.h 需手动格式化
     [ "${read_fail:-0}" = 1 ] && log_error "部分 staged 内容读取失败——请重新 git add 后重试。"
-    [ "${read_fail:-0}" = 0 ] && log_error "请运行 make fmt 后重新 git add（make fmt 仅覆盖 go/./ hgml *.h，仓外 C 文件请手动 clang-format -i）。"
+    [ "${read_fail:-0}" = 0 ] && log_error "请运行 make fmt 后重新 git add（make fmt 仅覆盖 Go 与 hgml/*.h，其余 .c/.h 请手动 clang-format -i）。"
     exit 1
 fi
 
