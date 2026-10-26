@@ -8,8 +8,8 @@ HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
 pass=0; fail=0
 T=$(mktemp -d)
 MSG=$(mktemp)
-D=""   # 先初始化防 trap 引用未赋值（set -u）
-trap 'rm -rf "$T" "$MSG" "${D:-}"' EXIT
+D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/WT 同理由 :- 守护（r8 no8577）
+trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${WT:-}"' EXIT
 cp commit-msg common.sh "$T/" || { echo "FAIL: 副本复制失败"; exit 1; }
 
 t() { # t <期望exit> <描述> <msg文件内容>
@@ -56,6 +56,7 @@ c "feat: seed4"
 bash "$HOOK" --ci "$BAD~1" HEAD >/dev/null 2>&1   # bad~1..HEAD 含 bad（范围含左端点后第一条起）
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 范围报 bad"; }
 GOOD=$(git rev-list --all --grep="feat: good" -n1)   # 按 subject 定位，不依赖 commit 序数
+[ -n "$GOOD" ] || { echo "FAIL: GOOD 定位失败（--grep 落空，后续断言无意义）"; exit 1; }   # r8 no cb55
 bash "$HOOK" --ci "$GOOD~1" "$GOOD" >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 合法 commit 应过"; }
 # --ci 空范围（rebase 后 diff-base 含于 tip 的合法场景，期望 0）
@@ -71,8 +72,9 @@ LC_ALL=C git commit -q --allow-empty -m "$(printf 'feat: evil \x1e tail')" || { 
 EVIL=$(git rev-parse HEAD)
 bash "$HOOK" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 应拒 0x1e 提交"; }
-# 颜色路径：非 TTY 管道下用 FORCE_COLOR 注入验证着色可达，NO_COLOR 优先压过（r7 no19）
-out=$(FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
+# 颜色路径：非 TTY 管道下用 FORCE_COLOR 注入验证着色可达，NO_COLOR 优先压过（r7 no19）；
+# 开色用例显式 NO_COLOR=（清空）——CI 环境若全局导出 NO_COLOR 会让断言假红（r8 no c819）
+out=$(NO_COLOR= FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
 [[ "$out" == *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: FORCE_COLOR 未生效"; }
 out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
 [[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未压过 FORCE_COLOR"; }
@@ -86,17 +88,33 @@ IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
 (cd "$IT" && bash tools/git-hooks/install.sh >/dev/null 2>&1 && [ "$(git -C "$IT" config --get core.hooksPath)" = "tools/git-hooks" ])
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh hooksPath 写入"; }
 rm -rf "$IT"
-# 迁移清理分支：worktree 级 hooksPath 覆盖应被 install.sh 清除（r7 no7，本迁移核心逻辑）
-IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" \
+# 迁移清理分支：worktree 级 hooksPath 覆盖应被 install.sh 清除（r7 no7，本迁移核心逻辑）。
+# 用 attached worktree（带 branch 行）——正是 r8 no30a9 暴露的、旧解析永不触发的形态
+IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" "$IT2/.hooks" \
     && cp "$HDIR"/{install.sh,commit-msg,common.sh} "$IT2/tools/git-hooks/" \
     || { echo "FAIL: 迁移用例环境准备失败"; exit 1; }
+git -C "$IT2" config core.hooksPath "$IT2/.hooks"   # 种子提交隔离外部钩子（r8 no4bbd，同 $D 段口径）
 git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init" || { echo "FAIL: 迁移用例 seed 失败"; exit 1; }
 git -C "$IT2" config extensions.worktreeConfig true
 WT=$(mktemp -d)
-git -C "$IT2" worktree add --detach "$WT" HEAD >/dev/null 2>&1 || { echo "FAIL: 迁移用例 worktree 创建失败"; exit 1; }
+git -C "$IT2" worktree add -q -b tmp-mig-wt "$WT" HEAD >/dev/null 2>&1 || { echo "FAIL: 迁移用例 worktree 创建失败"; exit 1; }
 git -C "$WT" config --worktree core.hooksPath "/stale/hooks"   # 模拟旧 install-hooks.sh 残留
-(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
+(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
+    || { fail=$((fail+1)); echo "FAIL: 迁移用例 install.sh 非零退出（r8 no34ab）"; }
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 未清除 worktree 级 hooksPath"; }
 rm -rf "$IT2" "$WT"
+# 伪造终止符重同步（r8 no59e3）：body 内嵌独立 \t\x1e 行把重复 signoff 拆到两个伪记录
+# 里逃过单记录查重——记录头 40-hex 校验应 fail-closed
+IT3=$(mktemp -d) && git init -q "$IT3" && mkdir -p "$IT3/tools/git-hooks" "$IT3/.hooks" \
+    && cp "$HDIR"/{commit-msg,common.sh} "$IT3/tools/git-hooks/" \
+    || { echo "FAIL: 重同步用例环境准备失败"; exit 1; }
+git -C "$IT3" config core.hooksPath "$IT3/.hooks" && mkdir -p "$IT3/.hooks"
+git -C "$IT3" config user.name t && git -C "$IT3" config user.email t@t
+printf 'feat: x\nSigned-off-by: A <a@t>\n\t\x1e\nfeat: y\nSigned-off-by: A <a@t>\n' > "$IT3/forged.msg"
+git -C "$IT3" commit -q --allow-empty --no-verify -F "$IT3/forged.msg" || { echo "FAIL: 重同步用例 seed 失败"; exit 1; }
+EVIL=$(git -C "$IT3" rev-parse HEAD)
+bash "$HDIR/commit-msg" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 伪造终止符重同步应拒"; }
+rm -rf "$IT3"
 echo "selftest: $pass pass, $fail fail"
 exit $fail

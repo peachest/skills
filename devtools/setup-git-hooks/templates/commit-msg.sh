@@ -39,7 +39,7 @@ validate_one() {
     # （"Merge branch x" 标题藏重复 signoff 不应放过）。
     # 宽松匹配：-i 大小写不敏感 + 折叠多空格 + 统一小写——
     # "Signed-off-by:  X"/"signed-off-by: x" 变体与正典行判重（git 自身对 trailer 宽容）
-    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:[ ]+' | tr -s ' \t' ' ' | tr '[:upper:]' '[:lower:]' | sort | uniq -d)" ]; then
+    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr '[:upper:]' '[:lower:]' | sed 's/^signed-off-by:[[:space:]]*/signed-off-by: /;s/[[:space:]]\+/ /g' | sort | uniq -d)" ]; then
         log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi
@@ -106,6 +106,13 @@ validate_range() {
         if [ -z "$sha" ]; then
             sha="${line%%$'\t'*}"
             body="${line#*$'\t'}"
+            # 记录头必须是 40 位全 sha（r8 no59e3：body 内嵌独立 \t\x1e 行会伪造终止、
+            # 让残段沦为伪记录头）——非 40-hex 即解析错位，无法可信继续，fail-closed 整体拒绝
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+                log_error "提交信息包含非法控制字符 0x1e（记录解析错位，剩余内容不可信，拒绝）"
+                bad=1
+                break
+            }
         else
             body+=$'\n'"$line"
         fi
