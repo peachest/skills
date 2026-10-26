@@ -12,8 +12,11 @@
 COMMIT_FORMAT="conventional"   # conventional | none
 COMMIT_PREFIX=""               # 本仓非 fork，纯 conventional；fork 时填 "[TW]" 等
 EXEMPT=(
-    "^Merge "                  # git merge 自动生成——只对 subject 判定：
-    "^Revert "                 #   正文任意行以这些词开头会劫持豁免（正文绕过实证）
+    # 收紧为 git 自动生成形态（r12 no79）：手写 "Merge xxx"/"Revert xxx" 不再豁免。
+    # git merge 模板固定为 branch/remote-tracking branch/pull request/commit/tag 开头；
+    # git revert 固定为 Revert "<原 subject>"
+    "^Merge (branch |remote-tracking branch |pull request |commit |tag |branch')"   # 只对 subject 判定：
+    "^Revert \""                                                                     #   正文任意行匹配会动持豁免（正文绕过实证）
     "^fixup!" "^squash!" "^amend!"  # git 交互式 rebase 自动生成
 )
 BODY_EXEMPT=(
@@ -24,7 +27,7 @@ BODY_EXEMPT=(
 
 set -euo pipefail
 
-SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（readlink -f 旧 macOS 缺失，r12 no81）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
 source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 # 配置块自检：拼错会静默 fail-open（跳过全部格式校验），与"单一事实源"定位不符（r9 no e3d5）
@@ -42,7 +45,9 @@ validate_one() {
     # （"Merge branch x" 标题藏重复 signoff 不应放过）。
     # 宽松匹配：-i 大小写不敏感 + 折叠多空格 + 统一小写——
     # "Signed-off-by:  X"/"signed-off-by: x" 变体与正典行判重（git 自身对 trailer 宽容）
-    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr '[:upper:]' '[:lower:]' | tr -d '\r' | sed 's/^signed-off-by:[[:space:]]*/signed-off-by: /;s/[[:space:]]\+/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
+    # POSIX 可移植：\+ 是 GNU BRE 扩展（BSD 按字面 +，r12 no82）；不整行小写——仅大小写
+    # 不同的两个不同签署人会被误判重复（r12 no82）；判重本身对大小写敏感是刻意取舍
+    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr -d '\r' | sed 's/^signed-off-by:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
         log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi
@@ -94,7 +99,7 @@ validate_one() {
 }
 
 validate_range() {
-    local base="$1" tip="$2" bad=0
+    local base="$1" tip="$2" bad=0 empty_range=0
     # 两段式取数：rev-list 拿 sha（无歧义），逐 commit 取 %B——
     # 0x1e 单遍记录协议已被两轮绕过（no59e3 伪 40-hex 头、no67 伪造终结+重同步），
     # 消息体可含任意字节时任何行内分隔符都不可信，故彻底放弃行解析（r11 no67）
@@ -102,9 +107,11 @@ validate_range() {
     shas=$(git rev-list "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
     # 空范围：tip 已含于 base（tip 为 base 祖先或相等，如 rebase 后旧 diff-base）是合法场景（WARN 不 fail），但需可见
-    [ -z "$shas" ] && { log_warn "范围 $base..$tip 为空——确认 base 是否正确（正常 MR 非空）"; return 0; }
+    [ -z "$shas" ] && { log_warn "范围 $base..$tip 为空（0 个提交被校验，本次兑底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }
 
     local sha body first_line
+    # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
+    [ "$(printf '%s\n' "$shas" | wc -l)" -gt 200 ] && log_warn "范围 $base..$tip 提交数超过 200——确认 base 是否错配（校验耗时会线性增长）"
     while IFS= read -r sha; do
         body=$(git log -1 --format=%B "$sha") \
             || { log_error "commit ${sha:0:8}: 无法读取提交信息"; bad=1; continue; }
@@ -116,7 +123,8 @@ validate_range() {
         fi
         # 只去尾随空白：不裁前导空白——" Merge branch x"/" feat: x" 前置空格
         # 属格式违规，与 CI 拒绝口径一致（r7 no11）。[[:space:]] 含 \r（r10 no c4be）
-        first_line=$(printf '%s\n' "$body" | head -n1 | sed 's/[[:space:]]*$//')
+        # sed -n 替代 head -n1：大消息时 head 提前退出触发 SIGPIPE→141（set -o pipefail，r12 no83）
+        first_line=$(printf '%s\n' "$body" | sed -n '1{s/[[:space:]]*$//p;}')
         if ! validate_one "$first_line" "$body"; then
             log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\013\016-\037')"
             bad=1
@@ -129,7 +137,7 @@ case "${1:-}" in
     --ci)
         [ $# -eq 3 ] || { log_error "用法: commit-msg --ci <base-sha> <tip-sha>"; exit 1; }
         validate_range "$2" "$3" || exit 1
-        log_info "CI commit 检查通过。"
+        [ "${empty_range:-0}" = 1 ] || log_info "CI commit 检查通过。"   # 空范围不报"通过"（r12 no78：WARN 与通过矛盾）
         ;;
     *)
         [ -f "${1:-}" ] || { log_error "未提供提交信息文件"; exit 1; }
@@ -139,9 +147,12 @@ case "${1:-}" in
             exit 1
         fi
         # 不裁前导空白（r7 no11，同 --ci 口径）。钩子拿到的是 git cleanup（剥离注释行/
-        # 首尾空行）之前的文件——先模拟 cleanup=strip 再取首行，否则模板块首行空行/注释误拦（r9 no 360f）
-        msg_clean=$(sed '/^#/d' "$1" | sed '/./,$!d')
-        first_line=$(printf '%s\n' "$msg_clean" | head -n1 | sed 's/[[:space:]]*$//')
+        # 首尾空行）之前的文件——先模拟 cleanup=strip 再取首行，否则模板块首行空行/注释误拦（r9 no 360f）。
+        # commentchar 跟随 core.commentchar 配置（r12 no80；auto 模式取 #）
+        comment_char=$(git config core.commentchar || echo '#')
+        [ "$comment_char" = "auto" ] && comment_char='#'
+        msg_clean=$(sed "/^$comment_char/d" "$1" | sed '/./,$!d')
+        first_line=$(printf '%s\n' "$msg_clean" | sed -n '1{s/[[:space:]]*$//p;}')   # 同上，避 SIGPIPE（r12 no83）
         validate_one "$first_line" "$msg_clean" || exit 1
         log_info "提交信息格式正确。"
         ;;

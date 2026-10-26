@@ -109,12 +109,13 @@ git -C "$WT" config --worktree core.hooksPath "/stale/hooks" || { echo "FAIL: wo
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     || { fail=$((fail+1)); echo "FAIL: 迁移用例 install.sh 非零退出（r8 no34ab）"; }
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 未清除 worktree 级 hooksPath"; }
-# fail-loud 契约用例（r10 no cf09）：worktree 级同键双值使 --unset 失败 → install.sh 应 exit 1。
-# 注意首次 install 已把残留清空，需连加两个值才让 --unset 进入多值必败分支
+# 多值清理用例（r10 no cf09 → r12 no86 修订）：worktree 级同键双值在 --unset 下必败，
+# 已改用 --unset-all——本用例验证多值也能清理成功（exit 0），不再走 fail-loud
+# 注意首次 install 已把残留清空，需连加两个值才能构成多值场景
 git -C "$WT" config --worktree --add core.hooksPath /stale/hooks
-git -C "$WT" config --worktree --add core.hooksPath /stale/hooks   # 同键第二个值 → --unset 必败
-(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
-[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 清理失败应 exit 1"; }
+git -C "$WT" config --worktree --add core.hooksPath /stale/hooks   # 同键两个值
+(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 多值清理应成功（--unset-all，r12 no86）"; }
 git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
 # 悬空 worktree：目录已删但元数据残留 → 跳过校验 + prune 提示，不置 mismatch（r11 no 75）
 rm -rf "$WT"
@@ -128,8 +129,16 @@ IT=$(mktemp -d) && git init -q "$IT" \
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 空仓冒烟失败"; }
 rm -rf "$IT"
-# 伪造终止符重同步（r8 no59e3）：body 内嵌独立 \t\x1e 行把重复 signoff 拆到两个伪记录
-# 里逃过单记录查重——记录头 40-hex 校验应 fail-closed。
+# pre-push 冒烟（r11 no91）：空仓 + </dev/null stdin——验证可解析执行、无 set -u 未绑定；
+# 危险路径（worktree/make/网络）仅在非删除推送且有 go 时触发，空仓 stdin 空即跳过
+IT=$(mktemp -d) && git init -q "$IT" \
+    && cp "$HDIR"/{pre-push,common.sh} "$IT/" \
+    || { echo "FAIL: pre-push 冒烟环境准备失败"; exit 1; }
+(cd "$IT" && bash "$IT/pre-push" </dev/null >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-push 空仓冒烟失败"; }
+rm -rf "$IT"
+# 0x1e 拒绝回归（body 含独立 \t\x1e 行形态——涵盖伪造终止符攻击的输入特征；
+# r11 重写后不再有记录协议，0x1e 一律 fail-closed，r12 no92 注释对齐）。
 # 先 seed 一个普通提交：forged 提交不能是根提交，否则 EVIL~1 不存在、断言空转（r9 no aee5）
 IT3=$(mktemp -d) && git init -q "$IT3" && mkdir -p "$IT3/tools/git-hooks" "$IT3/.hooks" \
     && cp "$HDIR"/{commit-msg,common.sh} "$IT3/tools/git-hooks/" \

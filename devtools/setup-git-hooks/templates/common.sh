@@ -4,10 +4,12 @@
 # （库文件携带 set -e 会隐式改变 pre-commit/pre-push 的错误处理语义：
 #   如 pre-push 对 wiki.py check 的 rc=$? 捕获在 -e 下直接终止钩子）。
 
-# 颜色：两流均为 TTY 才着色（交叉重定向如 2>err.log 时任一"或"判断都会
-# 让转义符漏进非 TTY 流）；NO_COLOR 约定优先；FORCE_COLOR 显式开色（供
-# selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；值 0 视为未开，r9 no 6e4b）
-if [[ -z "${NO_COLOR:-}" ]] && { [[ -t 1 && -t 2 ]] || { [[ -n "${FORCE_COLOR:-}" ]] && [ "${FORCE_COLOR}" != "0" ]; }; }; then
+# 颜色：两流均为 TTY 才着色（且 TERM≠dumb，r12 no77）；NO_COLOR 约定优先；
+# FORCE_COLOR 显式开色（供 selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；
+# 0/false 视为未开，r9 no 6e4b/r12 no77 社区约定）
+force_color_on=false
+case "${FORCE_COLOR:-}" in ""|0|false) ;; *) force_color_on=true ;; esac
+if [[ -z "${NO_COLOR:-}" ]] && { { [[ -t 1 && -t 2 ]] && [[ "${TERM:-}" != dumb ]]; } || $force_color_on; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
     YELLOW=$'\033[1;33m'
