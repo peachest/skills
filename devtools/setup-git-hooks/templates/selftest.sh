@@ -116,7 +116,18 @@ git -C "$WT" config --worktree --add core.hooksPath /stale/hooks   # 同键第�
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 清理失败应 exit 1"; }
 git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
-rm -rf "$IT2" "$WT"
+# 悬空 worktree：目录已删但元数据残留 → 跳过校验 + prune 提示，不置 mismatch（r11 no 75）
+rm -rf "$WT"
+(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 悬空 worktree 应跳过不报错"; }
+rm -rf "$IT2"
+# pre-commit 零依赖冒烟（r11 no 72）：空仓上应干净通过（无 staged 文件、无 HEAD）
+IT=$(mktemp -d) && git init -q "$IT" \
+    && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
+    || { echo "FAIL: pre-commit 冒烟环境准备失败"; exit 1; }
+(cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 空仓冒烟失败"; }
+rm -rf "$IT"
 # 伪造终止符重同步（r8 no59e3）：body 内嵌独立 \t\x1e 行把重复 signoff 拆到两个伪记录
 # 里逃过单记录查重——记录头 40-hex 校验应 fail-closed。
 # 先 seed 一个普通提交：forged 提交不能是根提交，否则 EVIL~1 不存在、断言空转（r9 no aee5）
