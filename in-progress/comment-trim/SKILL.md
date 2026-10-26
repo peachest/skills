@@ -42,7 +42,14 @@ is a cleaned-up diff, not a findings list.
    current truth; rewriting ranks equal to deletion. Rewrite needs a
    stable invariant to carry: a status snapshot has none (security
    posture drifts by design), so snapshots are deleted, never
-   "updated" to a newer snapshot.
+   "updated" to a newer snapshot. **Mechanism-lock test before
+   deleting**: if the evidence is pinned by a mechanism (version in
+   go.mod, a contract test, an upstream branch), the "measured X"
+   comment is proof of an invariant and survives ("verified against
+   vendored apimachinery v0.36.4"); if the evidence is a bare date or
+   a one-off run, it is a countdown. A cheaply re-runnable check may
+   keep the claim only with date + trigger condition; an unreproducible
+   mental state is deleted outright.
 
 **History lives in git, not comments.** Authorship, dates, change
 history, and "which MR/commit produced this" are one blame away —
@@ -76,6 +83,12 @@ reverse-engineered.
   template is a different file). The side effect is not derivable from
   this file alone.
 - cross-implementation alignment/difference notes
+- semantic anchors — the natural-language description of the problem the
+  code exists to solve ("kubelet restarts mid-registration"). Retrieval
+  precedes understanding: an AI (or newcomer) starts from the user's
+  words, not from your identifiers. Test: would this line hit when
+  someone who doesn't know this repo searches with their original
+  question? If yes, it is a legitimate index term.
 - anti-simplification trap notes — the comment defends code that looks
   like an unnecessary guard ("explicit 0 is a valid enum value that
   `| default` would swallow"). The tell: it justifies why a *more
@@ -85,7 +98,22 @@ reverse-engineered.
 Rule of thumb: every comment keeps its **one non-obvious fact** — the
 invariant a reader cannot derive from the code. Zero non-obvious facts →
 single summary line. A comment that survives with zero cuts is a valid
-ruling; trimming is judgment, not a quota. Gate for config/CI one-liners
+ruling; trimming is judgment, not a quota.
+
+Two density corollaries. **Anchor density is a signal**: once AI can
+generate unlimited comments, the presence of a comment itself claims a
+non-obvious fact — low comment density is what makes the real guards
+carry weight, so delete-side discipline and write-side value are the
+same policy. **Anti-vacuum quota**: the rules are not delete-only —
+core logic with zero why-level comments over ~200 lines is a finding
+(flag it to the author); agents have no context window for git
+archaeology, and a human at 3am reading six-month-old code needs the
+anchor present, not reconstructible.
+
+Expiry-hook form for verification claims: on security- or
+correctness-sensitive lines, "verified <date>, re-verify when <trigger>"
+is a commitment, not a snapshot — keep it in that shape (the trigger,
+not the date, is what keeps it from aging into a myth). Gate for config/CI one-liners
 (scanner-blind zone): a comment earns its place by being a decision or
 an explanation that cannot be obtained directly — never a status
 snapshot and never an action narration.
@@ -144,8 +172,17 @@ snapshot and never an action narration.
    without a repo path, local-process references (grilling Q numbers,
    local tracker map/ticket ids, wayfinder), and review-finding hashes
    (for the latter, state the problem it solved directly instead of the
-   pointer). Keep: full-path refs (org/repo#N) and external-repo
-   MR/issue numbers — durable cross-repo facts. Found most often in
+   pointer). Review-attribution residue follows the same rule: if the
+   comment's beneficiary is the author or the review bot of that round,
+   it is conversation history misplaced — cut it; the real invariant
+   hiding behind it gets kept and rewritten in place. The residue
+   breeds: AI never forgets and faithfully reproduces old justifications
+   into the next edit. Keep: full-path refs (org/repo#N) and
+   external-repo MR/issue numbers — durable cross-repo facts. When the
+   same decision is commented in several repos (shared template), the
+   fix is one canonical location plus explicit cross-repo coupling
+   statements ("mirrors common-ci !N — change together"), not identical
+   copies that drift separately. Found most often in
    comments, bench/test files, script headers, and docs (README,
    AGENTS.md).
 
