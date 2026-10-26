@@ -163,6 +163,21 @@ stderr reports `N pulled, M already classified, K new`:
   `discussion_id` + anchor. A wrong-author echo = the pull file changed under
   you — full re-pull, re-check before any `--force`.
 
+### 审查循环上限（hard rule）
+
+re-pull 会把复审轮次接回循环，但对**同一 finding**（跨轮身份 = `discussion_id`
++ anchor）的「修复 → 复审」往复最多 **2 轮**。第 2 轮复审仍提出同一问题时停下：
+
+- verdict 保持该 finding 的诚实裁决，**不得为凑绿改判**（TP 改 OOS/FP 之类）；
+  状态如实记 fix failed，gate 保持红是有意设计。
+- 上报用户：**blocked** + 已尝试的每轮修复（每轮一行）+ 剩余分歧点，由用户裁决
+  下一步；禁止静默开始第 3 轮。
+
+与既有机制的关系：verdict.py 的拒重复记录是**状态去重**、不是轮数控制，两者不
+重复计数；Edge 默认 resolved 只发生在 verdict 时刻，不受本上限影响；复审轮中
+的**新** finding（不同 discussion_id/anchor）照常进入循环，不计入同 finding
+的 2 轮上限。
+
 ### 6. Wrap up
 
 Present the final state: fixed / failed / skipped counts, changed files, and

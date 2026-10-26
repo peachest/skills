@@ -115,6 +115,14 @@ A failed build or test marks the finding's **status** as ❌ fix failed (a statu
 
 **Completion criterion**: build + tests pass (status ✅ fixed), or failures are documented (status ❌ fix failed with the failure output).
 
+#### Review loop cap (hard rule)
+
+For a single finding, the fix → re-review round trip is capped at **2 rounds**. One round = one fix attempt + one verification against it (build/tests still failing, or the reviewer re-raising the same claim — in triage mode, a re-pulled finding at the same anchor). After round 2 closes without resolving the finding, stop:
+
+- Record the status ❌ fix failed (verdict unchanged), with `reason` = **blocked** + each fix already attempted (one line per round) + the remaining points of disagreement.
+- Report to the user honestly and let them decide the next step. In triage mode this feeds triage-mr's blocked report (see its loop cap).
+- **Forbidden**: silently starting round 3; narrowing scope to force green (deleting tests, weakening assertions, or reclassifying the finding — e.g. TP → OOS/FP — to make it go away).
+
 ### 7. Report
 
 Generate `fix-plan-<ID>.md` with a summary table + per-finding detail. Template: [REPORT.md](REPORT.md).
