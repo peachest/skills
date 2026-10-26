@@ -40,7 +40,7 @@ clone_replace_deps() {
             continue
         fi
 
-        local gitlab_url="ssh://git@<gitlab-host>/<group>/${dir_name}.git   # 按仓填内部 GitLab 地址"
+        local gitlab_url="ssh://git@gitlab.example.com/llm/<platform>/hami/${dir_name}.git"   # 按仓填内部 GitLab SSH 地址
         log_info "克隆依赖: $dir_name <- $gitlab_url (dev)"
         local clone_err
         if ! clone_err=$(git clone --quiet --depth 1 -b dev "$gitlab_url" "$target" 2>&1); then
@@ -57,7 +57,7 @@ clone_replace_deps() {
 # go1.26.5 之类升级后即消失）；~/go/bin 提供 golangci-lint 等 make 依赖。
 # PATH 幂等，置于循环外只拼一次；删除远端分支的推送不需要 go，
 # 故 command -v 检查放在循环内 skip 之后（见下）。
-export PATH="${HOME:-/nonexistent}/sdk/go/bin:${HOME:-/nonexistent}/go/bin:$PATH"   # HOME 缺失环境（CI 容器）set -u 下不炸，走 command -v 兜底报错
+export PATH="${HOME:-/nonexistent}/sdk/go/bin:${HOME:-/nonexistent}/go/bin:${PATH:-}"   # PATH 同样防 set -u 未绑定   # HOME 缺失环境（CI 容器）set -u 下不炸，走 command -v 兜底报错
 
 # stdin 每行: <local ref> <local sha> <remote ref> <remote sha>
 while read -r _local_ref local_sha _remote_ref _remote_sha; do

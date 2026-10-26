@@ -9,6 +9,8 @@
 tw-commit-check:
   stage: .pre
   image: <自带 git+bash 的镜像>   # 脚本依赖 bash（数组/herestring），alpine/git 不含 bash
+  variables:
+    GIT_DEPTH: 0   # diff-base 可能超出默认浅克隆 depth=50，fail-closed 前提是 base 可达
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'

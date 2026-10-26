@@ -22,13 +22,19 @@ fi
 # 指向已悬空的 gitdir hooks——它优先于 clone 级配置，不清则钩子静默失效
 if [ "$(git config extensions.worktreeConfig 2>/dev/null)" = "true" ] \
    && git config --worktree --get core.hooksPath >/dev/null 2>&1; then
-    git config --worktree --unset core.hooksPath && echo "✓ 已清除旧 worktree 级 hooksPath 覆盖"
+    # 显式 if-then：set -e 下 'A && echo' 链中 A 失败被静默吞
+    if git config --worktree --unset core.hooksPath; then
+        echo "✓ 已清除旧 worktree 级 hooksPath 覆盖"
+    else
+        echo "警告: 旧 worktree 级 hooksPath 清理失败" >&2
+    fi
 fi
 
 git config core.hooksPath "$HOOKS_DIR"
 # 遍历目录（钩子目录即事实源，新增钩子自动纳入）；非钩子文件跳过。
 # exec 位校验同循环：部分文件系统 chmod 静默失败，git 只执行带 exec 位钩子
 for hook in "$HOOKS_DIR"/*; do
+    # 排除清单与目录内容耦合：新增非钩子文件时记得同步此处
     case "${hook##*/}" in
         common.sh|selftest.sh|install.sh) continue ;;
     esac

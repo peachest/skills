@@ -25,13 +25,20 @@ BODY_EXEMPT=(
 set -euo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
+source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 validate_one() {
     local first_line="$1" full_msg="${2:-$1}"
 
     if [ -z "$first_line" ]; then
         log_error "提交信息不能为空。"
+        return 1
+    fi
+
+    # 重复 Signed-off-by 查重先于豁免：豁免免的是格式约束，不免全仓查重规则
+    # （"Merge branch x" 标题藏重复 signoff 不应放过）
+    if [ -n "$(printf '%s\n' "$full_msg" | grep '^Signed-off-by: ' | sort | uniq -d)" ]; then
+        log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi
 
@@ -49,12 +56,6 @@ validate_one() {
             return 0
         fi
     done
-
-    # 重复 Signed-off-by 查重（本仓既有规则，L1/L2 都查）
-    if [ -n "$(printf '%s\n' "$full_msg" | grep '^Signed-off-by: ' | sort | uniq -d)" ]; then
-        log_error "存在重复的 Signed-off-by 行。"
-        return 1
-    fi
 
     # 内部原创 commit 前缀（fork 仓的隔离标记，上游同步时 grep '^\[ORG\]' 可列出全部内部修改）。
     # 行首锚定：case 的 pattern 中变量按字面匹配（[TW] 不作 glob 展开），
@@ -76,7 +77,7 @@ validate_one() {
     fi
 
     if [ "$COMMIT_FORMAT" = "conventional" ]; then
-        if ! echo "$check_line" | grep -qE '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9/_,-]+\))?!?: [^[:space:]].*'; then
+        if ! printf '%s\n' "$check_line" | grep -qE '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9/_,-]+\))?!?: [^[:space:]].*'; then
             log_error "提交信息不符合 Conventional Commits 格式："
             log_error "  <type>(optional scope)(optional !): <description>"
             log_error "  例如: feat(hgml): add MIG placement API"
@@ -94,6 +95,13 @@ validate_range() {
     local log_out
     log_out=$(git log --format='%H%x09%B%x09%x1e' "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
+    # 0x1e 是本脚本解析终止符，消息内嵌会错位归因/绕过校验（偶数次可对齐伪造
+    # 合法记录）——CI 场景 fail-closed；本地钩子场景消息未入库无法预检
+    # 单行化后匹配：grep 按行匹配，跨行分布的双 0x1e（每行一个）按行查会漏
+    if printf '%s' "$log_out" | tr -d '\n' | grep -q $'\x1e.*\x1e'; then
+        log_error "范围 $base..$tip 内存在包含 0x1e 控制字符的提交信息，拒绝校验"
+        return 1
+    fi
     # 空范围：rebase 后 diff-base 已含于 tip 是合法场景（WARN 不 fail），但需可见
     [ -z "$log_out" ] && { log_warn "范围 $base..$tip 为空——确认 base 是否正确（正常 MR 非空）"; return 0; }
 
@@ -135,6 +143,11 @@ case "${1:-}" in
         ;;
     *)
         [ -f "${1:-}" ] || { log_error "未提供提交信息文件"; exit 1; }
+        # L1 与 L2 同源：本地钩子也拒 0x1e（消息文件即将入库，可预检）
+        if grep -q $'\x1e' "$1"; then
+            log_error "提交信息包含非法控制字符 0x1e（与 CI 校验协议冲突）"
+            exit 1
+        fi
         first_line=$(head -n1 "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         validate_one "$first_line" "$(cat "$1")" || exit 1
         log_info "提交信息格式正确。"
