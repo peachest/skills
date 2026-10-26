@@ -47,7 +47,7 @@ validate_one() {
     # "Signed-off-by:  X"/"signed-off-by: x" 变体与正典行判重（git 自身对 trailer 宽容）
     # POSIX 可移植：\+ 是 GNU BRE 扩展（BSD 按字面 +，r12 no82）；不整行小写——仅大小写
     # 不同的两个不同签署人会被误判重复（r12 no82）；判重本身对大小写敏感是刻意取舍
-    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr -d '\r' | sed 's/^signed-off-by:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
+    if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
         log_error "存在重复的 Signed-off-by 行。"
         return 1
     fi
@@ -98,8 +98,9 @@ validate_one() {
     return 0
 }
 
+empty_range=0   # 全局标记：validate_range 返回后调用方读取，local 会在 return 后失效（r13 no95）
 validate_range() {
-    local base="$1" tip="$2" bad=0 empty_range=0
+    local base="$1" tip="$2" bad=0
     # 两段式取数：rev-list 拿 sha（无歧义），逐 commit 取 %B——
     # 0x1e 单遍记录协议已被两轮绕过（no59e3 伪 40-hex 头、no67 伪造终结+重同步），
     # 消息体可含任意字节时任何行内分隔符都不可信，故彻底放弃行解析（r11 no67）
@@ -107,7 +108,7 @@ validate_range() {
     shas=$(git rev-list "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
     # 空范围：tip 已含于 base（tip 为 base 祖先或相等，如 rebase 后旧 diff-base）是合法场景（WARN 不 fail），但需可见
-    [ -z "$shas" ] && { log_warn "范围 $base..$tip 为空（0 个提交被校验，本次兑底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }
+    [ -z "$shas" ] && { log_warn "范围 $base..$tip 为空（0 个提交被校验，本次兑底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }   # 兑底→兜底错字顺手修（r11 no63 同源）
 
     local sha body first_line
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
@@ -123,8 +124,9 @@ validate_range() {
         fi
         # 只去尾随空白：不裁前导空白——" Merge branch x"/" feat: x" 前置空格
         # 属格式违规，与 CI 拒绝口径一致（r7 no11）。[[:space:]] 含 \r（r10 no c4be）
-        # sed -n 替代 head -n1：大消息时 head 提前退出触发 SIGPIPE→141（set -o pipefail，r12 no83）
-        first_line=$(printf '%s\n' "$body" | sed -n '1{s/[[:space:]]*$//p;}')
+        # sed -n 替代 head -n1：大消息时 head 提前退出触发 SIGPIPE→141（set -o pipefail，r12 no83）；
+        # 剥前导空行——与钩子模式 cleanup 口径一致（verbatim/plumbing 入库的空行首，r13 no97）
+        first_line=$(printf '%s\n' "$body" | sed '/./,$!d' | sed -n '1{s/[[:space:]]*$//p;}')
         if ! validate_one "$first_line" "$body"; then
             log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\013\016-\037')"
             bad=1
@@ -151,7 +153,8 @@ case "${1:-}" in
         # commentchar 跟随 core.commentchar 配置（r12 no80；auto 模式取 #）
         comment_char=$(git config core.commentchar || echo '#')
         [ "$comment_char" = "auto" ] && comment_char='#'
-        msg_clean=$(sed "/^$comment_char/d" "$1" | sed '/./,$!d')
+        esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*\/]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
+        msg_clean=$(sed "/^$esc_cc/d" "$1" | sed '/./,$!d')
         first_line=$(printf '%s\n' "$msg_clean" | sed -n '1{s/[[:space:]]*$//p;}')   # 同上，避 SIGPIPE（r12 no83）
         validate_one "$first_line" "$msg_clean" || exit 1
         log_info "提交信息格式正确。"

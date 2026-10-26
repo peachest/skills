@@ -80,7 +80,7 @@ out=$(NO_COLOR= FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn
 out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
 [[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未压过 FORCE_COLOR"; }
 out_w=$(bash -c "source $T/common.sh; log_warn w" 2>/dev/null); out_e=$(bash -c "source $T/common.sh; log_warn w" 2>&1 >/dev/null)
-[[ -z "$out_w" && -n "$out_e" ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr"; }
+[[ -z "$out_w" && "$out_e" == *"[WARN]"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr 或输出非 log_warn（r13 no108）"; }
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
@@ -112,10 +112,16 @@ git -C "$WT" config --worktree core.hooksPath "/stale/hooks" || { echo "FAIL: wo
 # 多值清理用例（r10 no cf09 → r12 no86 修订）：worktree 级同键双值在 --unset 下必败，
 # 已改用 --unset-all——本用例验证多值也能清理成功（exit 0），不再走 fail-loud
 # 注意首次 install 已把残留清空，需连加两个值才能构成多值场景
-git -C "$WT" config --worktree --add core.hooksPath /stale/hooks
-git -C "$WT" config --worktree --add core.hooksPath /stale/hooks   # 同键两个值
+git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
+    || { echo "FAIL: 多值 --add 1 失败（断言会空转）"; exit 1; }
+git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
+    || { echo "FAIL: 多值 --add 2 失败（断言会空转）"; exit 1; }
+[ "$(git -C "$WT" config --worktree --get-all core.hooksPath | wc -l)" = "2" ] \
+    || { echo "FAIL: 多值场景未构造成功（get-all 计数非 2）"; exit 1; }   # 环境断言（r13 no107）
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 多值清理应成功（--unset-all，r12 no86）"; }
+[ -z "$(git -C "$WT" config --worktree --get-all core.hooksPath 2>/dev/null)" ] \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 多值未清空"; }
 git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
 # 悬空 worktree：目录已删但元数据残留 → 跳过校验 + prune 提示，不置 mismatch（r11 no 75）
 rm -rf "$WT"
@@ -128,6 +134,12 @@ IT=$(mktemp -d) && git init -q "$IT" \
     || { echo "FAIL: pre-commit 冒烟环境准备失败"; exit 1; }
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 空仓冒烟失败"; }
+# 失败路径（r13 no105）：未 gofmt 的 .go staged → gofmt 拦截 + fail 聚合 → exit 1
+# （同时回归 set -e 与循环体交互、fail 聚合两处语义）
+printf 'package x\nfunc  y() {}\n' > "$IT/bad.go"
+git -C "$IT" add bad.go
+(cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦未 gofmt 文件"; }
 rm -rf "$IT"
 # pre-push 冒烟（r11 no91）：空仓 + </dev/null stdin——验证可解析执行、无 set -u 未绑定；
 # 危险路径（worktree/make/网络）仅在非删除推送且有 go 时触发，空仓 stdin 空即跳过
@@ -136,6 +148,22 @@ IT=$(mktemp -d) && git init -q "$IT" \
     || { echo "FAIL: pre-push 冒烟环境准备失败"; exit 1; }
 (cd "$IT" && bash "$IT/pre-push" </dev/null >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-push 空仓冒烟失败"; }
+# 回退分支（r13 no106）：env -u PATH -u HOME——path_fallback 与 gopath_prefix 归空边界
+(cd "$IT" && env -u PATH -u HOME bash "$IT/pre-push" </dev/null >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-push env -u PATH/HOME 冒烟失败"; }
+rm -rf "$IT"
+# wt.toml [pre-start] hooks 包装命令退出码契约（r13 no94）：
+#   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
+HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
+[ -n "$HOOKS_WRAP" ] || { echo "FAIL: 未从 wt.toml 提取 hooks 包装命令"; exit 1; }
+IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
+    && cp "$HDIR"/{install.sh,common.sh} "$IT/tools/git-hooks/" \
+    || { echo "FAIL: wt 包装用例环境准备失败"; exit 1; }
+r=$(cd "$IT" && WT_NO_HOOKS=1 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: WT_NO_HOOKS 应静默 exit 0（got $r）"; }
+r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 正常安装应 exit 0（got $r）"; }
+echo fail-marker > "$IT/tools/git-hooks/install.sh" && chmod -x "$IT/tools/git-hooks/install.sh"
 rm -rf "$IT"
 # 0x1e 拒绝回归（body 含独立 \t\x1e 行形态——涵盖伪造终止符攻击的输入特征；
 # r11 重写后不再有记录协议，0x1e 一律 fail-closed，r12 no92 注释对齐）。

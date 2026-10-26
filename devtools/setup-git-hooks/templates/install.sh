@@ -61,7 +61,7 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
                 echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）"   # 带原值可追溯（r12 no88）
             else
                 echo "警告: $1 清理失败" >&2
-                clean_fail=1
+                return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
             fi
         fi
     }
@@ -83,7 +83,7 @@ check_wt() {  # $1 = worktree 路径：校验实际生效值（悬空跳过并�
         return 0
     fi
     if [ "$(git -C "$1" config core.hooksPath 2>/dev/null)" != "$HOOKS_DIR" ]; then
-        echo "警告: $1 的 hooksPath 实际未指向 $HOOKS_DIR，该 worktree 钩子不生效" >&2
+        echo "警告: $1 的 hooksPath 校验未通过（实际生效值非 $HOOKS_DIR——通常为 worktree 级覆盖残留），该 worktree 钩子不生效" >&2
         return 1
     fi
 }
@@ -101,8 +101,8 @@ for hook in "$HOOKS_DIR"/*; do
     case "${hook##*/}" in
         *.sh|*.md) continue ;;   # *.sh 辅助脚本；*.md 文档（r9 no 6b3a：文档不应被 chmod +x）
     esac
-    chmod +x "$hook" 2>/dev/null || true
-    [ -x "$hook" ] || echo "警告: $hook 不可执行，该钩子不会生效" >&2
+    chmod +x "$hook" 2>/dev/null || { echo "错误: chmod +x $hook 失败，钩子不会生效" >&2; exit 1; }   # 真实错误 exit 1（r13 no103）
+    [ -x "$hook" ] || { echo "错误: $hook 不可执行，该钩子不会生效" >&2; exit 1; }
 done
 
 # 清理失败/校验不匹配 = 真实错误（与头部边界声明一致：仅目录缺失属 fail-open），exit 1
