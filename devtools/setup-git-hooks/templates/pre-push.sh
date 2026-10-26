@@ -1,70 +1,146 @@
 #!/bin/bash
-# pre-push: 两段检查
-#   1. base-branch drift：当前分支落后基分支（默认 remote HEAD / branch.<name>.merge）
-#      时阻断 push，提示先 pull+rebase——避免在 MR 阶段才发现冲突（实证：基于旧 dev
-#      的分支会撞上已修复问题的旧版本）。绕过单次 push：HOOKS_ALLOW_BASE_DRIFT=1
-#   2. CI 模拟：对将要推送的 commit 跑 make lint + make test。
-#      simple 模式直接在当前仓跑；isolated 模式在临时 worktree 检出推送 SHA
-#      （模拟干净 CI，适合有 go.mod replace ../xxx 相对依赖的仓）。
+# pre-push: 对"将要推送的 commit"跑全量 make lint + make test，
+# 模拟远程 CI。在 /tmp/build-<project>/ 下创建 worktree 和依赖子目录，
+# 让 go.mod 的 replace => ../HAMi 自然解析到同级 HAMi/ 目录。
+#
+# Wiki drift 检测：project_wiki 源文件 SHA 漂移时暂停 push，交给 agent 更新。
+#
+# 跳过检查: git push --no-verify
 
+set -uo pipefail   # 入口自行声明（common.sh 不带副作用）；不用 -e：pre-push 需捕获 wiki.py 的设计内退出码
 SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
 
-# ── 配置块 ─────────────────────────────────────────────────────────
-CHECK_BASE_DRIFT=1        # 0 关闭落后检查
-SIM_MODE="simple"         # simple | isolated（isolated 需按仓改 clone_replace_deps 逻辑）
-SIM_MAKE_TARGETS="lint test"
-# ─────────────────────────────────────────────────────────────────
-
-cd_to_repo_root
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+cd "$repo_root" || exit 1
 
 zero=0000000000000000000000000000000000000000
 checked=""
+build_base="/tmp/build-<device-plugin-repo>"
 
-# --- 1. base-branch drift 检查 ---
-if [ "$CHECK_BASE_DRIFT" = "1" ] && [ "${HOOKS_ALLOW_BASE_DRIFT:-0}" != "1" ]; then
-    branch=$(git branch --show-current)
-    # 基分支探测：branch.<name>.merge（wt/VSCode 等会写）优先，回退 remote HEAD
-    base_branch=$(git config --get "branch.${branch}.merge" 2>/dev/null | sed 's|^refs/heads/||')
-    [ -z "$base_branch" ] && base_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-    if [ -n "$base_branch" ] && [ "$base_branch" != "$branch" ]; then
-        git fetch --quiet origin "$base_branch" 2>/dev/null || log_warn "fetch origin $base_branch 失败，跳过 drift 检查"
-        behind=$(git rev-list --count "HEAD..origin/${base_branch}" 2>/dev/null || echo 0)
-        if [ "${behind:-0}" -gt 0 ]; then
-            log_error "当前分支基于的 ${base_branch} 已前进 ${behind} 个提交——先 rebase 再 push："
-            log_error "  git fetch origin && git rebase origin/${base_branch}"
-            log_error "（单次绕过: HOOKS_ALLOW_BASE_DRIFT=1 git push ...）"
-            exit 1
+# 清理上次失败的残留
+git worktree prune 2>/dev/null
+rm -rf "$build_base"
+
+# EXIT 时清理
+trap 'rm -rf "$build_base"; git worktree prune 2>/dev/null' EXIT
+
+# clone_replace_deps: 解析 go.mod 中的 replace => ../xxx 行，
+# 从 GitLab clone 对应仓库到 build_base/xxx。
+# 对标 common-ci/go-build.yml 的依赖拉取逻辑。
+clone_replace_deps() {
+    local go_mod="$1"
+
+    while IFS= read -r line; do
+        local dir_name
+        dir_name=$(echo "$line" | sed 's|.*/||')
+        local target="$build_base/$dir_name"
+
+        if [ -d "$target" ]; then
+            continue
         fi
-    fi
-fi
 
-# --- 2. CI 模拟 ---
-tmp=""
-trap '[ -n "$tmp" ] && { git worktree remove --force "$tmp" >/dev/null 2>&1; rm -rf "$tmp"; }' EXIT
+        local gitlab_url="ssh://git@<gitlab-host>/<group>/${dir_name}.git   # 按仓填内部 GitLab 地址"
+        log_info "克隆依赖: $dir_name <- $gitlab_url (dev)"
+        local clone_err
+        if ! clone_err=$(git clone --quiet --depth 1 -b dev "$gitlab_url" "$target" 2>&1); then
+            log_warn "克隆 $dir_name dev 分支失败: $clone_err"
+            log_warn "尝试默认分支"
+            if ! clone_err=$(git clone --quiet --depth 1 "$gitlab_url" "$target" 2>&1); then
+                log_warn "无法克隆 $dir_name: $clone_err"
+            fi
+        fi
+    done < <(grep 'replace.*=>.*\.\./' "$go_mod" 2>/dev/null)
+}
 
+# 确保 go 在 PATH 中：~/sdk/go 是无版本号的稳定入口（不写死版本目录，
+# go1.26.5 之类升级后即消失）；~/go/bin 提供 golangci-lint 等 make 依赖。
+# PATH 幂等，置于循环外只拼一次；删除远端分支的推送不需要 go，
+# 故 command -v 检查放在循环内 skip 之后（见下）。
+export PATH="${HOME:-/nonexistent}/sdk/go/bin:${HOME:-/nonexistent}/go/bin:$PATH"   # HOME 缺失环境（CI 容器）set -u 下不炸，走 command -v 兜底报错
+
+# stdin 每行: <local ref> <local sha> <remote ref> <remote sha>
 while read -r _local_ref local_sha _remote_ref _remote_sha; do
     [ -z "$local_sha" ] || [ "$local_sha" = "$zero" ] && continue
+    command -v go >/dev/null 2>&1 || { log_error "未找到 go 工具链（期望 ~/sdk/go/bin 或 PATH）"; exit 1; }
     case " $checked " in *" $local_sha "*) continue ;; esac
     checked="$checked $local_sha"
 
-    log_info "检查 ${local_sha:0:8}..."
-    if [ "$SIM_MODE" = "isolated" ]; then
-        # isolated：临时 worktree 检出推送 SHA（干净树模拟 CI）。
-        # 有 go.mod replace => ../xxx 相对依赖的仓需自行克隆依赖到 worktree 同级
-        # （参考 <device-plugin-repo> hooks/pre-push.sh 的 clone_replace_deps）。
-        tmp=$(mktemp -d)
-        git worktree add --detach "$tmp/worktree" "$local_sha" >/dev/null || exit 1
-        if ! make -C "$tmp/worktree" $SIM_MAKE_TARGETS; then
-            log_error "make $SIM_MAKE_TARGETS 失败（针对 ${local_sha:0:8}）。"
-            exit 1
-        fi
-    else
-        if ! make $SIM_MAKE_TARGETS; then
-            log_error "make $SIM_MAKE_TARGETS 失败。"
-            exit 1
-        fi
+    rm -rf "$build_base"
+    mkdir -p "$build_base"
+
+    worktree_dir="$build_base/worktree"
+
+    log_info "在干净 worktree 中检查 ${local_sha:0:8} （模拟远程 CI，忽略本地未提交变更）..."
+    git worktree add --detach "$worktree_dir" "$local_sha" >/dev/null || exit 1
+
+    # 从 GitLab clone go.mod replace 指向的依赖仓库到 build_base/ 下。
+    # worktree 的 ../HAMi → build_base/HAMi，go.mod replace 路径自然解析。
+    clone_replace_deps "$worktree_dir/go.mod"
+
+    # 同步依赖：clone 的 HAMi dev 分支 go.mod 可能与 go.sum 不一致
+    (cd "$worktree_dir" && go mod tidy) || { log_error "go mod tidy 失败"; exit 1; }
+
+    # 校验 .gitlab-ci.yml 语法和 pipeline 创建
+    log_info "校验 .gitlab-ci.yml..."
+    if ! (cd "$worktree_dir" && glab ci lint --dry-run 2>/dev/null); then
+        log_error ".gitlab-ci.yml 校验失败（针对已提交内容 ${local_sha:0:8}）。"
+        log_error "修复后重新提交推送；确要跳过用 git push --no-verify。"
+        exit 1
     fi
+
+    if ! make -C "$worktree_dir" lint test; then
+        log_error "make lint / test 失败（针对已提交内容 ${local_sha:0:8}）。"
+        log_error "修复后重新提交推送；确要跳过用 git push --no-verify。"
+        exit 1
+    fi
+
+    git worktree remove --force "$worktree_dir" >/dev/null 2>&1
+    rm -rf "$build_base"
 done
+
+# ---------------------------------------------------------------------------
+# Project wiki drift 检测
+# ---------------------------------------------------------------------------
+# 检测源文件 SHA 与 .review_cache.json 基线是否一致。
+# 漂移即暂停 push，交给 agent 更新 wiki。
+#
+# wiki home (docs/home.md) 不需要检测——它在 .gitignore 中，
+# CI sync job 每次从 docs/ 结构重新生成，永远不会过时。
+
+wiki_py="$repo_root/hack/wiki.py"
+wiki_stale=false
+wiki_output=""
+
+if [ -f "$wiki_py" ] && [ -d "$repo_root/docs/project_wiki" ]; then
+    wiki_output=$(cd "$repo_root" && python3 "$wiki_py" check --root . --fail-on-stale 2>&1)
+    rc=$?
+    case $rc in
+        1) wiki_stale=true ;;
+        2) log_warn "docs/project_wiki/ 未初始化（返回码 2）— 跳过漂移检测"
+           log_warn "首次使用请运行: python3 hack/wiki.py init --root ." ;;
+    esac
+else
+    log_warn "hack/wiki.py 未找到 — 跳过漂移检测"
+fi
+
+if $wiki_stale; then
+    echo ""
+    log_error "═══════════════════════════════════════════════════════════════"
+    log_error "Project wiki 漂移检测：源文件 SHA 已变化 — push 已暂停"
+    log_error "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "$wiki_output" | sed 's/^/     /'
+    echo ""
+    log_info "修复步骤:"
+    log_info "  # 审查并更新 docs/project_wiki/*.md 中变更文件的描述"
+    log_info "  python3 hack/wiki.py update --root .                      # 刷新 SHA 基线"
+    log_info "  git add docs/ && git commit && git push"
+    echo ""
+    log_warn "或交给 agent 处理: /skill:project-wiki"
+    echo ""
+    log_error "确要跳过用 git push --no-verify。"
+    exit 1
+fi
 
 log_info "pre-push 检查通过。"
