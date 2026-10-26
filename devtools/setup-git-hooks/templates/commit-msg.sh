@@ -95,13 +95,6 @@ validate_range() {
     local log_out
     log_out=$(git log --format='%H%x09%B%x09%x1e' "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
-    # 0x1e 是本脚本解析终止符，消息内嵌会错位归因/绕过校验（偶数次可对齐伪造
-    # 合法记录）——CI 场景 fail-closed；本地钩子场景消息未入库无法预检
-    # 单行化后匹配：grep 按行匹配，跨行分布的双 0x1e（每行一个）按行查会漏
-    if printf '%s' "$log_out" | tr -d '\n' | grep -q $'\x1e.*\x1e'; then
-        log_error "范围 $base..$tip 内存在包含 0x1e 控制字符的提交信息，拒绝校验"
-        return 1
-    fi
     # 空范围：rebase 后 diff-base 已含于 tip 是合法场景（WARN 不 fail），但需可见
     [ -z "$log_out" ] && { log_warn "范围 $base..$tip 为空——确认 base 是否正确（正常 MR 非空）"; return 0; }
 
@@ -116,6 +109,13 @@ validate_range() {
         fi
         if [[ "$line" == *$'\x1e' ]]; then
             body="${body%$'\x1e'}"
+            # 消息内容内嵌 0x1e（解析终止符）会伪造记录对齐——内容级拒绝
+            if [[ "$body" == *$'\x1e'* ]]; then
+                log_error "commit ${sha:0:8} 提交信息包含非法控制字符 0x1e"
+                bad=1
+                sha=""; body=""
+                continue
+            fi
             first_line="${body%%$'\n'*}"
             first_line=$(printf '%s' "$first_line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if ! validate_one "$first_line" "$body"; then
