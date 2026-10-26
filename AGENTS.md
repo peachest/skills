@@ -16,7 +16,7 @@
 | `.github/workflows/tests.yml` | CI：push/PR main 时 `uv run pytest` | 绿是合并标准 |
 | `docs/agents/` | install-skills / skill-authoring / issue-tracker / triage-labels / domain 五份 agent 文档 | 写 skill 前必读 skill-authoring.md |
 | `wiki/` | skill 持久知识层（已知问题/被拒提案） | 改 skill 前后必走，见下方 Skill Wiki 节 |
-| `vendor/mattpocock/` | 上游 subtree 镜像 | 同步规则见下方 Vendor 管理 |
+| `vendor/mattpocock/` | 上游 subtree 镜像 | 同步规则见 [`vendor/mattpocock/MIRROR.md`](vendor/mattpocock/MIRROR.md) |
 
 ## 新 skill 归属
 
@@ -46,12 +46,7 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 
 ## Vendor 管理（mattpocock 上游）
 
-`vendor/mattpocock/` 是 `git subtree add --squash` 导入的上游镜像，定制直接改 vendor 内文件，随本仓 commit 沉淀。
-
-- **同步上游**：`git fetch mattpocock && git subtree pull --prefix vendor/mattpocock mattpocock main --squash`。冲突只会出现在双方改过同一文件时；对纯本地新增（add/add）与上游演进重合的文件，先 diff 裁决哪边更新再取。同步后对变更的 skill 重装（`npx skills add -g`）。
-- **commit 分层**：pi 专属机械适配（`/skill:` 格式迁移、sanitize 脱敏、路径调整）与实质性功能改动分开成 commit——前者是每次同步可能重放的嫁接税，保持独立才好在冲突时快速重放；后者才值得挑出向上游提 PR。
-- **重定制 skill 出 overlay**：改动深、每次同步冲突重的 skill（当前 teach、setup-matt-pocock-skills、wayfinder、diagnosing-bugs-with-docs fork）以 `in-progress/` 定制版为唯一安装源；vendor 内保留上游纯净版，保证 subtree pull 零冲突。误改 vendor 副本会在下次同步时以冲突形式暴露漂移。
-- **禁止**为同步便利另建 fork 仓或 patch 层——subtree 的设计就是同一目录靠三方合并解纠缠。
+`vendor/mattpocock/` 是 `git subtree add --squash` 导入的上游镜像。同步操作、冲突处理、commit 分层与 overlay 规则全部见 [`vendor/mattpocock/MIRROR.md`](vendor/mattpocock/MIRROR.md)（本节不重复，改动同步策略时只改 MIRROR.md）。
 
 ## Skill Wiki（改 skill 前后必走）
 
