@@ -47,6 +47,8 @@ pi install ./packages/pi-events-daemon-extension   # session 客户端（9 op �
 
 **模板形态**（推荐）：`subscribe({url: "...", opts: {template: "<名字>"}})`——URL 按 urlPattern 命名捕获组路由，key/schedule/check 全由模板生成（host/项目 id 从 URL 自动提取）。内置模板：`gitlab-pipeline`（mr/ci/ticket 三域）、`k8s-pod`、`fs-watermark`。`templates` op 列全部。
 
+**⚠️ 模板改动须重启 daemon**：profile registry 是启动时快照——改 templates/*.json 后不重启，subscribe 仍烘焙旧 check（2026-10-21 peer 事故正典）。
+
 **ad-hoc 形态**：`subscribe({check: "shell 命令", opts: {schedule: {type:"interval", every:60000}}})`——任意 shell 命令，默认 60s interval；退出码 0=passed / 2=failed 断言 / 其他=waiting。**缺省跑 smoke 预检**（syntax+live-run 失败不建订阅并返回报告；确信要建传 `opts.smoke: false`——checker 环境注意 glab 需 `--hostname <内部 GitLab host>`——缺省回落 gitlab.com 必 401）。
 
 **opts 公共**：`{on（状态谓词）, once（首 passed 自动关）, flip（持续监视翻转沿）, readyCheck（两阶段）, ttl, failureThreshold/successThreshold（默认 1/1）, sessionId}`。**sessionId 缺省 = 当前连接声明**（transport 自动注入，一般无需传；短连接脚本直连要显式传目标 session）。**opts 不含 shell/schedule（模板形态）**——schedule 归模板资产。
