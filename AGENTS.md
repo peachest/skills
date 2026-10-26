@@ -17,6 +17,7 @@
 | `docs/agents/` | install-skills / skill-authoring / issue-tracker / triage-labels / domain 五份 agent 文档 | 写 skill 前必读 skill-authoring.md |
 | `wiki/` | skill 持久知识层（已知问题/被拒提案） | 改 skill 前后必走，见下方 Skill Wiki 节 |
 | `vendor/mattpocock/` | 上游 subtree 镜像 | 同步规则见 [`vendor/mattpocock/MIRROR.md`](vendor/mattpocock/MIRROR.md) |
+| `vendor/pstack/` | pstack 上游 subtree 镜像（backnotprop 镜像，装精选子集） | 同步规则见 [`vendor/pstack/SYNC.md`](vendor/pstack/SYNC.md) |
 
 ## 新 skill 归属
 
