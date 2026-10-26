@@ -17,3 +17,4 @@
 备注：harbor registry 鉴权脚本的重复内联（诊断报告中有记录）属部署诊断域，超出
 create-mr 范围——若未来出现 harbor-api skill，其 skill-impact 首条从这里引用。
 | 2026-10-15 | S9 preflight gh pr list 加 `--repo owner/repo`（取自 OCR_REMOTE 选中 remote 的归一化 URL path；gh 自身 remote 解析在 fork 检出会查错仓）；glab 侧不变（--hostname 已管 host） | engineering/create-mr/scripts/preflight.sh | 6dbb8d7 | pytest 参数化 3 例（scp/https/ssh:// 三种 remote 形式，fake gh journal 断言 --repo team/app）；对应 P-002 远端形式矩阵收口 |
+| 2026-10-26 | S10 preflight ASSIGNEE glab 恒假阴性修复：`glab auth status --hostname $host` 钉住所选 remote host（多宿主下全局查询被无关 host 401 拖垮）+ sed 兼容 "Logged in as USER"/"Logged in to HOST as USER" 两种格式（glab 1.114.0 输出后者，旧正则 41/41 假阴性，历史 54 次 ASSIGNEE 中 glab 分支零成功）；顺带 create-draft-mr.sh --remote 传 URL 时 push 不带 -u 并打 NOTE（消 "No such remote" 噪音，实测 git push -u <URL> 推送成功但设上游失败的误导输出） | engineering/create-mr/scripts/preflight.sh + create-draft-mr.sh | c853dde | 本机实跑：<git-host> 仓 ASSIGNEE 提取出 houyuxi（修复前恒"未就绪"）；--dry-run URL/配置名两形态断言 push 命令形态；bash -n |
