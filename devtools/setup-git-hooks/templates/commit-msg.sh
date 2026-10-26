@@ -15,7 +15,7 @@ EXEMPT=(
     # 收紧为 git 自动生成形态（r12 no79）：手写 "Merge xxx"/"Revert xxx" 不再豁免。
     # git merge 模板固定为 branch/remote-tracking branch/pull request/commit/tag 开头；
     # git revert 固定为 Revert "<原 subject>"
-    "^Merge (branch |remote-tracking branch |pull request |commit |tag |branch')"   # 只对 subject 判定：
+    "^Merge (branch |remote-tracking branch |pull request |commit |tag )"   # git 模板恒为空格分隔；无空格变体是手写通道（r14 no113）
     "^Revert \""                                                                     #   正文任意行匹配会动持豁免（正文绕过实证）
     "^fixup!" "^squash!" "^amend!"  # git 交互式 rebase 自动生成
 )
@@ -61,11 +61,15 @@ validate_one() {
             return 0
         fi
     done
-    for pattern in ${BODY_EXEMPT[@]+"${BODY_EXEMPT[@]}"}; do
-        if printf '%s\n' "$full_msg" | grep -qE "$pattern"; then
-            return 0
-        fi
-    done
+    # ${#BODY_EXEMPT[@]} 判空而非 ${arr[@]:+}——bash<4.4（macOS 3.2）下空数组展开
+    # 会报 unbound variable（r14 no116，同 EXEMPT 守卫不同写法的历史原因）
+    if [ "${#BODY_EXEMPT[@]}" -gt 0 ]; then
+        for pattern in ${BODY_EXEMPT[@]+"${BODY_EXEMPT[@]}"}; do
+            if printf '%s\n' "$full_msg" | grep -qE "$pattern"; then
+                return 0
+            fi
+        done
+    fi
 
     # 内部原创 commit 前缀（fork 仓的隔离标记，上游同步时 grep '^\[ORG\]' 可列出全部内部修改）。
     # 行首锚定：case 的 pattern 中变量按字面匹配（[TW] 不作 glob 展开），
@@ -153,8 +157,13 @@ case "${1:-}" in
         # commentchar 跟随 core.commentchar 配置（r12 no80；auto 模式取 #）
         comment_char=$(git config core.commentchar || echo '#')
         [ "$comment_char" = "auto" ] && comment_char='#'
-        esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*\/]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
+        # / 会破坏 sed 地址定界符（转义后仍歧义），显式拒绝而非晦涩报错（r14 no114）
+        [ "$comment_char" = "/" ] && { echo "错误: 不支持的 core.commentchar 值: /（请改用其他注释符）" >&2; exit 1; }
+        esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
         msg_clean=$(sed "/^$esc_cc/d" "$1" | sed '/./,$!d')
+        # 已知 L1/L2 边界（r14 no115）：-m/-F 提交的默认 cleanup=whitespace 不剥注释行，
+        # `#` 开头的 subject 会入库；此处按 strip 模拟会误删该行——多行 -m 时本地放行、
+        # CI 按 %B 原文拒绝（fail-closed 方向）。按 commit.cleanup 区分属后续增强
         first_line=$(printf '%s\n' "$msg_clean" | sed -n '1{s/[[:space:]]*$//p;}')   # 同上，避 SIGPIPE（r12 no83）
         validate_one "$first_line" "$msg_clean" || exit 1
         log_info "提交信息格式正确。"

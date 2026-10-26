@@ -45,7 +45,8 @@ each_wt() {  # $1 = 回调函数名（接受 worktree 路径参数）
             "")          [ -n "$wt_dir" ] && { "$1" "$wt_dir" || CALLBACK_FAILED=1; }; wt_dir="" ;;
         esac
     done <<< "$wts"
-    [ -n "$wt_dir" ] && { "$1" "$wt_dir" || CALLBACK_FAILED=1; }
+    if [ -n "$wt_dir" ]; then "$1" "$wt_dir" || CALLBACK_FAILED=1; fi
+    return 0   # 显式 0：&& 短路状态不得成为函数返回值（set -e 会吞掉聚合，r14 no118）
 }
 
 # 迁移清理：旧 install-hooks.sh 是单 worktree 作用域——每个跑过旧脚本的

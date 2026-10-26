@@ -44,8 +44,8 @@ grep -q '^COMMIT_PREFIX=""' "$T/commit-msg" || { echo "FAIL: 前缀还原 sed �
 D=$(mktemp -d)
 git init -q "$D" || { echo "FAIL: git init"; exit 1; }
 cd "$D" || exit 1
-git config user.name t && git config user.email t@t
-mkdir -p .hooks && git config core.hooksPath "$D/.hooks"   # 隔离外部全局/系统级钩子
+git config user.name t && git config user.email t@t || { echo "FAIL: 环境 git config 失败"; exit 1; }
+mkdir -p .hooks && git config core.hooksPath "$D/.hooks" || { echo "FAIL: 钩子隔离配置失败"; exit 1; }   # 隔离外部全局/系统级钩子
 c() { git commit -q --allow-empty -m "$1" || { echo "FAIL: seed commit 失败: $1"; exit 1; }; }
 # 根提交占位：BAD~1 必须存在，否则 --ci BAD~1 走 fail-closed 恒 1，断言空转（r7 no14）
 c "feat: initial"
@@ -79,8 +79,11 @@ out=$(NO_COLOR= FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn
 [[ "$out" == *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: FORCE_COLOR 未生效"; }
 out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
 [[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未压过 FORCE_COLOR"; }
-out_w=$(bash -c "source $T/common.sh; log_warn w" 2>/dev/null); out_e=$(bash -c "source $T/common.sh; log_warn w" 2>&1 >/dev/null)
+out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>&1 >/dev/null)
 [[ -z "$out_w" && "$out_e" == *"[WARN]"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr 或输出非 log_warn（r13 no108）"; }
+# ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
+out=$(NO_COLOR=1 bash -c "source \"$T/common.sh\" 2>/dev/null; log_warn \$(printf 'x\\033[31my')" 2>&1)
+case "$out" in *$'\033'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 ESC" ;; *x[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: ESC 用例输出异常: $out" ;; esac
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
@@ -137,7 +140,7 @@ IT=$(mktemp -d) && git init -q "$IT" \
 # 失败路径（r13 no105）：未 gofmt 的 .go staged → gofmt 拦截 + fail 聚合 → exit 1
 # （同时回归 set -e 与循环体交互、fail 聚合两处语义）
 printf 'package x\nfunc  y() {}\n' > "$IT/bad.go"
-git -C "$IT" add bad.go
+git -C "$IT" add bad.go || { echo "FAIL: git add 环境准备失败"; exit 1; }
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦未 gofmt 文件"; }
 rm -rf "$IT"
@@ -154,17 +157,36 @@ IT=$(mktemp -d) && git init -q "$IT" \
 rm -rf "$IT"
 # wt.toml [pre-start] hooks 包装命令退出码契约（r13 no94）：
 #   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
+# 提取前提（r14 no120）：hooks 行为单行单值、无行尾注释；内层不含 TOML 转义（r14 no112
+# 已重写 hooks 行避免 \"），提取后须含 install.sh 关键字方可作为有效命令串
 HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
-[ -n "$HOOKS_WRAP" ] || { echo "FAIL: 未从 wt.toml 提取 hooks 包装命令"; exit 1; }
+[ -n "$HOOKS_WRAP" ] && case "$HOOKS_WRAP" in *install.sh*) ;; *) echo "FAIL: 提取的 hooks 包装命令非法: $HOOKS_WRAP"; exit 1 ;; esac \
+    || { echo "FAIL: 未从 wt.toml 提取 hooks 包装命令"; exit 1; }
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
     && cp "$HDIR"/{install.sh,common.sh} "$IT/tools/git-hooks/" \
     || { echo "FAIL: wt 包装用例环境准备失败"; exit 1; }
+# 用例 1/2：WT_NO_HOOKS 静默 exit 0；正常安装 exit 0
 r=$(cd "$IT" && WT_NO_HOOKS=1 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
 [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: WT_NO_HOOKS 应静默 exit 0（got $r）"; }
 r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
 [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 正常安装应 exit 0（got $r）"; }
-echo fail-marker > "$IT/tools/git-hooks/install.sh" && chmod -x "$IT/tools/git-hooks/install.sh"
+# 用例 3（r14 no119）：install.sh 失败 → 非零传播。chmod -x 无法模拟失败（包装命令是
+# bash 显式调用，不需要执行位）——用非法命令触发 bash 退出码 127
+printf 'fail-marker\n' > "$IT/tools/git-hooks/install.sh"
+r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+[ "$r" != "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 失败应非零传播（got $r）"; }
+# 用例 4（r14 no119）：旧分支无 install.sh → 包装层 exit 0
+rm -rf "$IT/tools/git-hooks"
+r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 无 hooks 目录应静默 exit 0（got $r）"; }
 rm -rf "$IT"
+# L1 0x1e 文件检查（r14 no123）：钩子模式的 grep 文件路径与 L2 --ci 的 %B 路径实现
+# 独立，各补一条防同口径回归。消息文件含 0x1e → commit-msg（钩子形态）exit 1
+IT4=$(mktemp -d) && git init -q "$IT4" && mkdir -p "$IT4/tools/git-hooks"     && cp "$HDIR"/{commit-msg,common.sh} "$IT4/tools/git-hooks/"     && git -C "$IT4" config user.name t && git -C "$IT4" config user.email t@t     || { echo "FAIL: L1 0x1e 用例环境准备失败"; exit 1; }
+printf 'feat: x\n\x1e\n' > "$IT4/msg"
+(cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/msg" >/dev/null 2>&1)
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: L1 应拒含 0x1e 的消息文件"; }
+rm -rf "$IT4"
 # 0x1e 拒绝回归（body 含独立 \t\x1e 行形态——涵盖伪造终止符攻击的输入特征；
 # r11 重写后不再有记录协议，0x1e 一律 fail-closed，r12 no92 注释对齐）。
 # 先 seed 一个普通提交：forged 提交不能是根提交，否则 EVIL~1 不存在、断言空转（r9 no aee5）

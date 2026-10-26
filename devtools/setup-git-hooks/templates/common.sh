@@ -21,13 +21,12 @@ else
     NC=''
 fi
 
-# printf 而非 echo -e：消息含外部输入（commit subject、clone 报错），
-# echo -e 会解释其中的反斜杠序列
-# local IFS=' '：$* 以空格连接，防调用方误改 IFS 把消息按行拼碎；单参调用不受影响（r8 no126a）
-# printf 而非 echo -e：消息含外部输入（commit subject、clone 报错），
-# echo -e 会解释其中的反斜杠序列；${*//ESC/} 剥原始 ESC 防终端注入（ANSI
-# CSI/OSC，r13 no101——与 commit-msg 回显处的 tr 剥离同信任边界处理）；
+# local IFS=' '：$* 以空格连接，防调用方误改 IFS 把消息按行拼碎；单参调用不受影响（r8 no126a）。
+# printf 而非 echo -e：消息含外部输入，echo -e 会解释反斜杠序列。仅剥 ESC 防终端注入
+# （ANSI CSI/OSC；保留 \t/\n 支持多行消息——与 commit-msg 回显的宽 tr 范围刻意不同，
+# r14 no110 注释即信任边界声明）。ESC 常量加载期算一次（r14 no110）。
 # || true 吞写失败：日志故障不改变钩子判定（set -e 下写失败中止整个钩子，r13 no100）
-log_info()  { local IFS=' '; printf '%s\n' "[INFO] ${GREEN}${*//$(printf '\033')/}${NC}" || true; }
-log_warn()  { local IFS=' '; printf '%s\n' "[WARN] ${YELLOW}${*//$(printf '\033')/}${NC}" >&2 || true; }
-log_error() { local IFS=' '; printf '%s\n' "[ERROR] ${RED}${*//$(printf '\033')/}${NC}" >&2 || true; }
+ESC=$'\033'
+log_info()  { local IFS=' '; printf '%s\n' "[INFO] ${GREEN}${*//$ESC/}${NC}" || true; }
+log_warn()  { local IFS=' '; printf '%s\n' "[WARN] ${YELLOW}${*//$ESC/}${NC}" >&2 || true; }
+log_error() { local IFS=' '; printf '%s\n' "[ERROR] ${RED}${*//$ESC/}${NC}" >&2 || true; }
