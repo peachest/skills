@@ -9,20 +9,20 @@ while [ "$(sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.status.phase}' 
 PHASE=$(sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.status.phase}')
 # ── 段1: 真实 ConfigMap score 段（head 截断，不伪造）──
 {
-  echo "hyx@<node-a>:~$ sudo kubectl get cm mock-ppu-config -n llm-system -o yaml | sed -n '/score:/,\$p' | head -20"
+  echo "hyx@node-a:~$ sudo kubectl get cm mock-ppu-config -n llm-system -o yaml | sed -n '/score:/,\$p' | head -20"
   sudo kubectl get cm mock-ppu-config -n llm-system -o yaml | sed -n '/score:/,$p' | head -20
   echo "...  # 共 56 条双向 pair，完整内容见 evidence/mock-config-P$P.yaml"
 } > /tmp/seg1.txt
 # ── 段2: 真实 node annotation（完整 JSON）──
 {
-  echo "hyx@<node-a>:~$ sudo kubectl get node <node-a> -o jsonpath='{.metadata.annotations.hami\\.io/node-ppu-score}' | python3 -m json.tool"
-  sudo kubectl get node <node-a> -o jsonpath='{.metadata.annotations.hami\.io/node-ppu-score}' | python3 -m json.tool
+  echo "hyx@node-a:~$ sudo kubectl get node node-a -o jsonpath='{.metadata.annotations.hami\\.io/node-ppu-score}' | python3 -m json.tool"
+  sudo kubectl get node node-a -o jsonpath='{.metadata.annotations.hami\.io/node-ppu-score}' | python3 -m json.tool
 } > /tmp/seg2.txt
 # ── 段3: 真实 pod annotations + resources（JSON 完整）──
 {
-  echo "hyx@<node-a>:~$ sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.metadata.annotations}' | python3 -m json.tool   # pod phase: $PHASE"
+  echo "hyx@node-a:~$ sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.metadata.annotations}' | python3 -m json.tool   # pod phase: $PHASE"
   sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.metadata.annotations}' | python3 -m json.tool
-  echo "hyx@<node-a>:~$ sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.spec.containers[0].resources.limits}'"
+  echo "hyx@node-a:~$ sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.spec.containers[0].resources.limits}'"
   sudo kubectl get pod ppu-topo-p$P-$CNT -o jsonpath='{.spec.containers[0].resources.limits}' | python3 -m json.tool
 } > /tmp/seg3.txt
 sudo kubectl delete pod ppu-topo-p$P-$CNT >/dev/null 2>&1 || true

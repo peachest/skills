@@ -46,6 +46,6 @@ commit → 定位创建 session → 查该 session 的实际输入；文章只�
 
 ## 排除（research-only，非 skill 来源）
 
-<platform-b>/kvcache、pdd、attention、okf、kserver、afd、weixin-connector 等目录下的
+<source-repo>/kvcache、pdd、attention、okf、kserver、afd、weixin-connector 等目录下的
 session 抓取均为领域调研（KV Cache、PD 分离、Attention 变体、RAG、KServe、vLLM AFD 等），
 产出在 `~/research/<topic>/`，与 skill 开发无关，不入此账本。

@@ -5,7 +5,7 @@ description: Generate terminal-style screenshots of real command output for repo
 
 # Terminal Screenshot（freeze 工具链）
 
-目标：给报告/客户演示生成**看起来像真实终端**的命令输出截图。本节点（<node-a>）无 DISPLAY，走 freeze SVG → Playwright PNG 两段。
+目标：给报告/客户演示生成**看起来像真实终端**的命令输出截图。本节点（node-a）无 DISPLAY，走 freeze SVG → Playwright PNG 两段。
 
 ## 铁律：证据截图必须真实（用户不会信摘要）
 
