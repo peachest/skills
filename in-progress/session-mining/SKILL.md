@@ -20,6 +20,7 @@ description: "Mine pi session logs along two script routes — by skill name (in
 | Harness custom events (guardrails, compaction) | recipe: event-signature grep | script routes are blind here |
 | Subagent transcript recovery (transcripts, not sessions) | recipe: transcript paging | read pagination |
 | Solidify user working preferences (AGENTS.md / memory material) | recipe: preference-mining | `references/preference-mining.md` |
+| Is skill X actually used, and does it work per-object? (usage → platform ground truth, e.g. review-rounds baseline) | recipe: cross-session tool-ROI mining | `scripts/triage-rounds/` (parameterized family, see below) |
 
 Script routes never cover the recipe rows: "who failed" is audit-shaped, "what shape" is usage-shaped — forcing the wrong one bypasses the skill (observed: orca spawn-chain mining ignored an injected tool-call extract).
 
@@ -53,3 +54,19 @@ Errors needing **attribution** (blame a run, a contract, an agent) → announce 
 - [ ] Errors either handed to diagnose or explicitly absent
 
 **Recipes** (`references/recipes.md` — hand-mining patterns with their own pitfall lists; `references/preference-mining.md` — user-preference solidification with its own output routing). **Primer** (`references/session-jsonl.md`) — entry structure, marker, pairing, cost accounting; read before touching raw JSONL.
+
+**Tool-ROI script family** (`scripts/triage-rounds/` — the cross-session tool-ROI recipe, battle-tested on the triage review-rounds baseline, reusable for other tool-ROI questions by swapping the object-extraction regex and the ground-truth endpoint):
+
+```bash
+# stage 1: script-route candidates → tool-call confirm (existing family scripts)
+python3 <SKILL_DIR>/scripts/find-skill-sessions.py triage-mr --json > ~/tmp/triage-rounds/skill-sessions.json
+python3 <SKILL_DIR>/scripts/find-tool-calls.py bash --args-contains ocr-pull-discussions.py > ~/tmp/triage-rounds/pull-calls.json
+# stage 2-5: extract invocations → collect ground truth → diff-size pass → analyze
+TRIAGE_ROUNDS_OUT=~/tmp/triage-rounds python3 <SKILL_DIR>/scripts/triage-rounds/extract-triage-mrs.py
+TRIAGE_ROUNDS_OUT=~/tmp/triage-rounds python3 <SKILL_DIR>/scripts/triage-rounds/triage-rounds-collect.py
+TRIAGE_ROUNDS_OUT=~/tmp/triage-rounds python3 <SKILL_DIR>/scripts/triage-rounds/triage-rounds-diffsize.py
+TRIAGE_ROUNDS_OUT=~/tmp/triage-rounds python3 <SKILL_DIR>/scripts/triage-rounds/triage-rounds-analyze.py
+```
+
+- **`url-map.py` is untracked** (intranet hosts; in .gitignore). On a fresh node copy it from the mining node's original (`~/tmp/triage-rounds-collect.py`) — collect exits with instructions when missing. Baseline data + REPORT live in `recheck/triage-rounds-REPORT.md`.
+- Adapt for another tool: replace the invocation-regex in extract (step 2), the object-id tokenization, and the platform endpoint in collect; analyze's round-grouping (`head_sha`) generalizes to any per-object revision key.
