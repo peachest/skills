@@ -30,6 +30,6 @@ Sync rules mirror `vendor/mattpocock/MIRROR.md`; pstack-specific notes below.
 
 Only these skills are installed to the global agent (install list is the source of truth):
 
-`how`, `why`, `blast-radius`, `correct`, `benchmark-checklist`, `statechart`
+`how`, `why`, `blast-radius`, `correct`, `benchmark-checklist`, `statechart`, `arena`, `sharpen`
 
 Known gap: `blast-radius` references `arena` and `unslop`, which are intentionally not installed — its instructions mention them but degrade gracefully; install them too if the references become noisy.
