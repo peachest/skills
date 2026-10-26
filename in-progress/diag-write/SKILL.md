@@ -25,6 +25,8 @@ Otherwise create `~/ops/<title>.md` from `~/ops/template.md` (delete the templat
 
 Fill `sessions` with the current session id (from the `PI_` environment variables or the session file's `<timestamp>_<uuid>` name) — the audit trail back to the raw session JSONL. Updating an existing entry (the merge case): **append** the session id, keep the earlier ones; a merged entry carries every session that worked the issue.
 
+Also fill `based_on` — the vault entries whose conclusions this diagnosis actually adopted (prior root causes it leaned on, pitfalls it avoided because of them). This is the vault's strong read signal: it feeds maturity promotion and consumption audits, so record titles honestly — empty when nothing was adopted. On merge, append and keep the earlier ones.
+
 ## Step 3 — Assign labels
 
 Read `~/ops/labels.md` and run **one pass per axis** — component (what broke, family-level), failure-type (how it broke), vendor (whose hardware). Multi-value axes take all that apply.
@@ -53,6 +55,7 @@ Invoked standalone (not via `/skill:diagnosing-bugs-with-docs` Phase 6)? The dia
 
 - [ ] Vault searched before creation; an existing entry on this issue was updated, not forked
 - [ ] Frontmatter valid per labels.md (status derived from content, not optimism)
+- [ ] `based_on` filled honestly — prior entries actually adopted, empty when none
 - [ ] Every label present in labels.md, or registered through user approval this run
 - [ ] index.md updated; entry sits in a cluster or 未归类
 - [ ] `~/ops` working tree clean (entry committed, message `diag: <标题>`, nothing mixed in)
