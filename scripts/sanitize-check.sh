@@ -31,7 +31,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # grep -E pattern. Word-bounded where the token is also a common substring.
-PATTERNS='<git-host>|<bot-id>|<vendor>|harbor\.trans|<registry-a>|\b<platform>\b|\bllm1[0-9]\b|\bllm(2[0-9]|3[0-9])\b|\bdev(17|32|119)\b|172\.1[6-9]\.|\b<xpu-proj>\b|<xpu-proj>|<gpu-plug>|\b<tool-x>\b|\b<charts-repo>\b|\b<SMG-x>\b|\bsmg\b|<group-a>|\baip\b|\bcvat\b|icc\.io|\b<platform>\b|<repo-b>|<repo-b>|\b<domain-a>\b|<platform-b>|<project-a>|\b<pkgfix>\b'
+PATTERNS='<git-host>|<bot-id>|<vendor>|harbor\.trans|<registry-a>|\b<platform>\b|\bllm1[0-9]\b|\bllm(2[0-9]|3[0-9])\b|\bdev(17|32|119)\b|172\.1[6-9]\.|\b<xpu-proj>\b|<xpu-proj>|<gpu-plug>|\b<tool-x>\b|\b<charts-repo>\b|\b<SMG-x>\b|\bsmg\b|<group-a>|\baip\b|\bcvat\b|icc\.io|\b<platform>\b|\bmwh\b|\bapplet\b|<repo-b>|<repo-b>|\b<domain-a>\b|<platform-b>|<project-a>|\b<pkgfix>\b'
 
 mode="tracked"
 if [[ "${1:-}" == "-u" ]]; then mode="untracked"; shift; fi
@@ -59,6 +59,7 @@ echo "== pattern scan (${#files[@]} files, mode=$mode) =="
 hits=0
 for f in "${files[@]}"; do
     [[ "$f" == scripts/sanitize-check.sh ]] && continue   # checker contains PATTERNS by construction
+    [[ "$f" == devtools/vscode-extension/docs/* ]] && continue  # vendored upstream VS Code docs, public by construction (<applet> 等通用词在此为原义，非内部标识)
     while IFS= read -r line; do
         echo "PATTERN  $line"
         hits=$((hits+1))
