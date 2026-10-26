@@ -193,8 +193,35 @@ snapshot and never an action narration.
    rebase. Already pushed: same rule as files — ask the user first
    (rewriting published history is a force-push).
 
-5. **Verify**: build, test, lint the touched packages once — comment-only
+5. **Verify** — integrity first, then builds:
+
+   **Integrity self-check** (re-read the diff; zero-cost, catches the
+   silent breakages):
+
+   - **Fragment**: every edited comment block still reads as
+     self-contained prose — no half-sentence left behind a trim, no
+     "see above" pointing at a deleted line. Trim-to-fact verdicts
+     survive only as a complete statement of the fact.
+   - **Rewrite completeness**: diff each rewrite against the original —
+     the original's non-obvious fact and its why (mechanism / trigger
+     condition) must both still be present; sanitized-but-emptied
+     wording is a failed rewrite, redo it.
+   - **Deletion accountability**: every drop/trim of a possibly
+     load-bearing fact names where the info now lives (commit message,
+     ADR, MR description). If nowhere, the drop converts to rewrite.
+   - **Mirror integrity**: if an edited comment participates in a
+     mirror/cross-language/cross-repo alignment (its siblings repeat
+     the same fact), the paired sites are updated or explicitly left
+     with a stated reason — one-sided edits are the drift you came to
+     remove.
+   - **Anti-vacuum back-check**: if the edit removed the last why-level
+     comment in a ~200-line region, reinstate a one-liner or flag to
+     the author.
+
+   Then **build, test, lint the touched packages once** — comment-only
    edits still run the checks; they catch a stray edit that hit code.
+   Batch application applies high-confidence candidates only; medium/
+   low go to the user for review.
 
 6. **Fold back**: if the trimmed files belong to an unpushed commit, fold
    via `git commit --fixup <sha>` + `git rebase -i --autosquash <base>`
