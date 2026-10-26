@@ -177,7 +177,7 @@ validate_range() {
             "Revert \""*)
                 # Revert 反伪造（r19 no196·medium，与 Merge 反伪造对称）：git revert 模板
                 # 恒含 "This reverts commit <40-hex>." 尾注——缺失即手写伪造
-                if ! printf '%s\n' "$body" | grep -qE '^This reverts commit [0-9a-f]{40}\.'; then
+                if ! printf '%s\n' "$body" | grep -qE '^This reverts commit [0-9a-f]{40,64}\.'; then   # {40,64}：SHA-256 对象格式仓为 64 位（r20 no216）
                     log_error "commit ${sha:0:8} 手写 Revert 主题但正文无 'This reverts commit <sha>.' 尾注——请改写为 conventional 格式或用 git revert 生成"
                     bad=1
                 fi

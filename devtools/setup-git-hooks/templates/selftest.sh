@@ -10,7 +10,9 @@ pass=0; fail=0; skipped=0   # skipped：缺工具链的 SKIP 用例计数（r17 
 # 配置隔离（r18 no192·medium）：t() 形态矩阵以真实仓库为 cwd 跑钩子副本，钩子会读
 # git config core.commentchar——屏蔽全局/系统级配置，防环境相关假红/假绿；
 # IT6 等本地配置不受影响
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1   # NOSYSTEM：旧版 git（<2.32）不识别 SYSTEM（r19 no213）
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1
+# 前提（r20 no226）：GLOBAL/SYSTEM 变量需 git ≥2.32；更旧版本会静默忽略、全局/系统
+# 配置仍生效（NOSYSTEM 仅兜住系统级）——形态矩阵在旧 git 上可能残留环境漂移
 T=$(mktemp -d) || { echo >&2 "FAIL: mktemp -d 失败" >&2; exit 1; }
 MSG=$(mktemp) || { echo >&2 "FAIL: mktemp 失败" >&2; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
@@ -85,6 +87,21 @@ bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
 [ $? != 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 空范围应默认拒绝（r17 no168）" >&2; }
 COMMIT_CI_ALLOW_EMPTY=1 bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 空范围豁免后应放行" >&2; }
+# Revert 反伪造（r20 no215·medium）：手写 Revert 主题无尾注 → 拒；真 git revert → 放行
+git -C "$D" commit -q --allow-empty --no-verify -m 'Revert "feat: fake"' || { echo >&2 "FAIL: revert 伪造 seed 失败"; exit 1; }
+FREV=$(git -C "$D" rev-parse HEAD)
+bash "$HOOK" --ci "$FREV~1" "$FREV" >/dev/null 2>&1
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应拒手写 Revert 主题（无尾注，r20 no215）"; }
+# git revert 需真实变更（空提交 revert 失败）：先造一个带文件的提交再 revert；
+# git revert 无 --no-verify 选项（r20 修正）
+printf 'x\n' > "$D/revtmp" && git -C "$D" add revtmp \
+    && git -C "$D" commit -q -m "feat: to-revert" \
+    || { echo >&2 "FAIL: revert 前置 seed 失败"; exit 1; }
+git -C "$D" revert --no-edit HEAD >/dev/null 2>&1 || { echo >&2 "FAIL: revert seed 失败"; exit 1; }
+TREV=$(git -C "$D" rev-parse HEAD)
+[ "$(git -C "$D" show -s --format=%s "$TREV")" = Revert-x ] || true   # revert subject 形态仅提示，不作断言
+bash "$HOOK" --ci "$TREV~1" "$TREV" >/dev/null 2>&1
+[ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应放行真 git revert 提交（r20 no215）"; }
 # Merge 反伪造（r18 no181·medium）：手写 "Merge branch 'x'" 主题的普通提交 → CI 拒绝
 git -C "$D" commit -q --allow-empty --no-verify -m "Merge branch 'fake'" || { echo >&2 "FAIL: 反伪造用例 seed 失败" >&2; exit 1; }
 FAKE=$(git -C "$D" rev-parse HEAD)
@@ -244,37 +261,39 @@ rm -rf "$IT5"
 #   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
 # 提取前提（r14 no120）：hooks 行为单行单值、无行尾注释；内层不含 TOML 转义（r14 no112
 # 已重写 hooks 行避免 \"），提取后须含 install.sh 关键字方可作为有效命令串
+# 整段依赖 wt.toml——缺失（vendor/独立部署）时整段 SKIP（r20 no225）
 if [ -f "$HDIR/../../.config/wt.toml" ]; then
-hooks_lines=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | grep -c .)   # grep -c 而非 wc -l（BSD 前导空格，r18 no191 同 r15 no138）
-[ "$hooks_lines" = "1" ] || { echo >&2 "FAIL: wt.toml 存在 $hooks_lines 行 hooks 键（提取契约定为单行，r17 no175）" >&2; exit 1; }
+    hooks_lines=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | grep -c .)   # grep -c 而非 wc -l（BSD 前导空格，r18 no191）
+    [ "$hooks_lines" = "1" ] || { echo >&2 "FAIL: wt.toml 存在 $hooks_lines 行 hooks 键（提取契约定为单行，r17 no175）"; exit 1; }
+    HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
+    [ -n "$HOOKS_WRAP" ] && case "$HOOKS_WRAP" in *install.sh*) ;; *) echo >&2 "FAIL: 提取的 hooks 包装命令非法: $HOOKS_WRAP"; exit 1 ;; esac \
+        || { echo >&2 "FAIL: 未从 wt.toml 提取 hooks 包装命令"; exit 1; }
+    IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
+        && cp "$HDIR"/{install.sh,common.sh} "$IT/tools/git-hooks/" \
+        || { echo >&2 "FAIL: wt 包装用例环境准备失败"; exit 1; }
+    # 用例 1/2：WT_NO_HOOKS 静默 exit 0；正常安装 exit 0
+    r=$(cd "$IT" && WT_NO_HOOKS=1 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+    [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: WT_NO_HOOKS 应静默 exit 0（got $r）"; }
+    r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+    [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 正常安装应 exit 0（got $r）"; }
+    # WT_NO_HOOKS=0/false 不跳过（仅字面 1 禁用，r15 no124）
+    r=$(cd "$IT" && git config --unset core.hooksPath 2>/dev/null; WT_NO_HOOKS=0 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+    { [ "$r" = "0" ] && git -C "$IT" config --get core.hooksPath | grep -q tools/git-hooks; } \
+        && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: WT_NO_HOOKS=0 应正常安装而非跳过"; }
+    # 用例 3（r14 no119）：install.sh 失败 → 非零传播。chmod -x 无法模拟失败（包装命令是
+    # bash 显式调用，不需要执行位）——用非法命令触发 bash 退出码 127
+    printf 'fail-marker\n' > "$IT/tools/git-hooks/install.sh"
+    r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+    [ "$r" != "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: install.sh 失败应非零传播（got $r）"; }
+    # 用例 4（r14 no119）：旧分支无 install.sh → 包装层 exit 0
+    rm -rf "$IT/tools/git-hooks"
+    r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+    [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 无 hooks 目录应静默 exit 0（got $r）"; }
+    rm -rf "$IT"
 else
-echo >&2 "SKIP: .config/wt.toml 不存在（独立部署/vendor 场景），跳过 wt 包装契约用例（r19 no212）"
+    echo >&2 "SKIP: .config/wt.toml 不存在（独立部署/vendor 场景），跳过 wt 包装契约用例（r19 no212/r20 no225）"
 fi
-HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
-[ -n "$HOOKS_WRAP" ] && case "$HOOKS_WRAP" in *install.sh*) ;; *) echo >&2 "FAIL: 提取的 hooks 包装命令非法: $HOOKS_WRAP" >&2; exit 1 ;; esac \
-    || { echo >&2 "FAIL: 未从 wt.toml 提取 hooks 包装命令" >&2; exit 1; }
-IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
-    && cp "$HDIR"/{install.sh,common.sh} "$IT/tools/git-hooks/" \
-    || { echo >&2 "FAIL: wt 包装用例环境准备失败" >&2; exit 1; }
-# 用例 1/2：WT_NO_HOOKS 静默 exit 0；正常安装 exit 0
-r=$(cd "$IT" && WT_NO_HOOKS=1 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
-[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: WT_NO_HOOKS 应静默 exit 0（got $r）" >&2; }
-r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
-[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 正常安装应 exit 0（got $r）" >&2; }
-# WT_NO_HOOKS=0/false 不跳过（仅字面 1 禁用，r15 no124）
-r=$(cd "$IT" && git config --unset core.hooksPath 2>/dev/null; WT_NO_HOOKS=0 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
-{ [ "$r" = "0" ] && git -C "$IT" config --get core.hooksPath | grep -q tools/git-hooks; } \
-    && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: WT_NO_HOOKS=0 应正常安装而非跳过" >&2; }
-# 用例 3（r14 no119）：install.sh 失败 → 非零传播。chmod -x 无法模拟失败（包装命令是
-# bash 显式调用，不需要执行位）——用非法命令触发 bash 退出码 127
-printf 'fail-marker\n' > "$IT/tools/git-hooks/install.sh"
-r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
-[ "$r" != "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: install.sh 失败应非零传播（got $r）" >&2; }
-# 用例 4（r14 no119）：旧分支无 install.sh → 包装层 exit 0
-rm -rf "$IT/tools/git-hooks"
-r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
-[ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 无 hooks 目录应静默 exit 0（got $r）" >&2; }
-rm -rf "$IT"
+
 # commentchar 路径（r16 no146）：core.commentchar=';' 时钩子按 ';' 剥注释行——
 # 模板块首行为注释行应被剥离后正常校验，而非误拦"提交信息不能为空"
 IT6=$(mktemp -d) && git init -q "$IT6" && mkdir -p "$IT6/tools/git-hooks" \

@@ -2,7 +2,7 @@
 # pre-commit: 秒级检查，只看 staged 内容（git show :file，而非工作区文件，
 # 保证 git add -p 部分暂存时检查的就是将要提交的内容）。
 # 重检查（lint/test）在 pre-push；commit 信息格式校验在 commit-msg——本文件不重复。
-# 凭证扫描请另装 gitleaks 并在此追加（除 gofmt/clang-format 工具链外零其他依赖、不内置任何扫描器；工具未装时对应检查会误报并拦截，r14 no117）
+# 凭证扫描请另装 gitleaks 并在此追加（除 gofmt/clang-format 工具链外零其他依赖、不内置任何扫描器；工具缺失/版本过旧由下方预检拦截并给出指引，r14 no117/r20 no222）
 
 set -euo pipefail   # 入口自行声明（common.sh 不带副作用）；本钩子全部检查为 if/exit 结构，-e 可安全兜住未来新增检查的未防护失败
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
@@ -17,7 +17,8 @@ read_fail=0   # 读取失败与格式失败分列，末尾提示按因区分（r
 # 且 git show 失败在管道/进程替换里会被静默吞掉（fail-open）——两条链路统一为
 # fail-loud：读取失败即拦截，不再依赖 diff 双空判等
 fmt_tmp=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
-trap 'rm -f "$fmt_tmp" "$fmt_tmp.fmt"' EXIT   # .fmt 副文件一并清理（r18 no185）
+fmt_out=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }   # 0600 副文件（r20 no220：重定向创建为 644 且有 symlink 竞争窗口）
+trap 'rm -f "$fmt_tmp" "$fmt_out"' EXIT INT TERM HUP   # 信号也清理（EXIT trap 不覆盖未捕获信号，r20 no220）
 # 文件清单先取再校验退出码：进程替换吞退出码会让 git 失败时静默跳过全部检查
 # （fail-open 与本文件 fail-loud 原则矛盾，r18 no188）。
 # 已知限制（r18 no187，同 install.sh 口径）：按行解析无法表示含换行的文件名；
@@ -40,9 +41,17 @@ if [ "${go_files:-0}" -gt 0 ] && ! command -v gofmt >/dev/null; then
     log_error "gofmt 未安装（staged 含 .go 文件）——请安装 Go 工具链，或 git commit --no-verify 跳过本次检查"
     exit 1
 fi
-if [ "${c_files:-0}" -gt 0 ] && ! command -v clang-format >/dev/null; then
-    log_error "clang-format 未安装（staged 含 .c/.h 文件）——请安装 clang-format，或 git commit --no-verify 跳过本次检查"
-    exit 1
+if [ "${c_files:-0}" -gt 0 ]; then
+    if ! command -v clang-format >/dev/null; then
+        log_error "clang-format 未安装（staged 含 .c/.h 文件）——请安装 clang-format，或 git commit --no-verify 跳过本次检查"
+        exit 1
+    fi
+    # 能力探测（r20 no221·medium）：旧版（如 clang-format 3.4）不支持 --dry-run/--Werror，
+    # 会把所有 .c/.h 稳定误报为"不通过"——预检阶段即区分
+    if ! clang-format --dry-run --Werror /dev/null >/dev/null 2>&1; then
+        log_error "clang-format 版本过旧或异常（不支持 --dry-run/--Werror）——请升级后重试"
+        exit 1
+    fi
 fi
 
 # 1. staged Go 文件 → gofmt 检查
@@ -54,11 +63,17 @@ while IFS= read -r f; do
         fail=1
         continue
     fi
-    if ! gofmt "$fmt_tmp" > "$fmt_tmp.fmt" 2>/dev/null || ! diff -q "$fmt_tmp" "$fmt_tmp.fmt" >/dev/null 2>&1; then
+    gofmt_err=$(gofmt "$fmt_tmp" > "$fmt_out" 2>&1) || true
+    if [ -n "$gofmt_err" ]; then
+        # 语法错误与格式差异区分（r20 no223）：make fmt 修不了语法错误
+        log_error "gofmt 解析失败（语法错误？WIP 提交请用 --no-verify）: $f"
+        printf '%s\n' "$gofmt_err" | head -5 | sed 's/^/  /' >&2 || true
+        fail=1
+    elif ! diff -q "$fmt_tmp" "$fmt_out" >/dev/null 2>&1; then
         log_error "gofmt 不通过: $f"
         # || true 兜底（r19 no204·medium）：diff 发现差异返回 1 + head 截断 SIGPIPE，
         # set -e 下会中止整个钩子、截断后续检查
-        gofmt "$fmt_tmp" 2>&1 | diff "$fmt_tmp" - 2>/dev/null | head -5 | sed 's/^/  /' >&2 || true
+        diff "$fmt_tmp" "$fmt_out" 2>/dev/null | head -5 | sed 's/^/  /' >&2 || true
         fail=1
     fi
 done <<< "$files_go"
