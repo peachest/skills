@@ -56,8 +56,13 @@ STRATEGY="${STRATEGY:-dp}"
 MIN_SILENCE_SCORE="${MIN_SILENCE_SCORE:-1.5}"
 MAX_FILESIZE_MB="${MAX_FILESIZE_MB:-25}"
 # chunk_transcribe.py imports numpy — on bare environments point this at a
-# python that has it (e.g. the workspace .venv or `uv run python`).
+# python that has it (defaults to the skill's own .venv; must be a single
+# executable path, not a multi-word command like "uv run python").
 PYTHON="${PYTHON:-$SKILL_DIR/.venv/bin/python}"
+if [ ! -x "$PYTHON" ]; then
+  echo "✗ Python interpreter not found: $PYTHON (create $SKILL_DIR/.venv or export PYTHON=<path with numpy>)" >&2
+  exit 1
+fi
 PARALLEL="${PARALLEL:-4}"
 
 if [ $# -lt 1 ]; then

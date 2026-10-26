@@ -296,7 +296,10 @@ def main() -> None:
     t0 = time.time()
     entries = []
     def flush():
-        cache_path.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
+        # 原子写：写入中途被杀会让缓存变截断 JSON，下次启动直接报废全部进度
+        tmp = cache_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, cache_path)
     for i, f in enumerate(kept, 1):
         cached = cache.get(f["file"])
         if cached and cached.get("text"):
