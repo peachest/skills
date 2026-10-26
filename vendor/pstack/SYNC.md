@@ -8,6 +8,8 @@ Sync rules mirror `vendor/mattpocock/MIRROR.md`; pstack-specific notes below.
 
 ## Sync steps
 
+0. File-name check before creating anything inside `vendor/pstack/`: upstream already ships files like `MIRROR.md` — a same-name file here makes every future subtree pull conflict. Check the upstream tree first; if the name exists, pick another (this repo uses `SYNC.md`).
+
 1. Fetch and merge:
 
    ```bash
@@ -32,4 +34,10 @@ Only these skills are installed to the global agent (install list is the source 
 
 `how`, `why`, `blast-radius`, `correct`, `benchmark-checklist`, `statechart`, `arena`, `sharpen`, `ketchup`
 
-Known gap: `blast-radius` references `arena` and `unslop`, which are intentionally not installed — its instructions mention them but degrade gracefully; install them too if the references become noisy.
+Machine check — run after any install/uninstall or sync:
+
+```bash
+bash vendor/pstack/check-installed.sh   # SYNC.md list vs ~/.agents/skills, missing/drift/unlisted
+```
+
+Known gap: `blast-radius` references `unslop` (arena was installed 2026-10-26), which is intentionally not installed — its instructions mention it but degrade gracefully; install it too if the reference becomes noisy.

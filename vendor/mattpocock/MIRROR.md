@@ -9,6 +9,8 @@ Two-layer contract (do not break it):
 
 ## Sync steps
 
+0. File-name check before creating anything inside `vendor/mattpocock/`: if the upstream tree already has that path (e.g. a README the mirror keeps), a same-name file makes every future subtree pull conflict — pick a name upstream does not use.
+
 1. Fetch and merge upstream:
 
    ```bash

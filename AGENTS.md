@@ -41,6 +41,7 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 
 多 session 共享本 checkout，直接在 `main` 上提交（无 wip 集成分支）。约定：
 - 提交前 `git status` 确认工作区——只 `git add` 自己本次任务的文件，**禁止 `git add -A`**（会卷入其他 session 的进行中改动）。
+- sanitize-check DIRTY 命中非本任务文件时：`git log --oneline -2 -- <file>` 核实归属后留给所属 session 处置，禁止代改、也禁止改用全仓审计模式（`-a`）绕行。
 - 提交信息不相关的东西不混入同一 commit（例如 sanitize 修复不与 feature 混提）。
 - 推送前重跑 `bash scripts/sanitize-check.sh && git push origin main`（tracked 模式只扫未推送区间；全仓审计用 `bash scripts/sanitize-check.sh -a`）。门禁脚本必须独立运行并用 `&&` 串联检查退出码，**禁止放进管道**（`sanitize-check | tail` 的退出码来自 tail，DIRTY 被吞掉就会带病推送）。含内部标识的文件先修再推。
 - 历史遗留的 `feat/*`、`session-*` 分支不受此规范约束。
