@@ -98,6 +98,26 @@ exit 1 with the finding, expects exit 0 on a clean tree, and expects a WARN
 (not a silent pass) when gitleaks or the config is missing. Re-run after any
 rule change: bad fixtures must FAIL, the clean tree must stay green.
 
+The template self-check proves the templates work, not that **your** adapted
+rules catch this repo's real secret shapes. On the real repo, run a canary
+pass before trusting the gate:
+
+1. Seed a **real variant form** — a shape your rules should catch but the
+   template placeholder never exercises (e.g. `VAR_PASSWORD="..."` with a
+   variable-name prefix, or a literal from the repo's own CI/config style).
+   The llmops-wiki 2026-10-26 case: `\\b(password)` left the `\\b` boundary
+   dead in front of `_`, so `REDIS_PASSWORD=` passed clean until a canary
+   with the prefix form caught it.
+2. Put the canary **inside the repo**. A path outside the worktree makes
+   `git add` fail with rc=1 — a git error masquerading as a block.
+3. Assert a **positive hit**: the output must name the rule-id (e.g.
+   `GITLEAKS <file>:<line> <rule-id>`). Exit codes alone prove nothing:
+   rc=1 can come from a git failure, rc=0 from the check never running.
+4. After a blocked hook run, confirm with `git log --oneline -1` that the
+   canary commit **does not exist** — a silent hook is an unverified gate,
+   and the seeded secret is now in history. Then remove the canary, re-run,
+   expect CLEAN.
+
 ## Triage a finding before acting
 
 A gitleaks hit — especially from a whole-tree `gitleaks dir` scan — is a
