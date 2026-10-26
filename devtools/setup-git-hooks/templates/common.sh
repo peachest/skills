@@ -6,8 +6,8 @@
 
 # 颜色：两流均为 TTY 才着色（交叉重定向如 2>err.log 时任一"或"判断都会
 # 让转义符漏进非 TTY 流）；NO_COLOR 约定优先；FORCE_COLOR 显式开色（供
-# selftest 在非 TTY 管道环境注入验证着色路径，r7 no19）
-if [[ -z "${NO_COLOR:-}" ]] && { [[ -t 1 && -t 2 ]] || [[ -n "${FORCE_COLOR:-}" ]]; }; then
+# selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；值 0 视为未开，r9 no 6e4b）
+if [[ -z "${NO_COLOR:-}" ]] && { [[ -t 1 && -t 2 ]] || { [[ -n "${FORCE_COLOR:-}" ]] && [ "${FORCE_COLOR}" != "0" ]; }; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
     YELLOW=$'\033[1;33m'
@@ -21,6 +21,7 @@ fi
 
 # printf 而非 echo -e：消息含外部输入（commit subject、clone 报错），
 # echo -e 会解释其中的反斜杠序列
+# local IFS=' '：$* 以空格连接，防调用方误改 IFS 把消息按行拼碎；单参调用不受影响（r8 no126a）
 log_info()  { local IFS=' '; printf '%s\n' "[INFO] ${GREEN}$*${NC}"; }
 log_warn()  { local IFS=' '; printf '%s\n' "[WARN] ${YELLOW}$*${NC}" >&2; }
 log_error() { local IFS=' '; printf '%s\n' "[ERROR] ${RED}$*${NC}" >&2; }

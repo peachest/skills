@@ -27,6 +27,9 @@ set -euo pipefail
 SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
+# 配置块自检：拼错会静默 fail-open（跳过全部格式校验），与"单一事实源"定位不符（r9 no e3d5）
+case "$COMMIT_FORMAT" in conventional|none) ;; *) echo "错误: COMMIT_FORMAT 配置非法: $COMMIT_FORMAT" >&2; exit 1 ;; esac
+
 validate_one() {
     local first_line="$1" full_msg="${2:-$1}"
 
@@ -163,9 +166,11 @@ case "${1:-}" in
             log_error "提交信息包含非法控制字符 0x1e（与 CI 校验协议冲突）"
             exit 1
         fi
-        # 不裁前导空白（r7 no11，同 --ci 口径）
-        first_line=$(head -n1 "$1" | sed 's/\r$//;s/[[:space:]]*$//')
-        validate_one "$first_line" "$(cat "$1")" || exit 1
+        # 不裁前导空白（r7 no11，同 --ci 口径）。钩子拿到的是 git cleanup（剥离注释行/
+        # 首尾空行）之前的文件——先模拟 cleanup=strip 再取首行，否则模板块首行空行/注释误拦（r9 no 360f）
+        msg_clean=$(sed '/^#/d' "$1" | sed '/./,$!d')
+        first_line=$(printf '%s\n' "$msg_clean" | head -n1 | sed 's/\r$//;s/[[:space:]]*$//')
+        validate_one "$first_line" "$msg_clean" || exit 1
         log_info "提交信息格式正确。"
         ;;
 esac

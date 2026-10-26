@@ -1,6 +1,7 @@
 #!/bin/bash
 # selftest.sh — hook 脚本自测（纯 bash assert，零依赖，GNU/BSD sed 兼容）。
-# 全部断言对临时目录的副本执行，源文件只读；CI 可选跑：bash tools/git-hooks/selftest.sh
+# 单条消息形态断言对临时目录副本执行（t() 对 $T 副本）；--ci 用例对源文件 HOOK 直调
+# （CI 消费的就是源文件本身，副本无意义）；CI 接线：make selftest / commit-check job
 set -uo pipefail
 cd "$(dirname "$0")"
 HDIR="$PWD"                    # hooks 目录绝对路径（后续测试段会 cd 走）
@@ -8,8 +9,8 @@ HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
 pass=0; fail=0
 T=$(mktemp -d)
 MSG=$(mktemp)
-D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/WT 同理由 :- 守护（r8 no8577）
-trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${WT:-}"' EXIT
+D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
+trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${WT:-}"' EXIT
 cp commit-msg common.sh "$T/" || { echo "FAIL: 副本复制失败"; exit 1; }
 
 t() { # t <期望exit> <描述> <msg文件内容>
@@ -88,6 +89,12 @@ IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
 (cd "$IT" && bash tools/git-hooks/install.sh >/dev/null 2>&1 && [ "$(git -C "$IT" config --get core.hooksPath)" = "tools/git-hooks" ])
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh hooksPath 写入"; }
 rm -rf "$IT"
+# fail-open 分支（r9 no 4776）：旧分支无 tools/git-hooks 目录 → exit 0 且不写配置
+IT=$(mktemp -d) && git init -q "$IT" || { echo "FAIL: fail-open 用例环境准备失败"; exit 1; }
+(cd "$IT" && bash "$HDIR/install.sh" >/dev/null 2>&1) \
+    && [ -z "$(git -C "$IT" config --get core.hooksPath 2>/dev/null)" ] \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: fail-open 应 exit 0 且不写配置"; }
+rm -rf "$IT"
 # 迁移清理分支：worktree 级 hooksPath 覆盖应被 install.sh 清除（r7 no7，本迁移核心逻辑）。
 # 用 attached worktree（带 branch 行）——正是 r8 no30a9 暴露的、旧解析永不触发的形态
 IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" "$IT2/.hooks" \
@@ -104,12 +111,14 @@ git -C "$WT" config --worktree core.hooksPath "/stale/hooks"   # 模拟旧 insta
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 未清除 worktree 级 hooksPath"; }
 rm -rf "$IT2" "$WT"
 # 伪造终止符重同步（r8 no59e3）：body 内嵌独立 \t\x1e 行把重复 signoff 拆到两个伪记录
-# 里逃过单记录查重——记录头 40-hex 校验应 fail-closed
+# 里逃过单记录查重——记录头 40-hex 校验应 fail-closed。
+# 先 seed 一个普通提交：forged 提交不能是根提交，否则 EVIL~1 不存在、断言空转（r9 no aee5）
 IT3=$(mktemp -d) && git init -q "$IT3" && mkdir -p "$IT3/tools/git-hooks" "$IT3/.hooks" \
     && cp "$HDIR"/{commit-msg,common.sh} "$IT3/tools/git-hooks/" \
     || { echo "FAIL: 重同步用例环境准备失败"; exit 1; }
 git -C "$IT3" config core.hooksPath "$IT3/.hooks" && mkdir -p "$IT3/.hooks"
 git -C "$IT3" config user.name t && git -C "$IT3" config user.email t@t
+git -C "$IT3" commit -q --allow-empty -m "feat: initial" || { echo "FAIL: 重同步用例 initial seed 失败"; exit 1; }
 printf 'feat: x\nSigned-off-by: A <a@t>\n\t\x1e\nfeat: y\nSigned-off-by: A <a@t>\n' > "$IT3/forged.msg"
 git -C "$IT3" commit -q --allow-empty --no-verify -F "$IT3/forged.msg" || { echo "FAIL: 重同步用例 seed 失败"; exit 1; }
 EVIL=$(git -C "$IT3" rev-parse HEAD)
