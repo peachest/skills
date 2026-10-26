@@ -44,3 +44,10 @@
 - commit: 4c59ea6
 - 验证: 审计数据（2026-10-19，96 未触发中 6 例来自派发路径，10 月失约点）
 - 状态: accepted
+
+## 2026-10-26 report-verify 脚手架（报告落盘漂移两轮复现后机械化）
+- 提案: 子代理"REPORT_WRITTEN/已写入 X"声明式判据失效（brainstorm 3/4、phaseA 4/5 落错，真实率 1/5）——task 文本路径只是指令、不改 runtime output 路由，产物漂进 subagent-artifacts 而自述照常声称成功
+- 落点: scripts/verify-reports.py（manifest 机械验证 + exit 1 时列 artifacts 窗口内候选供回捞，5 单测）+ references/report-verify.md（治本=output: API 绑定 + 兜底=收尾验证双层）+ pitfalls.md #37；AGENTS.md 派发形态第 4 条同步更新
+- commit: 9cab96c
+- 验证: uv run pytest 5 passed（fake sessions dir 不碰真实数据）+ live smoke 退出语义（missing→1/present→0）；output: 绑定语义经 pi-subagents guide tool-reference/output-mode-details 源级确认
+- 状态: accepted
