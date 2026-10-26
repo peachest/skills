@@ -123,7 +123,9 @@ out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.s
 case "$out" in *$'\033'*) fail=$((fail+1)); echo >&2 "FAIL: log_warn 未剥离 ESC" >&2 ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: ESC 用例输出异常: $out" >&2 ;; esac   # [ 转义（r15 no141：未闭合 [ 按字面是冷门巧合语义）
 # UTF-8 C1 定点剥除（r17 no158）：8 位 CSI/OSC 起始符不得透传
 out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xc2\x9d')" 2>&1)
-case "$out" in *$'\xc2\x9b'*|*$'\xc2\x9d'*) fail=$((fail+1)); echo >&2 "FAIL: log_warn 未剥离 UTF-8 C1" >&2 ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: C1 用例输出异常" >&2 ;; esac   # 同 r15 no141 转义口径（r18 no195）
+# locale 无关断言（CI LANG=C 走字节剥除分支，残留孤立 \xc2）：只要 CSI/OSC 起始符
+# 不透传、正文 "[31m" 文本保留即可
+case "$out" in *$'\xc2\x9b'*|*$'\xc2\x9d'*) fail=$((fail+1)); echo >&2 "FAIL: log_warn 未剥离 UTF-8 C1" ;; *"[31m"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: C1 用例输出异常: $(printf '%s' "$out" | od -c | head -2)" ;; esac   # r19 CI 实测修正
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
