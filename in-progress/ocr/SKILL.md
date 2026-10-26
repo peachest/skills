@@ -8,7 +8,9 @@ description: >
   troubleshoot the ocr LLM provider (LLM timeouts, concurrency, thinking-disable).
   Enforces gateway-safe defaults (OCR_LLM_TIMEOUT=600, --timeout 30 locked,
   concurrency tuned to diff size), persists results as ocr sessions, and hands
-  findings to /skill:fix. Prefer this over the generic open-code-review skill.
+  findings to /skill:fix. Reviews run in the background (bg_run) or via a
+  subagent so they never block the foreground task. Prefer this over the
+  generic open-code-review skill.
 ---
 
 # ocr — company-adapted code review
@@ -110,6 +112,34 @@ OCR_LLM_TIMEOUT=300 ocr review --audience agent --format json -o <file> --timeou
 
 ## 4. Scenario routing
 
+### Run mode: background by default, never block the foreground
+
+A full review takes 15–30+ min (chapter 8 baselines). A foreground bash call
+freezes the session for the whole duration. Route by context:
+
+| Context | How to run |
+|---|---|
+| pi session (default) | `bg_run` background shell task. Continue the foreground conversation; handle results when the completion notification arrives. |
+| Findings should be verified/reported without loading this session (parallel work, peer handoff, context isolation) | Spawn a `delegate`/`worker` subagent (pi-subagents rules) whose task is: run the ocr command, then perform the chapter-5 verification and report findings grouped by severity. The subagent absorbs both the wait and the token-heavy verification. |
+| Foreground is fine | Only quick operations: `ocr session list/show/comments`, `ocr llm test`, `--preview`, config checks — seconds, not minutes. |
+
+Background invocation (pi):
+
+```
+bg_run: OCR_LLM_TIMEOUT=300 ocr review ... --format json -o <abs-path>.json
+```
+
+- `-o` must be an absolute path you can locate after the task ends; the
+  sessions dir (`ocr session list`) remains the source of truth either way.
+- One review at a time per repo: if the previous round is still running, let
+  it finish — its result covers the interim changes (same rule as the rolling
+  review in implement-spec-in-pipeline).
+- On the completion notification, run chapter 5 against the JSON. If the task
+  failed, feed the captured output into the chapter-8 troubleshooting table.
+- Rollback rule: if `ocr` itself keeps failing (auth, gateway timeouts), hand
+  the same diff to a `reviewer` subagent for a read-only review — the
+  review-runs-while-work-continues shape matters more than the engine.
+
 | User intent | Command |
 |---|---|
 | Review my changes / working copy | `ocr review` (staged + unstaged + untracked) |
@@ -123,6 +153,10 @@ never look for one; get the session id via `ocr session list` (chapter 7).
 
 ## 5. Result handling and the fix loop
 
+- When the review ran in the background or in a subagent (chapter 4), this
+  whole section runs at completion time — on the task notification for
+  `bg_run`, or as the subagent's report — not synchronously in the
+  dispatching turn.
 - **Verify every finding against the source before reporting** — LLM findings
   must never be relayed verbatim. Check each one against the actual code; the
   three failure classes to filter out: hallucinated (no such code path),
