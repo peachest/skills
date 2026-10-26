@@ -13,3 +13,4 @@
 | test-bash-guards.py | bash-guards hook fixtures — superseded by packages/pi-bash-guards golden fixture suite | 5 cases (01a1590a, 2026-10-20) | — | absorbed |
 | check-grafana-rooturl.sh | grafana root_url rendering (4 cases) | all green (01a07fc6, 2026-09-08) | never re-run after fix | dead |
 | plainlang-scan.py | bro skill 匹配分析复跑（大白话偏好 6 类信号 + 去噪排除 peer 派发文本）；支撑 AGENTS.md Output Rules 已覆盖、不装 bro 的结论 | 去噪后 dabaihua 56 / jieshi 121 / zhankai 104 / jiandan 57 / pushback 57（2026-10-26 本 session，1964 files / 30455 msgs） | 2026-10-26 | live |
+| extract-triage-mrs.py + triage-rounds-{collect,diffsize,analyze}.py | triage-mr 评审轮次衰减基线（59 MR/1221 findings：round1 49.8%→round4 累计 89%；TP% 42→86 单调升；churn r=0.576 才是强预测变量，diff 大小 r=0.165 弱） | triage-rounds-REPORT.md（peer-fix-loop-cap 2026-10-26，143 session/771 pull） | 2026-10-26 | live |

@@ -115,3 +115,13 @@
 - passCheck: `diff -rq ~/.agents/skills/<name>/ <source>/ | grep -v __pycache__` 为空；调用前 `<source>` 与 `~/.agents` 的脚本清单一致
 - 证据: peer triage 复盘（.agents 版无 verdict.py + 旧 pull 无 gate，session 卡住换脚本）；现状实证 diff 为空（2026-10-21 post-commit 重装链生效）
 - 出现: 2026-10-21 peer triage 复盘
+
+## P-012 评审轮次衰减基线：churn（非 diff 大小）是轮次强预测变量，支持单 finding 2 轮上限、不支持 MR 级封顶
+- 状态: absorbed-into-skill
+- 现象: 评审循环应设几轮没有数据依据，靠拍脑袋；曾有提案按 MR 级封顶 4 轮
+- 根因: 缺基线度量。2026-10-26 挖掘补齐（143 session/771 pull/59 MR/1221 findings，复跑脚本 recheck/extract-triage-mrs.py 等）：①数量收敛——新 findings 逐轮近似减半（403→181→78→59→25），round4 累计捕获 89%；②质量纯度收敛——TP 占比 42%→86% 单调升、FP 39%→0 单调降，后期轮次产出更少但更真（多为 fix 引入回归）；③强预测变量是 churn（commits r=0.576、pipelines r=0.667），diff 行数仅 r=0.165——轮次经验公式 ≈ max(2, min(4, ⌈commits÷3⌉))
+- 方案: 支持两个决策——单 finding 修复-复审 2 轮上限（fix/triage-mr SKILL.md hard rule，ac313fc）与数据一致；MR 级 4 轮封顶不被支持（round3-4 仍有约 17% 新发现产出），不写入流程，仅可作前置预估参考
+- 触发条件: 评审循环轮数设计/评审资源分配讨论
+- passCheck: recheck 脚本重跑可与基线（59 MR/1221 findings/round4=89%）对比漂移
+- 证据: peer-fix-loop-cap 01a178fa 挖掘（REPORT 收录 recheck/triage-rounds-REPORT.md）
+- 出现: 2026-10-26 loop-cap 落地时的数据支撑挖掘
