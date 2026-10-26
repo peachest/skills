@@ -15,6 +15,15 @@
 # New internal identifier surfaced in review → append to PATTERNS below.
 # Domain placeholder allowlist (must never match): gitlab.blue.example,
 # gitlab.red.example, harbor.example.com, internal.example.com, 203.0.113.x.
+#
+# Generalization placeholders (for sanitizing hits): use ONLY these forms —
+# they are pattern-clean by construction. Reusing any PATTERNS word inside a
+# placeholder (e.g. "<xpu-proj>-manager-example", "<smg-x>") re-triggers the scan.
+#   repo/project names  → <repo-a>, <repo-b>, <group>/<project>
+#   hosts/domains       → gitlab.example.com, harbor.example.com (allowlist)
+#   node/machine names  → <node>, <cluster>, dev machines
+#   paths               → <project-checkout>, the project checkout
+#   MR/issue refs       → internal MR example, an earlier internal MR
 set -uo pipefail
 
 GITLEAKS_CONFIG="${GITLEAKS_CONFIG:-$HOME/data/benchmark/config/gitleaks.toml}"
