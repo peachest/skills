@@ -115,18 +115,39 @@ validate_range() {
     # 0x1e 单遍记录协议已被两轮绕过（no59e3 伪 40-hex 头、no67 伪造终结+重同步），
     # 消息体可含任意字节时任何行内分隔符都不可信，故彻底放弃行解析（r11 no67）
     local shas
+    # 形态预检（r17 no169）：- 开头的值会被 git 当选项解析（如 --all 改变范围语义）
+    case "$base" in -*) log_error "base 不可用选项形态: $base"; return 1 ;; esac
+    case "$tip" in -*) log_error "tip 不可用选项形态: $tip"; return 1 ;; esac
     # 存在性预检（r15 no131）：先校验两端可解析，给精确错误并消除 crafted 值歧义
     git rev-parse --verify --quiet "$base^{commit}" >/dev/null || { log_error "base 不可解析为提交: $base"; return 1; }
     git rev-parse --verify --quiet "$tip^{commit}" >/dev/null || { log_error "tip 不可解析为提交: $tip"; return 1; }
     shas=$(git rev-list "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
-    # 空范围：tip 已含于 base（tip 为 base 祖先或相等，如 rebase 后旧 diff-base）是合法场景（WARN 不 fail），但需可见
-    [ -z "$shas" ] && { log_warn "EMPTY_RANGE: 范围 $base..$tip 为空（0 个提交被校验，本次兜底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }   # EMPTY_RANGE 稳定标记供 CI 机器识别（r15 no130）；兜底错字（r15 no129）
+    # 空范围（r17 no168·medium）：CI 接线的 diff-base..HEAD 在正常 MR 下必非空，空即
+    # base 误配，默认 fail-closed（exit 1）；人工调试的合法空范围（tip 已含于 base，
+    # 如 rebase 后旧 diff-base）用 COMMIT_CI_ALLOW_EMPTY=1 显式豁免
+    if [ -z "$shas" ]; then
+        empty_range=1
+        if [ "${COMMIT_CI_ALLOW_EMPTY:-0}" = "1" ]; then
+            log_warn "EMPTY_RANGE: 范围 $base..$tip 为空（0 个提交被校验）——COMMIT_CI_ALLOW_EMPTY=1 已豁免"
+            return 0
+        fi
+        log_error "EMPTY_RANGE: 范围 $base..$tip 为空（0 个提交被校验，兜底未生效）——确认 base/tip 是否错配（正常 MR 非空）；人工调试合法空范围请设 COMMIT_CI_ALLOW_EMPTY=1"
+        return 1
+    fi
 
     local sha body first_line
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
     [ "$(printf '%s\n' "$shas" | wc -l)" -gt 200 ] && log_warn "范围 $base..$tip 提交数超过 200——确认 base 是否错配（校验耗时会线性增长）"
     while IFS= read -r sha; do
+        # Merge 豁免反伪造（r17 no170）：真 merge commit 恒有 >=2 parent；手写
+        # "Merge branch 'x'" subject 的普通提交在此被拒（L2 有 sha 可查，L1 维持 subject 口径）
+        case "$(git log -1 --format=%s "$sha")" in
+            "Merge branch "*|"Merge branches "*|"Merge tag "*|"Merge tags "*|"Merge commit "*|"Merge remote-tracking "*|"Merge pull request "*)
+                parents=$(git rev-list --parents -n1 "$sha" | wc -w)
+                [ "$parents" -lt 3 ] && { log_error "$sha 手写 Merge 主题但非 merge commit（parent 数 $((parents-1))）——请改写为 conventional 格式"; return 1; }
+                ;;
+        esac
         body=$(git log -1 --format=%B "$sha") \
             || { log_error "commit ${sha:0:8}: 无法读取提交信息"; bad=1; continue; }
         # 消息含 0x1e 一律拒绝（L1 钩子同口径；攻击者可借此伪造分隔符）

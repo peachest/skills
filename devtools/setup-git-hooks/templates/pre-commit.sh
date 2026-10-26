@@ -12,10 +12,21 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 
 fail=0
 
+# staged 内容先落临时文件再检查（r16 no165/no167）：命令替换剥尾换行、$( ) 丢 NUL、
+# 且 git show 失败在管道/进程替换里会被静默吞掉（fail-open）——两条链路统一为
+# fail-loud：读取失败即拦截，不再依赖 diff 双空判等
+fmt_tmp=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
+trap 'rm -f "$fmt_tmp"' EXIT
+
 # 1. staged Go 文件 → gofmt 检查
 while IFS= read -r f; do
     [ -z "$f" ] && continue
-    if ! diff -q <(git show ":$f" | tr -d '\n') <(git show ":$f" | gofmt | tr -d '\n') >/dev/null 2>&1; then
+    if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
+        log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
+        fail=1
+        continue
+    fi
+    if ! gofmt "$fmt_tmp" > "$fmt_tmp.fmt" 2>/dev/null || ! diff -q "$fmt_tmp" "$fmt_tmp.fmt" >/dev/null 2>&1; then
         log_error "gofmt 不通过: $f"
         fail=1
     fi
@@ -24,14 +35,13 @@ done < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
 # 2. staged C 文件 → clang-format 检查
 while IFS= read -r f; do
     [ -z "$f" ] && continue
-    # 先取内容再喂 clang-format（r16 no153）：git show 并入管道后 pipefail 会把
-    # 索引竞态（show 失败、clang-format 收空输入退出 0）误报为格式不通过
-    if ! content=$(git show ":$f" 2>/dev/null); then
+    # 同 Go 链路口径（r16 no167）：失败 fail-loud；临时文件保字节原样（r16 no165）
+    if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
         fail=1
         continue
     fi
-    if ! printf '%s' "$content" | clang-format --dry-run --Werror --assume-filename="$f" - >/dev/null 2>&1; then
+    if ! clang-format --dry-run --Werror --assume-filename="$f" "$fmt_tmp" >/dev/null 2>&1; then
         log_error "clang-format 不通过: $f"
         fail=1
     fi

@@ -4,8 +4,10 @@
 # 配置写 clone 级共享配置——配一次，主检出与全部 worktree 同时生效。
 # 撤销：git config --unset core.hooksPath
 # 信任模型（r15 no134）：hook 内容随检出分支变化——检出不受信分支（外部 PR/fork）后
-# 其自带钩子会在下次 commit/push 自动执行。opt-out：WT_NO_HOOKS=1（含本脚本与 wt
-# pre-start，make setup 亦透传）；详见 README "Git hooks" 一节
+# 其自带钩子会在下次 commit/push 自动执行。WT_NO_HOOKS=1 仅为安装开关（含本脚本、
+# wt pre-start、make setup 透传），不影响已写入的 core.hooksPath——停用已装钩子需
+# git config --unset core.hooksPath；单次跳过校验用 --no-verify（r17 no161）。
+# 详见 README "Git hooks" 一节
 # 最低 git 版本（r16 no149）：相对 core.hooksPath 按各 worktree 根解析是本方案前提，
 # 以 CI 镜像 git 版本为实测基线；--porcelain 逐块解析在更旧版本上行为未定义
 set -euo pipefail
@@ -13,7 +15,7 @@ set -euo pipefail
 # kill-switch（r16 no150）：与 wt pre-start 同口径（仅字面 1），三条安装路径语义统一
 [ "${WT_NO_HOOKS:-}" = "1" ] && { echo "提示: WT_NO_HOOKS=1，跳过钩子安装" >&2; exit 0; }
 
-root="$(git rev-parse --show-toplevel)"
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "错误: 当前目录不在 git 工作树内（bare 仓/无工作树），钩子安装不适用" >&2; exit 1; }   # 可读诊断替代 git 原生 fatal（r17 no162）
 cd "$root"
 
 HOOKS_DIR="tools/git-hooks"   # 必须相对路径：core.hooksPath 相对值按各 worktree 根解析，
@@ -25,7 +27,10 @@ case "$HOOKS_DIR" in /*) echo "错误: HOOKS_DIR 必须为相对路径（见上�
 # 真实错误（hooksPath 写失败）才 exit 1
 [ -d "$HOOKS_DIR" ] || { echo "提示: $HOOKS_DIR 不存在（旧分支无钩子目录属预期），跳过安装" >&2; exit 0; }
 
-# 先授权钩子文件再写任何配置：任何失败都不改动 hooksPath（原子性，r15 no133）——
+# 先授权钩子文件再写任何配置：chmod 失败不改动 hooksPath（r15 no133）。已知部分
+# 原子性边界（r17 no163）：迁移清理先于 clone 级写入执行，后者失败时已清除的
+# worktree 级值仅能按 stdout 记录手工恢复（清理提示带原值，可接受）
+
 # 否则 chmod 失败后配置已落盘，git 会静默跳过无执行位的钩子（检查反而被关闭），
 # 且提前退出会短路末尾的聚合诊断报告。保留 chmod 错误输出便于诊断（只读挂载/EACCES）
 # 遍历目录（钩子目录即事实源，新增钩子自动纳入）；非钩子文件跳过。
@@ -110,8 +115,7 @@ check_wt() {  # $1 = worktree 路径：校验实际生效值（悬空跳过并�
         return 1
     fi
 }
-wt_mismatch=0
-each_wt check_wt
+each_wt check_wt   # wt_mismatch 直取聚合值（原 0 初始化为死赋值，r17 no164）
 wt_mismatch=$CALLBACK_FAILED   # 共享遍历器的失败聚合（r12 no89）
 CALLBACK_FAILED=0
 # 按行解析无法表示含换行的路径（git ≥2.36 才有 --porcelain -z）：此类极端路径不受支持（已文档化）

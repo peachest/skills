@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 HDIR="$PWD"                    # hooks 目录绝对路径（后续测试段会 cd 走）
 HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
-pass=0; fail=0
+pass=0; fail=0; skipped=0   # skipped：缺工具链的 SKIP 用例计数（r17 no174）
 T=$(mktemp -d) || { echo "FAIL: mktemp -d 失败"; exit 1; }
 MSG=$(mktemp) || { echo "FAIL: mktemp 失败"; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
@@ -40,6 +40,11 @@ t 1 "正文含 Merge 行不豁免"    $'updated stuff\n\nMerge the config before
 t 1 "空 subject 拦截"          $'\n'
 # 重复 Signed-off-by
 t 1 "重复 signoff 拦截"        $'feat(x): ok\n\nSigned-off-by: A <a@t>\nSigned-off-by: A <a@t>\n'
+# 归一化变体判重（r17 no171）：键大小写不敏感、多空格折叠、无空格变体；值大小写敏感
+t 1 "signoff 键大小写变体"     $'feat(x): ok\n\nSigned-off-by: A <a@t>\nsigned-off-by: A <a@t>\n'
+t 1 "signoff 多空格折叠"       $'feat(x): ok\n\nSigned-off-by:  A <a@t>\nSigned-off-by: A <a@t>\n'
+t 1 "signoff 无空格变体"       $'feat(x): ok\n\nSigned-off-by:A <a@t>\nSigned-off-by: A <a@t>\n'
+t 0 "不同签署人不误判"          $'feat(x): ok\n\nSigned-off-by: A <a@t>\nSigned-off-by: B <b@t>\n'
 t 0 "单个 signoff 通过"        $'feat(x): ok\n\nSigned-off-by: A <a@t>\n'
 # 前缀（fork 语义，对副本临时开启）
 sed 's/^COMMIT_PREFIX=""/COMMIT_PREFIX="[TW]"/' commit-msg > "$T/commit-msg"
@@ -71,9 +76,11 @@ GOOD=$(git rev-list --all --grep="feat: good" -n1)   # 按 subject 定位，不�
 [ -n "$GOOD" ] || { echo "FAIL: GOOD 定位失败（--grep 落空，后续断言无意义）"; exit 1; }   # r8 no cb55
 bash "$HOOK" --ci "$GOOD~1" "$GOOD" >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 合法 commit 应过"; }
-# --ci 空范围（rebase 后 diff-base 含于 tip 的合法场景，期望 0）
+# --ci 空范围：r17 no168 起 CI 默认 fail-closed；人工调试合法空范围需显式豁免
 bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
-[ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 空范围应放行"; }
+[ $? != 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 空范围应默认拒绝（r17 no168）"; }
+COMMIT_CI_ALLOW_EMPTY=1 bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
+[ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 空范围豁免后应放行"; }
 # fail-closed：不可达范围
 bash "$HOOK" --ci 0000000000000000000000000000000000000000 HEAD >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: fail-closed 不可达范围"; }
@@ -93,8 +100,11 @@ out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn x' _ "
 out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>&1 >/dev/null)
 [[ -z "$out_w" && "$out_e" == *"[WARN]"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr 或输出非 log_warn（r13 no108）"; }
 # ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
-out=$(NO_COLOR=1 bash -c "source \"$T/common.sh\" 2>/dev/null; log_warn \$(printf 'x\\033[31my')" 2>&1)
+out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\033[31my')" 2>&1)   # 传参形式（r17 no173 同 no142）
 case "$out" in *$'\033'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 ESC" ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: ESC 用例输出异常: $out" ;; esac   # [ 转义（r15 no141：未闭合 [ 按字面是冷门巧合语义）
+# UTF-8 C1 定点剥除（r17 no158）：8 位 CSI/OSC 起始符不得透传
+out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xc2\x9d')" 2>&1)
+case "$out" in *$'\xc2\x9b'*|*$'\xc2\x9d'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 UTF-8 C1" ;; *x[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: C1 用例输出异常" ;; esac
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
@@ -150,12 +160,31 @@ IT=$(mktemp -d) && git init -q "$IT" \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 空仓冒烟失败"; }
 # 失败路径（r13 no105）：未 gofmt 的 .go staged → gofmt 拦截 + fail 聚合 → exit 1
 # （同时回归 set -e 与循环体交互、fail 聚合两处语义）
-command -v gofmt >/dev/null || { echo "FAIL: gofmt 未安装，gofmt 拦截用例前提不成立（r16 no155）"; exit 1; }
-printf 'package x\nfunc  y() {}\n' > "$IT/bad.go"
-git -C "$IT" add bad.go || { echo "FAIL: git add 环境准备失败"; exit 1; }
-(cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
-[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦未 gofmt 文件"; }
+if command -v gofmt >/dev/null; then
+    printf 'package x\nfunc  y() {}\n' > "$IT/bad.go"
+    git -C "$IT" add bad.go || { echo "FAIL: git add 环境准备失败"; exit 1; }
+    (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
+    [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦未 gofmt 文件"; }
+else
+    echo "SKIP: gofmt 未安装，跳过 gofmt 拦截用例（r17 no174：SKIP 不阻塞无 Go 环境的 make selftest）"
+    skipped=$((skipped+1))
+fi
 rm -rf "$IT"
+# clang-format 拦截路径（r16 no166·medium）：未格式化 .c staged → 拦截 + "无法读取
+# staged 内容"分支同链路（r16 no153/no165）
+if command -v clang-format >/dev/null; then
+    IT=$(mktemp -d) && git init -q "$IT" \
+        && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
+        || { echo "FAIL: clang-format 用例环境准备失败"; exit 1; }
+    printf 'int main(){return 0;}\n' > "$IT/bad.c"
+    git -C "$IT" add bad.c || { echo "FAIL: clang-format 用例 git add 失败"; exit 1; }
+    (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
+    [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦未 clang-format 文件"; }
+    rm -rf "$IT"
+else
+    echo "SKIP: clang-format 未安装，跳过 clang-format 拦截用例（r17 no174 同口径）"
+    skipped=$((skipped+1))
+fi
 # pre-push 冒烟（r11 no91）：空仓 + </dev/null stdin——验证可解析执行、无 set -u 未绑定；
 # 危险路径（worktree/make/网络）仅在非删除推送且有 go 时触发，空仓 stdin 空即跳过
 IT=$(mktemp -d) && git init -q "$IT" \
@@ -184,6 +213,8 @@ rm -rf "$IT5"
 #   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
 # 提取前提（r14 no120）：hooks 行为单行单值、无行尾注释；内层不含 TOML 转义（r14 no112
 # 已重写 hooks 行避免 \"），提取后须含 install.sh 关键字方可作为有效命令串
+hooks_lines=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | wc -l)
+[ "$hooks_lines" = "1" ] || { echo "FAIL: wt.toml 存在 $hooks_lines 行 hooks 键（提取契约定为单行，r17 no175）"; exit 1; }
 HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
 [ -n "$HOOKS_WRAP" ] && case "$HOOKS_WRAP" in *install.sh*) ;; *) echo "FAIL: 提取的 hooks 包装命令非法: $HOOKS_WRAP"; exit 1 ;; esac \
     || { echo "FAIL: 未从 wt.toml 提取 hooks 包装命令"; exit 1; }
@@ -243,5 +274,5 @@ EVIL=$(git -C "$IT3" rev-parse HEAD)
 (cd "$IT3" && bash "$HDIR/commit-msg" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 伪造终止符重同步应拒"; }
 rm -rf "$IT3"
-echo "selftest: $pass pass, $fail fail"
+echo "selftest: $pass pass, $fail fail${skipped:+, $skipped skipped}"
 exit $fail

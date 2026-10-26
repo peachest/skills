@@ -8,7 +8,7 @@
 # FORCE_COLOR 显式开色（供 selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；
 # 0/false 视为未开，r9 no 6e4b/r12 no77 社区约定）
 force_color_on=false
-case "${FORCE_COLOR:-}" in ""|0|false) ;; *) force_color_on=true ;; esac
+case "${FORCE_COLOR:-}" in ""|0|[Ff]alse|[Nn]o|[Oo][Ff][Ff]) ;; *) force_color_on=true ;; esac   # 关断值大小写不敏感（r17 no160；不用 ${,,}——macOS bash 3.2）
 if [[ -z "${NO_COLOR:-}" ]] && { { [[ -t 1 && -t 2 ]] && [[ "${TERM:-}" != dumb ]]; } || $force_color_on; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
@@ -28,10 +28,20 @@ fi
 # 不能按字节区间 0x80-0x9F 删（会破坏中文等合法 UTF-8 续字节）。本层是 pre-commit
 # 文件名回显等外部输入的唯一防线。|| true 吞写失败：日志故障不改变钩子判定（r13 no100）
 sanitize_log() {
+    local IFS=' '   # 与包装层一致："$*" 拼接受调用方 IFS 动态作用域影响（r17 no159）
     local m
     m=$(printf '%s' "$*" | tr -d '\000-\010\013\014\015\016-\037\177') || true
-    m=${m//$'\xc2\x9b'/}   # UTF-8 U+009B = 8 位 CSI
-    m=${m//$'\xc2\x9d'/}   # UTF-8 U+009D = 8 位 OSC
+    # UTF-8 编码的 C1（C2 80–9F）中可承载/扰动终端序列的定点剥除（r16 no143/r17 no157）：
+    # CSI/OSC/DCS/SOS/PM/APC 起始符 + NEL/RI 行为扰动符；均固定两字节序列，UTF-8 自
+    # 同步保证定点删除不误伤多字节字符
+    m=${m//$'\xc2\x85'/}   # NEL
+    m=${m//$'\xc2\x8d'/}   # RI
+    m=${m//$'\xc2\x90'/}   # DCS
+    m=${m//$'\xc2\x98'/}   # SOS
+    m=${m//$'\xc2\x9b'/}   # CSI
+    m=${m//$'\xc2\x9d'/}   # OSC
+    m=${m//$'\xc2\x9e'/}   # PM
+    m=${m//$'\xc2\x9f'/}   # APC
     printf '%s' "$m"
 }
 log_info()  { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[INFO] ${GREEN}${m}${NC}" || true; }
