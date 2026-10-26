@@ -1,0 +1,22 @@
+# L2 服务端 commit 格式兜底 job（.gitlab-ci.yml 片段）
+# 与本地 tools/git-hooks/commit-msg 同一实现（--ci 模式），口径天然一致。
+# 堵住的缺口：未装本地钩子的检出、--no-verify。
+# 信任边界：本 job 定义来自来源分支自带配置，push 者可自行禁用——
+# 是质量兜底而非安全边界；需服务端强约束用 GitLab Push Rules（Premium 功能）。
+#
+# 用法：合入项目 .gitlab-ci.yml 的 stages 最前（.pre），脚本路径按仓调整。
+
+tw-commit-check:
+  stage: .pre
+  image: <自带 git+bash 的镜像>   # 脚本依赖 bash（数组/herestring），alpine/git 不含 bash
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+  script:
+    # 范围：MR 用 diff-base，直推用 CI_COMMIT_BEFORE_SHA；都缺省时跳过（存量豁免）
+    - |
+      BASE="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-${CI_COMMIT_BEFORE_SHA:-}}"
+      if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+        echo "无 diff base（存量历史豁免），跳过"; exit 0
+      fi
+      bash tools/git-hooks/commit-msg --ci "$BASE" "$CI_COMMIT_SHA"
