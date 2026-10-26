@@ -124,6 +124,7 @@ validate_range() {
         # body 行末恰为 0x1e 的伪终结（r7 no8）由尾部兜底捕获：伪终结后后续内容累积在 body/sha 残留非空
         if [[ "$line" == $'\t\x1e' || "$line" == $'\x1e' ]]; then
             body="${body%$'\x1e'}"
+            body="${body%$'\t'}"   # 剥离 %B 尾换行后残留的分隔符 tab（空 %B 单行记录形态，r10 no 2698）
             # 消息内容内嵌 0x1e（解析终止符）会伪造记录对齐——内容级拒绝
             if [[ "$body" == *$'\x1e'* ]]; then
                 log_error "commit ${sha:0:8} 提交信息包含非法控制字符 0x1e"
@@ -134,7 +135,7 @@ validate_range() {
             first_line="${body%%$'\n'*}"
             # 只去尾随空白与 \r：不裁前导空白——" Merge branch x"/" feat: x" 縣空格
             # 属格式违规，与 CI 拒绝口径一致（r7 no11）
-            first_line=$(printf '%s' "$first_line" | sed 's/\r$//;s/[[:space:]]*$//')
+            first_line=$(printf '%s' "$first_line" | sed 's/[[:space:]]*$//')   # [[:space:]] 含 \r，勿单写 \r$（BSD sed 字面 r，r10 no c4be）
             if ! validate_one "$first_line" "$body"; then
                 log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\013\016-\037')"
                 bad=1
@@ -169,7 +170,7 @@ case "${1:-}" in
         # 不裁前导空白（r7 no11，同 --ci 口径）。钩子拿到的是 git cleanup（剥离注释行/
         # 首尾空行）之前的文件——先模拟 cleanup=strip 再取首行，否则模板块首行空行/注释误拦（r9 no 360f）
         msg_clean=$(sed '/^#/d' "$1" | sed '/./,$!d')
-        first_line=$(printf '%s\n' "$msg_clean" | head -n1 | sed 's/\r$//;s/[[:space:]]*$//')
+        first_line=$(printf '%s\n' "$msg_clean" | head -n1 | sed 's/[[:space:]]*$//')
         validate_one "$first_line" "$msg_clean" || exit 1
         log_info "提交信息格式正确。"
         ;;

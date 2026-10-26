@@ -7,8 +7,8 @@ cd "$(dirname "$0")"
 HDIR="$PWD"                    # hooks 目录绝对路径（后续测试段会 cd 走）
 HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
 pass=0; fail=0
-T=$(mktemp -d)
-MSG=$(mktemp)
+T=$(mktemp -d) || { echo "FAIL: mktemp -d 失败"; exit 1; }
+MSG=$(mktemp) || { echo "FAIL: mktemp 失败"; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
 trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${WT:-}"' EXIT
 cp commit-msg common.sh "$T/" || { echo "FAIL: 副本复制失败"; exit 1; }
@@ -102,13 +102,20 @@ IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" "$IT2/
     || { echo "FAIL: 迁移用例环境准备失败"; exit 1; }
 git -C "$IT2" config core.hooksPath "$IT2/.hooks"   # 种子提交隔离外部钩子（r8 no4bbd，同 $D 段口径）
 git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init" || { echo "FAIL: 迁移用例 seed 失败"; exit 1; }
-git -C "$IT2" config extensions.worktreeConfig true
+git -C "$IT2" config extensions.worktreeConfig true || { echo "FAIL: extensions.worktreeConfig 开启失败"; exit 1; }
 WT=$(mktemp -d)
 git -C "$IT2" worktree add -q -b tmp-mig-wt "$WT" HEAD >/dev/null 2>&1 || { echo "FAIL: 迁移用例 worktree 创建失败"; exit 1; }
-git -C "$WT" config --worktree core.hooksPath "/stale/hooks"   # 模拟旧 install-hooks.sh 残留
+git -C "$WT" config --worktree core.hooksPath "/stale/hooks" || { echo "FAIL: worktree 级 hooksPath 写入失败（断言会空转）"; exit 1; }   # 模拟旧 install-hooks.sh 残留
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     || { fail=$((fail+1)); echo "FAIL: 迁移用例 install.sh 非零退出（r8 no34ab）"; }
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install.sh 未清除 worktree 级 hooksPath"; }
+# fail-loud 契约用例（r10 no cf09）：worktree 级同键双值使 --unset 失败 → install.sh 应 exit 1。
+# 注意首次 install 已把残留清空，需连加两个值才让 --unset 进入多值必败分支
+git -C "$WT" config --worktree --add core.hooksPath /stale/hooks
+git -C "$WT" config --worktree --add core.hooksPath /stale/hooks   # 同键第二个值 → --unset 必败
+(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 清理失败应 exit 1"; }
+git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
 rm -rf "$IT2" "$WT"
 # 伪造终止符重同步（r8 no59e3）：body 内嵌独立 \t\x1e 行把重复 signoff 拆到两个伪记录
 # 里逃过单记录查重——记录头 40-hex 校验应 fail-closed。
@@ -120,9 +127,10 @@ git -C "$IT3" config core.hooksPath "$IT3/.hooks" && mkdir -p "$IT3/.hooks"
 git -C "$IT3" config user.name t && git -C "$IT3" config user.email t@t
 git -C "$IT3" commit -q --allow-empty -m "feat: initial" || { echo "FAIL: 重同步用例 initial seed 失败"; exit 1; }
 printf 'feat: x\nSigned-off-by: A <a@t>\n\t\x1e\nfeat: y\nSigned-off-by: A <a@t>\n' > "$IT3/forged.msg"
-git -C "$IT3" commit -q --allow-empty --no-verify -F "$IT3/forged.msg" || { echo "FAIL: 重同步用例 seed 失败"; exit 1; }
+git -C "$IT3" commit -q --allow-empty --no-verify -F "$IT3/forged.msg" || { echo "FAIL: 重同步用例 forged seed 失败"; exit 1; }
 EVIL=$(git -C "$IT3" rev-parse HEAD)
-bash "$HDIR/commit-msg" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1
+# 在 IT3 内执行：--ci 的 git log 按 cwd 解析仓，跨仓调用会读错仓 → fail-closed 恒 1、断言空转（r10 no b1e3）
+(cd "$IT3" && bash "$HDIR/commit-msg" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 伪造终止符重同步应拒"; }
 rm -rf "$IT3"
 echo "selftest: $pass pass, $fail fail"

@@ -1,7 +1,8 @@
 #!/bin/bash
 # pre-commit: 秒级检查，只看 staged 内容（git show :file，而非工作区文件，
 # 保证 git add -p 部分暂存时检查的就是将要提交的内容）。
-# 重检查（lint/test）在 pre-push，见 tools/git-hooks/pre-push。
+# 重检查（lint/test）在 pre-push；commit 信息格式校验在 commit-msg——本文件不重复。
+# 凭证扫描若需要，装 gitleaks 类工具后在此追加（本仓用 skills 仓的 gitleaks pre-commit，见 AGENTS.md）。
 
 set -euo pipefail   # 入口自行声明（common.sh 不带副作用）；本钩子全部检查为 if/exit 结构，-e 可安全兜住未来新增检查的未防护失败
 SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"

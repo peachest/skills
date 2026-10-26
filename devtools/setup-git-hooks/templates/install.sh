@@ -65,9 +65,13 @@ while IFS= read -r line; do
     case "$line" in
         worktree\ *) wt_dir="${line#worktree }" ;;
         bare)        wt_dir="" ;;
-        "")          if [ -n "$wt_dir" ] && [ "$(git -C "$wt_dir" config core.hooksPath 2>/dev/null)" != "$HOOKS_DIR" ]; then
-                         echo "警告: $wt_dir 的 hooksPath 实际未指向 $HOOKS_DIR，该 worktree 钩子不生效" >&2
-                         wt_mismatch=1
+        "")          if [ -n "$wt_dir" ]; then
+                         if [ ! -d "$wt_dir" ]; then
+                             echo "警告: $wt_dir 已不存在（悬空 worktree 元数据），跳过校验，建议 git worktree prune" >&2   # r10 no e1a4
+                         elif [ "$(git -C "$wt_dir" config core.hooksPath 2>/dev/null)" != "$HOOKS_DIR" ]; then
+                             echo "警告: $wt_dir 的 hooksPath 实际未指向 $HOOKS_DIR，该 worktree 钩子不生效" >&2
+                             wt_mismatch=1
+                         fi
                      fi
                      wt_dir="" ;;
     esac
