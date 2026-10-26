@@ -165,8 +165,54 @@ confirm with the user is always clean.
 
 9. **Report** the MR URL back to the user.
 
+10. **MR 闭环（CI 订阅 + 评审循环）** — confirm continuation before starting.
+    After step 9, ask the user whether to run the closure loop for this MR
+    (e.g. "要继续盯 CI 并处理评审意见吗？"). The confirm discipline is the same
+    as step 8: only an explicit user input in this session counts — a direct
+    instruction or dispatch text covering *this MR's* 闭环 (盯 CI / CI 红了修复 /
+    拉 triage 意见) satisfies it; silence or an unrelated MR's instruction does
+    not. Declined → stop at the MR URL report. Once confirmed:
+
+    a. **Subscribe to CI completion** — read `/skill:pi-events-daemon` and
+       subscribe in the template form:
+       `subscribe({url: "<MR page URL>", opts: {template: "gitlab-pipeline", once: true}})`
+       — daemon wakes this session at a terminal pipeline state (passed/failed);
+       no hand-rolled polling. One subscription covers one pipeline run: after
+       any fix push, subscribe again for the new pipeline.
+
+    b. **CI red → fix first.** Read the failed job's log (trace retrieval via
+       the glab-api skill), root-cause, fix on the same feature branch, push.
+       Route the diagnosis by failure type to the existing skill — do not
+       improvise: security-stage jobs (trivy image scan / SCAP / OSCA
+       threshold) → `/skill:gitlab-security-job`; ocr-review jobs and GitLab
+       CI job stall/timeout/failure analysis → `/skill:diagnose-ocr-ci`;
+       anything else → the project's normal debugging flow. The loop
+       confirmation covers these CI-fix re-pushes (same branch, fixing the
+       reported failure); a change beyond that scope returns to step 8's
+       confirmation. Then re-subscribe (a) for the new pipeline.
+
+    c. **CI green → review loop.** Read `/skill:triage-mr` and run its pull
+       step (CI is at a terminal state, so the pipeline gate passes). Before
+       acting on the findings, run `/skill:challenge-audit` on the pulled
+       report — audit the review's quality first (invented findings,
+       misclassifications); findings the audit kills are recorded through
+       triage-mr's verdict semantics as rejected, not fixed. Surviving
+       findings go through `/skill:fix` in its triage mode (verdict →
+       `verdict.py` per finding → fix the ✅ TPs). Then complete triage-mr's
+       post + resolve half: post the round's verdicts (post is not CI-gated —
+       post immediately after each verdict, per triage-mr's 追尾规则), fix what
+       the verdicts demand, push, and let triage-mr's re-pull (its Step 5)
+       consume the OCR bot's new review round. Keep the pull → audit-informed
+       fix → post → verify cycle until triage-mr's verify gate exits 0.
+
+    d. **Close** — report the final state: CI outcome, findings triaged
+       (fixed/FP/resolved counts), remaining open threads if the gate is
+       intentionally red (⚠️ error-class rounds stay red by design).
+
 ## Non-goals
 
-- No verify gate — the development phase owns verification.
+- No verify gate — the development phase owns verification. Step 10's closure
+  loop owns *post-creation* CI and review closure only, not the development
+  phase's own verification.
 - No mechanical predicates (long-branch lists, candidate caps) — your judgment
   plus the confirmations above are the design.
