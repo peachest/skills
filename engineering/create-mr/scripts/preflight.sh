@@ -78,8 +78,12 @@ case $platform in
   gh)
     gh api user --jq .login 2>/dev/null || echo "gh auth 未就绪" ;;
   glab)
-    users=$(glab auth status 2>&1 | sed -n 's/.*[Ll]ogged in as \([^ ]*\).*/\1/p' | sort -u)
-    [ -n "$users" ] && echo "$users" || echo "glab auth 未就绪" ;;
+    # --hostname 钉住所选 remote 的 host（多宿主时全局 status 会被无关 host 的
+    # 401 拖垮）；sed 兼容 "Logged in as USER" 与 "Logged in to HOST as USER"
+    # 两种输出格式（glab 1.114.0 是后者，旧正则恒不匹配 → 41/41 假阴性）
+    users=$(glab auth status --hostname "$host" 2>&1 \
+      | sed -n 's/.*[Ll]ogged in \(to [^ ]*\)\{0,1\} *as \([^ ]*\).*/\2/p' | sort -u)
+    [ -n "$users" ] && echo "$users" || echo "glab auth 未就绪 (host=$host)" ;;
 esac
 
 # --- EXISTING_MR (API-first，404 甄别) -------------------------------------

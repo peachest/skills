@@ -51,11 +51,18 @@ norm_url() {  # keep in sync with preflight.sh
   esac
 }
 
-web=$(norm_url "$(git remote get-url "$remote")")
+# --remote 需是配置名；传 URL 时可工作（push 不能带 -u 设 upstream，噪音修复）
+web=$(norm_url "$(git remote get-url "$remote" 2>/dev/null || echo "$remote")")
+if git remote get-url "$remote" >/dev/null 2>&1; then
+  push_u=-u
+else
+  push_u=
+  echo "NOTE: --remote '$remote' 不是本仓配置的 remote 名（按 URL 处理，push 不设 upstream）" >&2
+fi
 case "$web" in *github.com*) platform=gh ;; *) platform=glab ;; esac
 
 if [ "$dry" = yes ]; then
-  echo "DRY: git push -u $remote $source  $([ $push = no ] && echo '(skipped: --no-push)')"
+  echo "DRY: git push $push_u $remote $source  $([ $push = no ] && echo '(skipped: --no-push)')"
   case $platform in
     gh)   echo "DRY: gh pr create --head $source --base $target --title '$title' --body-file $desc --draft ${assignee:+--assignee $assignee}" ;;
     glab) echo "DRY: glab mr create -R $web --source-branch $source --target-branch $target --title '$title' --description \"\$(cat $desc)\" --draft --yes ${assignee:+--assignee $assignee}" ;;
@@ -64,7 +71,7 @@ if [ "$dry" = yes ]; then
 fi
 
 if [ "$push" = yes ]; then
-  git push -u "$remote" "$source"
+  git push $push_u "$remote" "$source"
 fi
 
 # create with one retry on transient failure (5xx / empty output).
