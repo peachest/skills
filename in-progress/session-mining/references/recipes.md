@@ -55,6 +55,23 @@ reads for a 237-line transcript). `jq -r '.recordType+" / "+(.role//"-")' |
 sort | uniq -c` probes structure when bash exists. (researcher-transcript
 recovery)
 
+## Cross-session tool-ROI mining (skill → real calls → remote ground truth)
+
+For "how often is skill X actually used and does it work", three stages, each
+filtering the previous: ① script-route candidates (find-skill-sessions by
+injection marker) → ② tool-call confirmation (find-tool-calls on the skill's
+key script; only sessions that really invoked it count) → ③ remote ground
+truth (extract the object ids the script was called with — MR iids, ticket
+numbers — then query the platform API for per-object history: discussions,
+pipelines, head_sha groupings = rounds). Attribution pitfalls: iid collides
+across projects (vote by session cwd→git remote, log the fallback-resolved
+ones); definition drift — mirror the script's own canonical finding filter,
+not your idealized one; old-era entries lack current fields (priority headers)
+and land in an unanswered bucket instead of being dropped silently. Baseline
+yield: 5284 sessions → 155 candidates → 143 real users → 59 objects / 1221
+findings. (triage-mr review-rounds baseline, recheck/extract-triage-mrs.py
+family + wiki triage-mr P-012)
+
 ## Recovery-chain diff
 
 For "why does X fail": dump with **and** without `--errors-only`, per failure
