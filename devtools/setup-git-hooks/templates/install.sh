@@ -3,6 +3,9 @@
 # hook 内容随分支文件走（旧分支没有本目录时 hook 自动不生效，fail-open），
 # 配置写 clone 级共享配置——配一次，主检出与全部 worktree 同时生效。
 # 撤销：git config --unset core.hooksPath
+# 信任模型（r15 no134，接入文档须同步声明）：hook 内容随检出分支变化——检出不受信
+# 分支（外部 PR/fork）后其自带钩子会在下次 commit/push 自动执行。opt-out：WT_NO_HOOKS=1
+# 仅拦截 wt pre-start；make setup 无条件安装，不可信环境请勿运行任一安装路径
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
@@ -16,6 +19,21 @@ case "$HOOKS_DIR" in /*) echo "错误: HOOKS_DIR 必须为相对路径（见上�
 # 目录缺失在旧分支是 fail-open 设计内场景（exit 0 + 提示）；
 # 真实错误（hooksPath 写失败）才 exit 1
 [ -d "$HOOKS_DIR" ] || { echo "提示: $HOOKS_DIR 不存在（旧分支无钩子目录属预期），跳过安装" >&2; exit 0; }
+
+# 先授权钩子文件再写任何配置：任何失败都不改动 hooksPath（原子性，r15 no133）——
+# 否则 chmod 失败后配置已落盘，git 会静默跳过无执行位的钩子（检查反而被关闭），
+# 且提前退出会短路末尾的聚合诊断报告。保留 chmod 错误输出便于诊断（只读挂载/EACCES）
+# 遍历目录（钩子目录即事实源，新增钩子自动纳入）；非钩子文件跳过。
+# git 只按精确文件名识别钩子（均无扩展名），*.sh 必为辅助脚本——排除即不变式，
+# 新增辅助脚本无需维护清单
+for hook in "$HOOKS_DIR"/*; do
+    [ -f "$hook" ] || continue   # 跳过子目录（glob 字面量已被上方 -d 拦，防御空目录场景）
+    case "${hook##*/}" in
+        *.sh|*.md) continue ;;   # *.sh 辅助脚本；*.md 文档（r9 no 6b3a：文档不应被 chmod +x）
+    esac
+    chmod +x "$hook" || { echo "错误: chmod +x $hook 失败，钩子不会生效" >&2; exit 1; }   # 真实错误 exit 1（r13 no103）
+    [ -x "$hook" ] || { echo "错误: $hook 不可执行，该钩子不会生效" >&2; exit 1; }
+done
 
 if old="$(git config --show-origin --get core.hooksPath 2>/dev/null)"; then
     origin="${old%%$'\t'*}"; old="${old#*$'\t'}"
@@ -55,9 +73,8 @@ each_wt() {  # $1 = 回调函数名（接受 worktree 路径参数）
 if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; then
     clean_fail=0
     clean_wt() {  # $1 = worktree 路径：存在 worktree 级 hooksPath 则清除
-        if git -C "$1" config --worktree --get core.hooksPath >/dev/null 2>&1; then
-            local old_val
-            old_val=$(git -C "$1" config --worktree --get core.hooksPath)
+        local old_val
+        if old_val=$(git -C "$1" config --worktree --get core.hooksPath 2>/dev/null); then   # 单次调用探测+取值（r15 no135：消竞态）
             if git -C "$1" config --worktree --unset-all core.hooksPath; then
                 echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）"   # 带原值可追溯（r12 no88）
             else
@@ -93,18 +110,6 @@ each_wt check_wt
 wt_mismatch=$CALLBACK_FAILED   # 共享遍历器的失败聚合（r12 no89）
 CALLBACK_FAILED=0
 # 按行解析无法表示含换行的路径（git ≥2.36 才有 --porcelain -z）：此类极端路径不受支持（已文档化）
-
-# 遍历目录（钩子目录即事实源，新增钩子自动纳入）；非钩子文件跳过。
-# git 只按精确文件名识别钩子（均无扩展名），*.sh 必为辅助脚本——排除即不变式，
-# 新增辅助脚本无需维护清单
-for hook in "$HOOKS_DIR"/*; do
-    [ -f "$hook" ] || continue   # 跳过子目录（glob 字面量已被上方 -d 拦，防御空目录场景）
-    case "${hook##*/}" in
-        *.sh|*.md) continue ;;   # *.sh 辅助脚本；*.md 文档（r9 no 6b3a：文档不应被 chmod +x）
-    esac
-    chmod +x "$hook" 2>/dev/null || { echo "错误: chmod +x $hook 失败，钩子不会生效" >&2; exit 1; }   # 真实错误 exit 1（r13 no103）
-    [ -x "$hook" ] || { echo "错误: $hook 不可执行，该钩子不会生效" >&2; exit 1; }
-done
 
 # 清理失败/校验不匹配 = 真实错误（与头部边界声明一致：仅目录缺失属 fail-open），exit 1
 # 让 wt pre-start / Makefile setup 调用方能感知（r9 no 3627/5b6d）

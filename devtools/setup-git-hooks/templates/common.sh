@@ -22,11 +22,11 @@ else
 fi
 
 # local IFS=' '：$* 以空格连接，防调用方误改 IFS 把消息按行拼碎；单参调用不受影响（r8 no126a）。
-# printf 而非 echo -e：消息含外部输入，echo -e 会解释反斜杠序列。仅剥 ESC 防终端注入
-# （ANSI CSI/OSC；保留 \t/\n 支持多行消息——与 commit-msg 回显的宽 tr 范围刻意不同，
-# r14 no110 注释即信任边界声明）。ESC 常量加载期算一次（r14 no110）。
-# || true 吞写失败：日志故障不改变钩子判定（set -e 下写失败中止整个钩子，r13 no100）
-ESC=$'\033'
-log_info()  { local IFS=' '; printf '%s\n' "[INFO] ${GREEN}${*//$ESC/}${NC}" || true; }
-log_warn()  { local IFS=' '; printf '%s\n' "[WARN] ${YELLOW}${*//$ESC/}${NC}" >&2 || true; }
-log_error() { local IFS=' '; printf '%s\n' "[ERROR] ${RED}${*//$ESC/}${NC}" >&2 || true; }
+# printf 而非 echo -e：消息含外部输入，echo -e 会解释反斜杠序列。剥除 \t/\n 外的全部
+# C0 控制符（含 \r 行首改写、C0 CSI 替代形态，r15 no125；本层是 pre-commit 文件名等
+# 外部输入的唯一防线）——保留 \t/\n 支持多行消息。|| true 吞写失败：日志故障不改变
+# 钩子判定（r13 no100）
+sanitize_log() { printf '%s' "$*" | tr -d '\000-\010\013\014\015\016-\037' || true; }
+log_info()  { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[INFO] ${GREEN}${m}${NC}" || true; }
+log_warn()  { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[WARN] ${YELLOW}${m}${NC}" >&2 || true; }
+log_error() { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[ERROR] ${RED}${m}${NC}" >&2 || true; }

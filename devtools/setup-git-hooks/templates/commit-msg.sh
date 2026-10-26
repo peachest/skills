@@ -15,8 +15,11 @@ EXEMPT=(
     # 收紧为 git 自动生成形态（r12 no79）：手写 "Merge xxx"/"Revert xxx" 不再豁免。
     # git merge 模板固定为 branch/remote-tracking branch/pull request/commit/tag 开头；
     # git revert 固定为 Revert "<原 subject>"
-    "^Merge (branch |remote-tracking branch |pull request |commit |tag )"   # git 模板恒为空格分隔；无空格变体是手写通道（r14 no113）
-    "^Revert \""                                                                     #   正文任意行匹配会动持豁免（正文绕过实证）
+    # git 模板恒为空格分隔；无空格变体是手写通道（r14 no113）；(es)?/(s)? 覆盖 octopus
+    # 复数形态 "Merge branches 'a' and 'b'"/"Merge tags ..."（r15 no127；注意可选组
+    # 是 (es)/(s) 而非 branches?——后者的 ? 落在词尾 s 上，单数 branch 反而不匹配）
+    "^Merge (branch(es)? |remote-tracking branch(es)? |pull request |commit(s)? |tag(s)? )"
+    "^Revert \""   # 豁免仅判 subject（first_line）；若按全文匹配，正文任意 "Revert ..." 行都会劫持豁免（正文绕过实证）
     "^fixup!" "^squash!" "^amend!"  # git 交互式 rebase 自动生成
 )
 BODY_EXEMPT=(
@@ -109,10 +112,13 @@ validate_range() {
     # 0x1e 单遍记录协议已被两轮绕过（no59e3 伪 40-hex 头、no67 伪造终结+重同步），
     # 消息体可含任意字节时任何行内分隔符都不可信，故彻底放弃行解析（r11 no67）
     local shas
+    # 存在性预检（r15 no131）：先校验两端可解析，给精确错误并消除 crafted 值歧义
+    git rev-parse --verify --quiet "$base^{commit}" >/dev/null || { log_error "base 不可解析为提交: $base"; return 1; }
+    git rev-parse --verify --quiet "$tip^{commit}" >/dev/null || { log_error "tip 不可解析为提交: $tip"; return 1; }
     shas=$(git rev-list "$base..$tip") \
         || { log_error "无法解析范围 $base..$tip——浅克隆需 fetch-depth: 0，具体原因见上方 git 报错"; return 1; }
     # 空范围：tip 已含于 base（tip 为 base 祖先或相等，如 rebase 后旧 diff-base）是合法场景（WARN 不 fail），但需可见
-    [ -z "$shas" ] && { log_warn "范围 $base..$tip 为空（0 个提交被校验，本次兑底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }   # 兑底→兜底错字顺手修（r11 no63 同源）
+    [ -z "$shas" ] && { log_warn "EMPTY_RANGE: 范围 $base..$tip 为空（0 个提交被校验，本次兜底未生效）——确认 base 是否正确（正常 MR 非空）"; empty_range=1; return 0; }   # EMPTY_RANGE 稳定标记供 CI 机器识别（r15 no130）；兜底错字（r15 no129）
 
     local sha body first_line
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）

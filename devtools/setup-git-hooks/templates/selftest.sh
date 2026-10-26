@@ -10,7 +10,7 @@ pass=0; fail=0
 T=$(mktemp -d) || { echo "FAIL: mktemp -d 失败"; exit 1; }
 MSG=$(mktemp) || { echo "FAIL: mktemp 失败"; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
-trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${WT:-}"' EXIT
+trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${IT4:-}" "${WT:-}"' EXIT   # IT4 同纳入（r15 no140）
 cp commit-msg common.sh "$T/" || { echo "FAIL: 副本复制失败"; exit 1; }
 
 t() { # t <期望exit> <描述> <msg文件内容>
@@ -24,7 +24,18 @@ t() { # t <期望exit> <描述> <msg文件内容>
 # 钩子形态边界
 t 0 "conventional 通过"        $'feat(x): ok\n'
 t 1 "非 conventional 拦截"     $'updated stuff\n'
-t 0 "merge 豁免（subject）"    $'Merge branch a\n'
+t 0 "merge 豁免（subject）"    $'Merge branch a\n'   # 模板恒为 "Merge branch 'x'"：branch 后必空格
+# octopus 复数形态（r15 no127）
+t 0 "octopus branches 豁免"   $'Merge branches \'a\' and \'b\'\n'
+t 0 "octopus tags 豁免"       $'Merge tags t1 and t2\n'
+t 1 "手写 Merge 不豁免"        $'Merge 手工合并\n'   # 无空格变体/非模板开头不再豁免（r12 no79）
+# 交互式 rebase 自动形态豁免 + Revert 豁免（r15 no132）
+t 0 "fixup! 豁免"             $'fixup! feat(x): ok\n'
+t 0 "squash! 豁免"            $'squash! feat(x): ok\n'
+t 0 "amend! 豁免"             $'amend! feat(x): ok\n'
+t 0 "Revert 豁免"             $'Revert "feat: x"\n\nThis reverts commit abc.\n'
+# CRLF：尾随 \r 并入空白剥离（r10 no 7d2c 回归）
+t 0 "CRLF 尾随 \r"            $'feat: x\r\n\nbody\r\n'
 t 1 "正文含 Merge 行不豁免"    $'updated stuff\n\nMerge the config before deploy.\n'
 t 1 "空 subject 拦截"          $'\n'
 # 重复 Signed-off-by
@@ -75,15 +86,15 @@ bash "$HOOK" --ci "$EVIL~1" "$EVIL" >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 应拒 0x1e 提交"; }
 # 颜色路径：非 TTY 管道下用 FORCE_COLOR 注入验证着色可达，NO_COLOR 优先压过（r7 no19）；
 # 开色用例显式 NO_COLOR=（清空）——CI 环境若全局导出 NO_COLOR 会让断言假红（r8 no c819）
-out=$(NO_COLOR= FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
+out=$(NO_COLOR= FORCE_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn x' _ "$T/common.sh" 2>&1)   # 传参形式防 TMPDIR 空格（r15 no142）
 [[ "$out" == *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: FORCE_COLOR 未生效"; }
-out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c "source $T/common.sh 2>/dev/null; log_warn x" 2>&1)
+out=$(NO_COLOR=1 FORCE_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn x' _ "$T/common.sh" 2>&1)
 [[ "$out" != *$'\033['* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: NO_COLOR 未压过 FORCE_COLOR"; }
 out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>&1 >/dev/null)
 [[ -z "$out_w" && "$out_e" == *"[WARN]"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: log_warn 未走 stderr 或输出非 log_warn（r13 no108）"; }
 # ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
 out=$(NO_COLOR=1 bash -c "source \"$T/common.sh\" 2>/dev/null; log_warn \$(printf 'x\\033[31my')" 2>&1)
-case "$out" in *$'\033'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 ESC" ;; *x[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: ESC 用例输出异常: $out" ;; esac
+case "$out" in *$'\033'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 ESC" ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: ESC 用例输出异常: $out" ;; esac   # [ 转义（r15 no141：未闭合 [ 按字面是冷门巧合语义）
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
@@ -119,8 +130,8 @@ git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
     || { echo "FAIL: 多值 --add 1 失败（断言会空转）"; exit 1; }
 git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
     || { echo "FAIL: 多值 --add 2 失败（断言会空转）"; exit 1; }
-[ "$(git -C "$WT" config --worktree --get-all core.hooksPath | wc -l)" = "2" ] \
-    || { echo "FAIL: 多值场景未构造成功（get-all 计数非 2）"; exit 1; }   # 环境断言（r13 no107）
+[ "$(git -C "$WT" config --worktree --get-all core.hooksPath | grep -c .)" = "2" ] \
+    || { echo "FAIL: 多值场景未构造成功（get-all 计数非 2）"; exit 1; }   # 环境断言（r13 no107）；grep -c 而非 wc -l（BSD 前导空格填充，r15 no138）
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 多值清理应成功（--unset-all，r12 no86）"; }
 [ -z "$(git -C "$WT" config --worktree --get-all core.hooksPath 2>/dev/null)" ] \
@@ -170,6 +181,10 @@ r=$(cd "$IT" && WT_NO_HOOKS=1 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
 [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: WT_NO_HOOKS 应静默 exit 0（got $r）"; }
 r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
 [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 正常安装应 exit 0（got $r）"; }
+# WT_NO_HOOKS=0/false 不跳过（仅字面 1 禁用，r15 no124）
+r=$(cd "$IT" && git config --unset core.hooksPath 2>/dev/null; WT_NO_HOOKS=0 sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
+{ [ "$r" = "0" ] && git -C "$IT" config --get core.hooksPath | grep -q tools/git-hooks; } \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: WT_NO_HOOKS=0 应正常安装而非跳过"; }
 # 用例 3（r14 no119）：install.sh 失败 → 非零传播。chmod -x 无法模拟失败（包装命令是
 # bash 显式调用，不需要执行位）——用非法命令触发 bash 退出码 127
 printf 'fail-marker\n' > "$IT/tools/git-hooks/install.sh"
@@ -193,8 +208,8 @@ rm -rf "$IT4"
 IT3=$(mktemp -d) && git init -q "$IT3" && mkdir -p "$IT3/tools/git-hooks" "$IT3/.hooks" \
     && cp "$HDIR"/{commit-msg,common.sh} "$IT3/tools/git-hooks/" \
     || { echo "FAIL: 重同步用例环境准备失败"; exit 1; }
-git -C "$IT3" config core.hooksPath "$IT3/.hooks" && mkdir -p "$IT3/.hooks"
-git -C "$IT3" config user.name t && git -C "$IT3" config user.email t@t
+git -C "$IT3" config core.hooksPath "$IT3/.hooks" && mkdir -p "$IT3/.hooks" || { echo "FAIL: IT3 钩子隔离配置失败（会退回全局钩子产生非确定结果，r15 no139）"; exit 1; }
+git -C "$IT3" config user.name t && git -C "$IT3" config user.email t@t || { echo "FAIL: IT3 git config 失败"; exit 1; }
 git -C "$IT3" commit -q --allow-empty -m "feat: initial" || { echo "FAIL: 重同步用例 initial seed 失败"; exit 1; }
 printf 'feat: x\nSigned-off-by: A <a@t>\n\t\x1e\nfeat: y\nSigned-off-by: A <a@t>\n' > "$IT3/forged.msg"
 git -C "$IT3" commit -q --allow-empty --no-verify -F "$IT3/forged.msg" || { echo "FAIL: 重同步用例 forged seed 失败"; exit 1; }
