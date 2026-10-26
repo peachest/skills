@@ -174,36 +174,55 @@ confirm with the user is always clean.
     not. Declined → stop at the MR URL report. Once confirmed:
 
     a. **Subscribe to CI completion** — read `/skill:pi-events-daemon` and
-       subscribe in the template form:
-       `subscribe({url: "<MR page URL>", opts: {template: "gitlab-pipeline", once: true}})`
-       — daemon wakes this session at a terminal pipeline state (passed/failed);
-       no hand-rolled polling. One subscription covers one pipeline run: after
-       any fix push, subscribe again for the new pipeline.
+       subscribe in the template form. The `gitlab-pipeline` template's ci
+       form needs the **pipeline URL**, not the MR page URL (an MR URL routes
+       to the template's mr form — MR state, never CI): derive the head
+       pipeline id first
+       (`glab api --hostname <host> "projects/<url-encoded-path>/merge_requests/<iid>"`
+       → `.head_pipeline.id`), then
+       `subscribe({url: "<host>/<project>/-/pipelines/<pipeline_id>", opts: {template: "gitlab-pipeline", once: true}})`
+       — daemon wakes this session at a terminal pipeline state (passed or
+       failed; `once` closes the subscription on either). Subscription-first:
+       for pipelines expected to run long, add the daemon skill's dual-track
+       `bg_run` counterpart for traceability. If the subscribe fails (smoke
+       report / daemon down), tell the user and ask whether to fall back to
+       manual polling or stop the closure loop here.
 
     b. **CI red → fix first.** Read the failed job's log (trace retrieval via
        the glab-api skill), root-cause, fix on the same feature branch, push.
        Route the diagnosis by failure type to the existing skill — do not
        improvise: security-stage jobs (trivy image scan / SCAP / OSCA
-       threshold) → `/skill:gitlab-security-job`; ocr-review jobs and GitLab
-       CI job stall/timeout/failure analysis → `/skill:diagnose-ocr-ci`;
-       anything else → the project's normal debugging flow. The loop
-       confirmation covers these CI-fix re-pushes (same branch, fixing the
-       reported failure); a change beyond that scope returns to step 8's
-       confirmation. Then re-subscribe (a) for the new pipeline.
+       threshold) → `/skill:gitlab-security-job`; ocr-review CI job
+       stall/timeout/failure → `/skill:diagnose-ocr-ci`; anything else → the
+       project's normal debugging flow. The loop confirmation covers these
+       CI-fix re-pushes (same branch, fixing the reported failure); a change
+       beyond that scope returns to step 8's confirmation. Exit condition:
+       when the fix is not yours to make (centralized `.trivyignore`, platform
+       thresholds, upstream breakage) or two re-push rounds have not gone
+       green, stop — report the failure history to the user and end the loop
+       (the confirmation does not cover a third round). Otherwise
+       re-subscribe (a) for the new pipeline.
 
     c. **CI green → review loop.** Read `/skill:triage-mr` and run its pull
-       step (CI is at a terminal state, so the pipeline gate passes). Before
-       acting on the findings, run `/skill:challenge-audit` on the pulled
-       report — audit the review's quality first (invented findings,
-       misclassifications); findings the audit kills are recorded through
-       triage-mr's verdict semantics as rejected, not fixed. Surviving
-       findings go through `/skill:fix` in its triage mode (verdict →
-       `verdict.py` per finding → fix the ✅ TPs). Then complete triage-mr's
-       post + resolve half: post the round's verdicts (post is not CI-gated —
-       post immediately after each verdict, per triage-mr's 追尾规则), fix what
-       the verdicts demand, push, and let triage-mr's re-pull (its Step 5)
-       consume the OCR bot's new review round. Keep the pull → audit-informed
-       fix → post → verify cycle until triage-mr's verify gate exits 0.
+       step (CI is at a terminal state, so the pipeline gate passes).
+       `pull-source.log` identity correct + 0 findings = no review round → go
+       straight to (d). Before acting on the findings, run
+       `/skill:challenge-audit` on the pulled report — audit the review's
+       quality first (invented findings, misclassifications); findings the
+       audit kills are recorded through triage-mr's verdict semantics as ❌ FP
+       (or 🔵 OOS for pre-existing issues), not fixed. Surviving findings go
+       through `/skill:fix` in its triage mode (verdict → `verdict.py` per
+       finding → fix the ✅ TPs) — the loop confirmation counts as fix's
+       batch instruction, so its per-finding ask gates are waived. Then
+       complete triage-mr's post + resolve half: post the round's verdicts
+       (post is not CI-gated — post immediately after each verdict, per
+       triage-mr's 追尾规则), fix what the verdicts demand, push, and let
+       triage-mr's re-pull (its Step 5) consume the OCR bot's new review
+       round. The loop confirmation covers these review-fix re-pushes (same
+       branch, fixing adjudicated findings). After each push, re-subscribe (a)
+       for the new pipeline — its wake is what unblocks the next verify (CI
+       in-flight → exit 2); keep the pull → audit-informed fix → post →
+       verify cycle until triage-mr's verify gate exits 0.
 
     d. **Close** — report the final state: CI outcome, findings triaged
        (fixed/FP/resolved counts), remaining open threads if the gate is
