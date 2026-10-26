@@ -110,8 +110,11 @@ check_wt() {  # $1 = worktree 路径：校验实际生效值（悬空跳过并�
         echo "警告: $1 已不存在（悬空 worktree 元数据），跳过校验，建议 git worktree prune" >&2
         return 0
     fi
-    if [ "$(git -C "$1" config core.hooksPath 2>/dev/null)" != "$HOOKS_DIR" ]; then
-        echo "警告: $1 的 hooksPath 校验未通过（实际生效值非 $HOOKS_DIR——通常为 worktree 级覆盖残留），该 worktree 钩子不生效" >&2
+    actual="$(git -C "$1" config core.hooksPath 2>/dev/null)"
+    if [ "$actual" != "$HOOKS_DIR" ]; then
+        # 打印实际生效值（r19 no202）：mismatch 成因多样（worktree 级残留/local include/
+        # 环境级 GIT_CONFIG_* 覆盖/尾部斜杠差异），实测值帮助定位
+        echo "警告: $1 的 hooksPath 校验未通过（实际生效值: ${actual:-<空>}，期望 $HOOKS_DIR——常见为 worktree 级覆盖残留），该 worktree 钩子不生效" >&2
         return 1
     fi
 }

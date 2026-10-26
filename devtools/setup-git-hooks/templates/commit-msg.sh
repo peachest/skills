@@ -46,8 +46,9 @@ validate_one() {
 
     # 重复 Signed-off-by 查重先于豁免：豁免免的是格式约束，不免全仓查重规则
     # （"Merge branch x" 标题藏重复 signoff 不应放过）。
-    # 宽松匹配：-i 大小写不敏感 + 折叠多空格 + 统一小写——
-    # "Signed-off-by:  X"/"signed-off-by: x" 变体与正典行判重（git 自身对 trailer 宽容）
+    # 宽松匹配：键名大小写不敏感（grep -i 命中 + sed 改写为小写字面键）+ 折叠多空格——
+    # "Signed-off-by:  A" 与 "signed-off-by: A" 判重；签署人值大小写敏感（r12 no82 刻意取舍，
+    # r19 no197 措辞对齐实现：并非"统一小写"）
     # POSIX 可移植：\+ 是 GNU BRE 扩展（BSD 按字面 +，r12 no82）；不整行小写——仅大小写
     # 不同的两个不同签署人会被误判重复（r12 no82）；判重本身对大小写敏感是刻意取舍
     if [ -n "$(printf '%s\n' "$full_msg" | grep -iE '^signed-off-by:' | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*/signed-off-by: /;s/[[:space:]][[:space:]]*/ /g;s/[[:space:]]*$//' | sort | uniq -d)" ]; then
@@ -170,6 +171,14 @@ validate_range() {
                     else
                         log_error "commit ${sha:0:8} 手写 Merge 主题但非 merge commit（parent 数 $((parents-1))）——请改写为 conventional 格式"
                     fi
+                    bad=1
+                fi
+                ;;
+            "Revert \""*)
+                # Revert 反伪造（r19 no196·medium，与 Merge 反伪造对称）：git revert 模板
+                # 恒含 "This reverts commit <40-hex>." 尾注——缺失即手写伪造
+                if ! printf '%s\n' "$body" | grep -qE '^This reverts commit [0-9a-f]{40}\.'; then
+                    log_error "commit ${sha:0:8} 手写 Revert 主题但正文无 'This reverts commit <sha>.' 尾注——请改写为 conventional 格式或用 git revert 生成"
                     bad=1
                 fi
                 ;;

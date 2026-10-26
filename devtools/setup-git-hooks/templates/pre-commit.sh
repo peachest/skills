@@ -5,12 +5,13 @@
 # 凭证扫描请另装 gitleaks 并在此追加（除 gofmt/clang-format 工具链外零其他依赖、不内置任何扫描器；工具未装时对应检查会误报并拦截，r14 no117）
 
 set -euo pipefail   # 入口自行声明（common.sh 不带副作用）；本钩子全部检查为 if/exit 结构，-e 可安全兜住未来新增检查的未防护失败
-SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
 source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 fail=0
+read_fail=0   # 读取失败与格式失败分列，末尾提示按因区分（r19 no209）
 
 # staged 内容先落临时文件再检查（r16 no165/no167）：命令替换剥尾换行、$( ) 丢 NUL、
 # 且 git show 失败在管道/进程替换里会被静默吞掉（fail-open）——两条链路统一为
@@ -22,11 +23,11 @@ trap 'rm -f "$fmt_tmp" "$fmt_tmp.fmt"' EXIT   # .fmt 副文件一并清理（r18
 # 已知限制（r18 no187，同 install.sh 口径）：按行解析无法表示含换行的文件名；
 # --no-renames（r18 no186）：rename 检测下 R 状态对被本过滤器整体排除，禁用后退化为
 # D+A、新路径以 A 纳入检查；typechange（file<->symlink）仍不在检查范围
-if ! files_go=$(git diff --cached --name-only --no-renames --diff-filter=ACM -- '*.go'); then
+if ! files_go=$(git -c core.quotePath=off diff --cached --name-only --no-renames --diff-filter=ACM -- '*.go'); then   # quotePath=off：非 ASCII 文件名按字面输出，否则 git show 必失败（r19 no206）
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
-if ! files_c=$(git diff --cached --name-only --no-renames --diff-filter=ACM -- '*.c' '*.h'); then
+if ! files_c=$(git -c core.quotePath=off diff --cached --name-only --no-renames --diff-filter=ACM -- '*.c' '*.h'); then
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
@@ -49,12 +50,15 @@ while IFS= read -r f; do
     [ -z "$f" ] && continue
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
+        read_fail=1
         fail=1
         continue
     fi
     if ! gofmt "$fmt_tmp" > "$fmt_tmp.fmt" 2>/dev/null || ! diff -q "$fmt_tmp" "$fmt_tmp.fmt" >/dev/null 2>&1; then
         log_error "gofmt 不通过: $f"
-        gofmt "$fmt_tmp" 2>&1 | diff "$fmt_tmp" - 2>/dev/null | head -5 | sed 's/^/  /' >&2   # 差异摘要（r18 no189）
+        # || true 兜底（r19 no204·medium）：diff 发现差异返回 1 + head 截断 SIGPIPE，
+        # set -e 下会中止整个钩子、截断后续检查
+        gofmt "$fmt_tmp" 2>&1 | diff "$fmt_tmp" - 2>/dev/null | head -5 | sed 's/^/  /' >&2 || true
         fail=1
     fi
 done <<< "$files_go"
@@ -65,18 +69,22 @@ while IFS= read -r f; do
     # 同 Go 链路口径（r16 no167）：失败 fail-loud；临时文件保字节原样（r16 no165）
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
+        read_fail=1
         fail=1
         continue
     fi
     if ! cf_err=$(clang-format --dry-run --Werror --assume-filename="$f" "$fmt_tmp" 2>&1); then
         log_error "clang-format 不通过: $f"
-        printf '%s\n' "$cf_err" | head -5 | sed 's/^/  /' >&2   # 诊断摘要（r18 no189）
+        printf '%s\n' "$cf_err" | head -5 | sed 's/^/  /' >&2 || true   # 诊断摘要（r18 no189；head SIGPIPE 兜底 r19 no205）
         fail=1
     fi
 done <<< "$files_c"
 
 if [ "$fail" -ne 0 ]; then
-    log_error "请运行 make fmt 后重新 git add。"
+    # 提示按失败原因区分（r19 no209）：读取失败应重新 add 而非 make fmt；
+    # make fmt 只覆盖 hgml/ 范围，仓外 .c/.h 需手动格式化
+    [ "${read_fail:-0}" = 1 ] && log_error "部分 staged 内容读取失败——请重新 git add 后重试。"
+    [ "${read_fail:-0}" = 0 ] && log_error "请运行 make fmt 后重新 git add（make fmt 仅覆盖 go/./ hgml *.h，仓外 C 文件请手动 clang-format -i）。"
     exit 1
 fi
 

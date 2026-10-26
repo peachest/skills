@@ -8,7 +8,7 @@
 # 跳过检查: git push --no-verify
 
 set -uo pipefail   # 入口自行声明（common.sh 不带副作用）；不用 -e：pre-push 需捕获 wiki.py 的设计内退出码
-SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
 source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh"; exit 1; }
 
 repo_root=$(git rev-parse --show-toplevel) || exit 1
@@ -40,7 +40,7 @@ clone_replace_deps() {
             continue
         fi
 
-        local gitlab_url="ssh://git@gitlab.example.com/<group>/<project>.git"   # 按仓填内部 GitLab SSH 地址
+        local gitlab_url="ssh://git@gitlab.example.com/<group>/${dir_name}.git"
         log_info "克隆依赖: $dir_name <- $gitlab_url (dev)"
         local clone_err
         if ! clone_err=$(git clone --quiet --depth 1 -b dev "$gitlab_url" "$target" 2>&1); then

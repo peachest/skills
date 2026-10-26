@@ -8,7 +8,9 @@
 # FORCE_COLOR 显式开色（供 selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；
 # 0/false 视为未开，r9 no 6e4b/r12 no77 社区约定）
 force_color_on=false
-case "${FORCE_COLOR:-}" in ""|0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]) ;; *) force_color_on=true ;; esac   # 关断值大小写不敏感（r17 no160/r18 no177；不用 ${,,}——macOS bash 3.2）
+# FORCE_COLOR 取值约定（r19 no199）：空/0/false/no/off（任意大小写）=不强制；
+# 其他任何值（含社区 1/2/3 级别、true、yes）=强制开色；含尾随空白的变体视为开
+case "${FORCE_COLOR:-}" in ""|0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]) ;; *) force_color_on=true ;; esac
 if [[ -z "${NO_COLOR:-}" ]] && { { [[ -t 1 && -t 2 ]] && [[ "${TERM:-}" != dumb ]]; } || $force_color_on; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
@@ -30,7 +32,14 @@ fi
 sanitize_log() {
     local IFS=' '   # 与包装层一致："$*" 拼接受调用方 IFS 动态作用域影响（r17 no159）
     local m
-    m=$(printf '%s' "$*" | tr -d '\000-\010\013\014\015\016-\037\177') || true
+    # LC_ALL=C 锁定字节级 tr 语义（r19 no201：多字节 locale 下 GNU tr 按字符处理有实现差异）
+    m=$(printf '%s' "$*" | LC_ALL=C tr -d '\000-\010\013\014\015\016-\037\177') || true
+    # 非 UTF-8 locale（LANG=C 等）下终端把原始单字节 0x80-0x9F 解释为 C1 控制符（r19 no198）：
+    # UTF-8 终端这些字节只出现在多字节序列中间不可剥；非 UTF-8 终端按字节剥除
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *[Uu][Tt][Ff]*) ;;   # UTF-8 终端：仅靠下方 C1 两字节定点剥除
+        *) m=$(printf '%s' "$m" | LC_ALL=C tr -d '\200-\237') || true ;;
+    esac
     # UTF-8 编码的 C1（C2 80–9F）中可承载/扰动终端序列的定点剥除（r16 no143/r17 no157）：
     # CSI/OSC/DCS/SOS/PM/APC 起始符 + NEL/RI 行为扰动符；均固定两字节序列，UTF-8 自
     # 同步保证定点删除不误伤多字节字符。已知取舍（r18 no178）：保留 LF 以支持多行消息
