@@ -24,7 +24,14 @@ done < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
 # 2. staged C 文件 → clang-format 检查
 while IFS= read -r f; do
     [ -z "$f" ] && continue
-    if ! git show ":$f" | clang-format --dry-run --Werror --assume-filename="$f" - >/dev/null 2>&1; then
+    # 先取内容再喂 clang-format（r16 no153）：git show 并入管道后 pipefail 会把
+    # 索引竞态（show 失败、clang-format 收空输入退出 0）误报为格式不通过
+    if ! content=$(git show ":$f" 2>/dev/null); then
+        log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
+        fail=1
+        continue
+    fi
+    if ! printf '%s' "$content" | clang-format --dry-run --Werror --assume-filename="$f" - >/dev/null 2>&1; then
         log_error "clang-format 不通过: $f"
         fail=1
     fi

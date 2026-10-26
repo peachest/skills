@@ -10,7 +10,7 @@ pass=0; fail=0
 T=$(mktemp -d) || { echo "FAIL: mktemp -d 失败"; exit 1; }
 MSG=$(mktemp) || { echo "FAIL: mktemp 失败"; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
-trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${IT4:-}" "${WT:-}"' EXIT   # IT4 同纳入（r15 no140）
+trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${IT4:-}" "${IT5:-}" "${IT6:-}" "${WT:-}"' EXIT   # IT4 同纳入（r15 no140）
 cp commit-msg common.sh "$T/" || { echo "FAIL: 副本复制失败"; exit 1; }
 
 t() { # t <期望exit> <描述> <msg文件内容>
@@ -114,7 +114,7 @@ rm -rf "$IT"
 IT2=$(mktemp -d) && git init -q "$IT2" && mkdir -p "$IT2/tools/git-hooks" "$IT2/.hooks" \
     && cp "$HDIR"/{install.sh,commit-msg,common.sh} "$IT2/tools/git-hooks/" \
     || { echo "FAIL: 迁移用例环境准备失败"; exit 1; }
-git -C "$IT2" config core.hooksPath "$IT2/.hooks"   # 种子提交隔离外部钩子（r8 no4bbd，同 $D 段口径）
+git -C "$IT2" config core.hooksPath "$IT2/.hooks" || { echo "FAIL: IT2 钩子隔离配置失败（会退回全局钩子产生非确定结果）"; exit 1; }   # 种子提交隔离外部钩子（r8 no4bbd，同 $D 段口径；r16 no154）
 git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init" || { echo "FAIL: 迁移用例 seed 失败"; exit 1; }
 git -C "$IT2" config extensions.worktreeConfig true || { echo "FAIL: extensions.worktreeConfig 开启失败"; exit 1; }
 WT=$(mktemp -d)
@@ -150,6 +150,7 @@ IT=$(mktemp -d) && git init -q "$IT" \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 空仓冒烟失败"; }
 # 失败路径（r13 no105）：未 gofmt 的 .go staged → gofmt 拦截 + fail 聚合 → exit 1
 # （同时回归 set -e 与循环体交互、fail 聚合两处语义）
+command -v gofmt >/dev/null || { echo "FAIL: gofmt 未安装，gofmt 拦截用例前提不成立（r16 no155）"; exit 1; }
 printf 'package x\nfunc  y() {}\n' > "$IT/bad.go"
 git -C "$IT" add bad.go || { echo "FAIL: git add 环境准备失败"; exit 1; }
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
@@ -166,6 +167,19 @@ IT=$(mktemp -d) && git init -q "$IT" \
 (cd "$IT" && env -u PATH -u HOME bash "$IT/pre-push" </dev/null >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-push env -u PATH/HOME 冒烟失败"; }
 rm -rf "$IT"
+# 聚合失败 → 非零（r16 no148·medium）：损坏 config.worktree 使后续 git config 全部 fatal——
+# 迁移分支被跳过、配置写入本身也 128 退出；可观测契约是“非零感知”，不锁定具体退出码
+# （wt pre-start / make setup 只消费非零信号）
+IT5=$(mktemp -d) && git init -q "$IT5" && mkdir -p "$IT5/tools/git-hooks" \
+    && cp "$HDIR"/{install.sh,common.sh} "$IT5/tools/git-hooks/" \
+    && git -C "$IT5" config user.name t && git -C "$IT5" config user.email t@t \
+    || { echo "FAIL: 聚合失败用例环境准备失败"; exit 1; }
+git -C "$IT5" commit -q --allow-empty --no-verify -m "init" || { echo "FAIL: 聚合用例 seed 失败"; exit 1; }
+git -C "$IT5" config extensions.worktreeConfig true || { echo "FAIL: worktreeConfig 开启失败"; exit 1; }
+printf 'this is not valid git-config\x00garbage' > "$IT5/.git/config.worktree"
+(cd "$IT5" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
+[ $? != 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 清理/写入失败应非零感知（r16 no148）"; }
+rm -rf "$IT5"
 # wt.toml [pre-start] hooks 包装命令退出码契约（r13 no94）：
 #   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
 # 提取前提（r14 no120）：hooks 行为单行单值、无行尾注释；内层不含 TOML 转义（r14 no112
@@ -195,6 +209,17 @@ rm -rf "$IT/tools/git-hooks"
 r=$(cd "$IT" && sh -c "$HOOKS_WRAP" >/dev/null 2>&1; echo $?)
 [ "$r" = "0" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 无 hooks 目录应静默 exit 0（got $r）"; }
 rm -rf "$IT"
+# commentchar 路径（r16 no146）：core.commentchar=';' 时钩子按 ';' 剥注释行——
+# 模板块首行为注释行应被剥离后正常校验，而非误拦"提交信息不能为空"
+IT6=$(mktemp -d) && git init -q "$IT6" && mkdir -p "$IT6/tools/git-hooks" \
+    && cp "$HDIR"/{commit-msg,common.sh} "$IT6/tools/git-hooks/" \
+    && git -C "$IT6" config user.name t && git -C "$IT6" config user.email t@t \
+    && git -C "$IT6" config core.commentchar ';' \
+    || { echo "FAIL: commentchar 用例环境准备失败"; exit 1; }
+printf '; comment line\nfeat: x\n' > "$IT6/msg"
+(cd "$IT6" && bash "$IT6/tools/git-hooks/commit-msg" "$IT6/msg" >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: commentchar=';' 注释行应被剥离"; }
+rm -rf "$IT6"
 # L1 0x1e 文件检查（r14 no123）：钩子模式的 grep 文件路径与 L2 --ci 的 %B 路径实现
 # 独立，各补一条防同口径回归。消息文件含 0x1e → commit-msg（钩子形态）exit 1
 IT4=$(mktemp -d) && git init -q "$IT4" && mkdir -p "$IT4/tools/git-hooks"     && cp "$HDIR"/{commit-msg,common.sh} "$IT4/tools/git-hooks/"     && git -C "$IT4" config user.name t && git -C "$IT4" config user.email t@t     || { echo "FAIL: L1 0x1e 用例环境准备失败"; exit 1; }

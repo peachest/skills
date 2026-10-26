@@ -3,10 +3,15 @@
 # hook 内容随分支文件走（旧分支没有本目录时 hook 自动不生效，fail-open），
 # 配置写 clone 级共享配置——配一次，主检出与全部 worktree 同时生效。
 # 撤销：git config --unset core.hooksPath
-# 信任模型（r15 no134，接入文档须同步声明）：hook 内容随检出分支变化——检出不受信
-# 分支（外部 PR/fork）后其自带钩子会在下次 commit/push 自动执行。opt-out：WT_NO_HOOKS=1
-# 仅拦截 wt pre-start；make setup 无条件安装，不可信环境请勿运行任一安装路径
+# 信任模型（r15 no134）：hook 内容随检出分支变化——检出不受信分支（外部 PR/fork）后
+# 其自带钩子会在下次 commit/push 自动执行。opt-out：WT_NO_HOOKS=1（含本脚本与 wt
+# pre-start，make setup 亦透传）；详见 README "Git hooks" 一节
+# 最低 git 版本（r16 no149）：相对 core.hooksPath 按各 worktree 根解析是本方案前提，
+# 以 CI 镜像 git 版本为实测基线；--porcelain 逐块解析在更旧版本上行为未定义
 set -euo pipefail
+
+# kill-switch（r16 no150）：与 wt pre-start 同口径（仅字面 1），三条安装路径语义统一
+[ "${WT_NO_HOOKS:-}" = "1" ] && { echo "提示: WT_NO_HOOKS=1，跳过钩子安装" >&2; exit 0; }
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -90,7 +95,7 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
     CALLBACK_FAILED=0
 fi
 
-git config core.hooksPath "$HOOKS_DIR"
+git config core.hooksPath "$HOOKS_DIR" || { echo "错误: core.hooksPath 写入失败（配置只读/损坏/并发锁？）" >&2; exit 1; }   # 一致风格诊断（r16 no152）
 # 写入后校验各 worktree 的实际生效值（worktree 级优先于 clone 级）：
 # 清理失败或存量覆盖（extensions.worktreeConfig 未启用而 worktree config 已有值）都会让
 # clone 级写入对个别 worktree 无效——逐仓校验并显式暴露，不做静默降级（r8 no8548）。
@@ -114,7 +119,7 @@ CALLBACK_FAILED=0
 # 清理失败/校验不匹配 = 真实错误（与头部边界声明一致：仅目录缺失属 fail-open），exit 1
 # 让 wt pre-start / Makefile setup 调用方能感知（r9 no 3627/5b6d）
 if [ "${clean_fail:-0}" = 1 ] || [ "${wt_mismatch:-0}" = 1 ]; then
-    echo "错误: 存在 worktree 级 hooksPath 覆盖未被清除（worktree 级优先，钩子不会指向 $HOOKS_DIR）——请手动：git -C <worktree> config --worktree --unset-all core.hooksPath" >&2   # 同键多值时单 --unset 必败（r12 no86）
+    echo "错误: 存在 worktree 级 hooksPath 覆盖未被清除（worktree 级优先，钩子不会指向 $HOOKS_DIR）——请修复权限后重跑本脚本（幂等），或手动：git -C <worktree> config --worktree --unset-all core.hooksPath" >&2   # 同键多值时单 --unset 必败（r12 no86）；重跑恢复路径（r16 no151）
     exit 1
 fi
 echo "✓ core.hooksPath = $HOOKS_DIR（本 clone 主检出与全部 worktree 生效）"

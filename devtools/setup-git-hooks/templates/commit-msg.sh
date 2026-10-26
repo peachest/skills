@@ -87,7 +87,10 @@ validate_one() {
             *)
                 log_error "内部原创 commit 必须带 $COMMIT_PREFIX 前缀："
                 log_error "  $COMMIT_PREFIX <type>(scope): <description>"
-                log_error "  豁免：merge/revert/fixup! 等自动生成提交${BODY_EXEMPT[@]:+、上游 cherry-pick（-x）}"
+                # ${arr[@]:+} 在 bash<4.4 空数组下 unbound（r16 no145，同 r14 no116）
+                local body_exempt_note=""
+                [ "${#BODY_EXEMPT[@]}" -gt 0 ] && body_exempt_note="、上游 cherry-pick（-x）"
+                log_error "  豁免：merge/revert/fixup! 等自动生成提交$body_exempt_note"
                 return 1
                 ;;
         esac
