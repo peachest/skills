@@ -11,7 +11,7 @@ Remote: `<YOUR_GITLAB_REMOTE>`
 - **列出 issue**：`glab issue list -F json`，配合 `--label` 过滤。
 - **评论 issue**：`glab issue note <number> --message "..."`。GitLab 将评论称为 "notes"。
 - **添加/移除标签**：`glab issue update <number> --label "..."` / `--unlabel "..."`。多个标签用逗号分隔或重复参数。
-- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 closing pattern（`Closes #n` / `Fixes #n` / `Resolves #n` 等，全集见「自动关闭的边界」段），push/merge 到**默认分支**后 GitLab 自动 close。**仓库工作分支非默认分支时自动关闭永不触发**，此时 merge 后验证 + 手动关闭是常态而非例外（详见「自动关闭的边界」段）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitLab 未触发），agent 手动 `glab issue close <n>`（先 note 记录原因）。详见 MR 约定段的「merge 后验证」。
+- **关闭**：**禁止** agent 直接调用 `glab issue close` 或 API 关闭 issue。所有 issue 必须通过 git commit message 关闭：在 commit body 或 MR description 中使用 closing pattern（`Closes #n` / `Fixes #n` / `Resolves #n` 等，全集见「自动关闭的边界」段），push/merge 到**默认分支**后 GitLab 自动 close。**仓库工作分支非默认分支时自动关闭永不触发**，此时 merge 后验证 + 手动关闭是常态而非例外（详见「自动关闭的边界」段）。关闭前 issue 应已标记 `status::resolved`（详见「状态管理」段），无需额外清理标签。**例外 1**：Map issue（`wayfinder:map`）无对应代码变更，全部子 ticket commit close 后，在创建 MR 时通过 MR description 中的 `Closes #<map>` 关闭。**例外 2**：MR merge 后 GitLab 未自动关闭（工作分支非默认分支、漏写 closing pattern 或 GitLab 未触发），补关优先用 `tracker --backend gitlab --repo <GROUP/PROJECT> [--gitlab-host <host>] ticket close-verify --ref <MR号或merge SHA> --apply`（工具不可用时回退手动：先 `glab issue note <n> --message "..."` 记录原因，再 `glab issue close <n>`）。详见 MR 约定段的「merge 后验证」。
 - **更新 issue body**：`glab issue update <n> --description "..."` 是**覆盖式**更新，不是 append。修一个 typo 也要传完整 body。heredoc 传多行：`--description "$(cat <<'EOF'\n...\nEOF\n)"`。
 
 ### Issue body 编辑三层规则
@@ -55,9 +55,9 @@ glab api "projects/<PROJECT_ID>" | jq -r '.default_branch'
 |------|------|------|
 | MR 直指默认分支 | trunk-based 仓库 | 正常写 `Closes #n`，自动关闭可用 |
 | 最终同步 MR 汇总 | 阶段性 dev→默认分支 回流 | 工作分支 MR 不期待关闭；回流 MR description 汇总全部 `Closes #n` |
-| merge 后手动关闭 | 长期双分支仓库（工作分支 ≠ 默认分支，如默认 `master`、工作 `dev`） | 每次 MR merge 后验证未关闭则手动 close（note 原因 + `glab issue close`）。若已把工作分支设为默认分支则回到策略 1 |
+| merge 后手动关闭 | 长期双分支仓库（工作分支 ≠ 默认分支，如默认 `master`、工作 `dev`） | 每次 MR merge 后跑 `tracker --backend gitlab ticket close-verify --ref <MR号或SHA>` 核验，未关票加 `--apply` 补关（无 tracker 时手动 note 原因 + `glab issue close`）。若已把工作分支设为默认分支则回到策略 1 |
 
-注意：修改默认分支只对**之后**创建的 MR/commit 生效，之前已合入的 closing pattern 不会追补关闭，需按「merge 后验证」手动补账。
+注意：修改默认分支只对**之后**创建的 MR/commit 生效，之前已合入的 closing pattern 不会追补关闭，需按「merge 后验证」补账——`tracker ... close-verify --ref <merge SHA>` 支持对历史 merge 追补。
 
 ### 项目设置例外
 
@@ -216,7 +216,7 @@ Agent 不主动创建 MR。用户说"提交 MR"或"创建 merge request"时，�
 - **命令**：`glab mr create --title "<map title>" --description "$(cat <<'EOF'\n参见 #<map>。\n\n子 ticket：\n- #<n> <title>\n- #<m> <title>\n\nCloses #<map>\nEOF\n)" --target-branch main`。
 - **确认**：创建前必须向用户展示 MR 描述并等待确认。
 - **关闭 Map**：merge 后 GitLab 根据 MR description 中的 `Closes #<map>` 自动关闭（仅当 MR 目标分支为默认分支，见「自动关闭的边界」段）。
-- **merge 后验证**：merge 完成后，agent 必须对 MR description 中所有 closing pattern 引用的 issue（含 Map 和子 ticket）运行 `glab api "projects/<PROJECT_ID>/issues/<iid>" | jq -r '.state'` 确认已 closed。若仍为 opened——常见原因：仓库工作分支非默认分支（GitLab 必然不触发，见「自动关闭的边界」段）、MR description 漏写 closing pattern——则手动关闭：先 `glab issue note <n> --message "..."` 记录原因，再 `glab issue close <n>`。此为 `glab issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。
+- **merge 后验证**：merge 完成后，agent 必须核验 MR 中所有 closing pattern 引用的 issue（含 Map 和子 ticket）已 closed。**首选工具**：`tracker --backend gitlab --repo <GROUP/PROJECT> [--gitlab-host <host>] ticket close-verify --ref <MR号或merge SHA>`——dry-run 扫描 MR description + 全部 commit message 的 closing pattern，逐票核验 state，输出未关清单；确认后加 `--apply` 自动 note+close，note 记录 merge 出处。工具不可用（无 tracker 二进制 / glab 未认证）时回退手动：对每个引用运行 `glab api "projects/<PROJECT_ID>/issues/<iid>" | jq -r '.state'`，仍 opened 的先 `glab issue note <n> --message "..."` 记录原因，再 `glab issue close <n>`。手动关闭仍是 `glab issue close` 禁令的**第二例外**（第一例外见下文关闭约定）。常见未关原因：仓库工作分支非默认分支（GitLab 必然不触发，见「自动关闭的边界」段）、MR description 漏写 closing pattern、squash 丢分 commit body 引用。
 
 ## Issue 模板
 
