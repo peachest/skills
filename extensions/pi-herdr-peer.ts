@@ -12,7 +12,6 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, basename } from "node:path";
@@ -40,7 +39,23 @@ function resolveScripts(): string {
 	);
 }
 
-const SCRIPTS = resolveScripts();
+// Same resolution order for another skill's scripts dir (to-peer owns creation).
+function resolveSkillScripts(skill: string, marker: string): string {
+	const rel = `${skill}/scripts`;
+	const candidates = [
+		process.env.HERDR_PEER_SCRIPTS,
+		join(dirname(dirname(fileURLToPath(import.meta.url))), "skills", "in-progress", rel),
+		join(process.env.HOME || "", ".pi", "agent", "skills", rel),
+		join(process.env.HOME || "", ".agents", "skills", rel),
+	].filter(Boolean) as string[];
+	for (const dir of candidates) {
+		if (existsSync(join(dir, marker))) return dir;
+	}
+	throw new Error(`${skill} scripts not found (looked for ${marker}; searched: ${candidates.join(", ")}). Install: npx skills add -g . -s ${skill} -a pi -y`);
+}
+
+	const TO_PEER_SCRIPTS = resolveSkillScripts("to-peer", "herdr-tab-peer.sh");
+	const SCRIPTS = resolveScripts();
 
 const UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/;
 
@@ -211,23 +226,42 @@ export default function (pi: ExtensionAPI) {
 		name: "herdr_peer",
 		label: "herdr peer",
 		description:
-			"Bootstrap a new named peer agent in one step: splits a pane beside the current one (geometry-aware), starts a pi agent in it, and returns its pane id. Name must match [a-z][a-z0-9_-]{0,31}. Dispatch the five-part bootstrap prompt to the returned pane with herdr_send.",
-		promptSnippet: "Create a new peer pi agent pane and return its address",
+			"Bootstrap a new named peer agent in one step: creates a NEW herdr tab in the current workspace (never pane split), starts a pi agent in it, fuses a liveness verify, and registers the peer identity (.agents/agents) when a workspace exists. Returns pane id + tab id + identity status. Name must match [a-z][a-z0-9_-]{0,31}. Dispatch the five-part bootstrap prompt to the returned pane with herdr_send. Exit 3 (name/identity conflict) and exit 4 (identity workspace missing — ask the user whether to initialize, never create silently) are surfaced in the error envelope.",
+		promptSnippet: "Create a new peer pi agent tab and return its address",
 		promptGuidelines: [
 			"Use herdr_peer to spawn a peer, then herdr_send to dispatch its bootstrap prompt — never pane split + agent start by hand.",
+			"On exit-4 (needs-workspace-init) ask the user whether to initialize a workspace; on exit-3 (conflict) report the existing holder and let the user decide reuse vs new name.",
 		],
 		parameters: Type.Object({
 			name: Type.String({ description: "Peer agent name, [a-z][a-z0-9_-]{0,31}" }),
 			cwd: Type.String({ description: "Working directory for the peer (absolute path)" }),
-			direction: Type.Optional(StringEnum(["right", "down"] as const, { description: "Split direction; default right (wide caller pane) / down for tall" })),
+			workspace: Type.Optional(Type.String({ description: "Target herdr workspace id or label; default = the caller's current workspace" })),
+			description: Type.Optional(Type.String({ description: "One-line peer purpose, written into AGENT.json" })),
+			prompt: Type.Optional(Type.String({ description: "Optional bootstrap prompt delivered right after creation (otherwise dispatch later via herdr_send)" })),
 		}),
 		async execute(_toolCallId, params, signal) {
-			const args = [join(SCRIPTS, "herdr-peer.sh"), params.name, params.cwd];
-			if (params.direction) args.push(params.direction);
+			const args = [join(TO_PEER_SCRIPTS, "herdr-tab-peer.sh"), params.name, params.cwd];
+			if (params.workspace) args.push("--workspace", params.workspace);
+			else args.push("--caller-ws");
+			if (params.description) args.push("--description", params.description);
+			let tmpPrompt: string | undefined;
+			if (params.prompt) {
+				tmpPrompt = join(mkdtempSync(join(tmpdir(), "herdr-peer-")), "prompt.md");
+				writeFileSync(tmpPrompt, params.prompt);
+				args.push("--prompt-file", tmpPrompt);
+			}
 			const res = await pi.exec("bash", args, { timeout: 120_000, signal });
-			const peer = parseEnvelope(res.stdout.trim() || res.stderr.trim(), "herdr-peer");
+			const raw = res.stdout.trim() || res.stderr.trim();
+			const peer = parseEnvelope(raw, "herdr-peer");
+			const failed = res.code !== 0;
+			const text = JSON.stringify(failed ? { ...peer, exitCode: res.code } : peer, null, 2);
+			const hint = failed
+				? "herdr_peer exited " + res.code + ": exit 3 = conflict (user decides reuse vs new name); exit 4 = peer created but identity workspace missing (ask the user whether to initialize .agents/agents/)"
+				: "";
+			const content: Array<{ type: "text"; text: string }> = [{ type: "text", text }];
+			if (hint) content.push({ type: "text", text: hint });
 			return {
-				content: [{ type: "text", text: JSON.stringify(peer, null, 2) }],
+				content,
 				details: peer,
 			};
 		},

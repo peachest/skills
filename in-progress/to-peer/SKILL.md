@@ -1,7 +1,7 @@
 ---
 name: to-peer
 description: "Create a peer agent session in a NEW herdr tab (never split pane). One command: tab create → agent start → optional bootstrap prompt. Use when the user asks to 创建 peer session / 开新 tab 派活 / to-peer / spawn a peer in a new tab. Message protocol (five-part dispatch, replies, closure) lives in multi-agent-collab — this skill owns creation only."
-argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [--runtime R] [--label L] [--focus]"
+argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [--runtime R] [--label L] [--focus] [--caller-ws] [--description D]"
 ---
 
 # to-peer — 在新 tab 创建 peer session
@@ -18,7 +18,21 @@ argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [
 
 ## 为什么是新 tab 而不是 split pane
 
-用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。split pane 的旧路径（multi-agent-collab 的 `scripts/herdr-peer.sh`）仅在该 skill 自身被引用且无新 tab 要求时才考虑；用户明确提到 to-peer 或新 tab 时，走本 skill。
+用户拍板：peer session 一律开新 tab（`herdr tab create`），每个 peer 独占一整个 tab，不用 `pane split`。`herdr_peer` 工具已对齐此契约（2026-10-26）：内部改为调本 skill 脚本、默认在**当前 herdr workspace** 开新 tab，split 形态已移除。multi-agent-collab 的 `scripts/herdr-peer.sh`（pane split）降级为 legacy fallback，仅在该 skill 自身被引用且无新 tab 要求时才考虑。
+
+## 失败即回 skill（红线，2026-10-26 拍板，源自 10-26 绕过案）
+
+任何创建报错（agent 重名、identity_conflict、ws 断言失败等）时，**唯一合法动作是带着脚本的结构化错误回到本 skill 的路径重试或向用户升级**——禁止绕过 skill 手打裸 `herdr tab create` / `agent start`。实证：2026-10-26 一案，skill 护栏齐全（ws 推断+WARN+回读），但 herdr_peer 重名报错后 agent 图省事裸打 CLI 不带 --workspace，tab 落进 <repo-c> ws（最近活跃 ws），把修复过的 lesson 犯了第二遍。知识护栏在重试压力下会失效——重名的正确处置是：脚本已自动报出已有持有者，**复用 vs 新名字由用户裁决**，不要自行选路。
+
+## 身份登记（2026-10-26）
+
+创建脚本融合了 SPEC（`~/.agents/agents/SPEC.md`）身份登记：peer 创建成功且活性验证通过后，自动在**身份 workspace**（`.agents/agents/` 所在目录树，与 herdr workspace 是正交概念）登记：写 AGENT.json + charter.md 存根 + sessions.log 追加当值行（`endedAt: null`，sessionId 取自 agent list 回执，非手写）。落点解析：cwd 是 git worktree 时优先主 checkout（wt 是一次性生态，身份是常驻资产，SPEC §2 特例）。三态语义：
+
+- `identity: registered`（exit 0）— 已登记
+- `identity: needs-workspace-init`（**exit 4**）— peer 已建好干活，但解析不到身份 workspace。**向用户提问是否初始化 `.agents/agents/`**（SPEC §2：新建 workspace 必须用户确认），不静默跳过、不代建
+- `identity: skipped-remote-machine` — 跨机 peer，远端文件系统不在掌控内，v1 不登记
+
+同名身份已存在 → **exit 3 conflict**，创建前中止（不留下半成品）；复用已有 peer、换名、还是显式接班，由用户裁决——与 agent 重名同构。
 
 ## 前置检查
 
@@ -44,11 +58,17 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 - **父地址必须写字面值（2026-10-22 拍板，源自 <pkgfix>-cve 案例）**：bootstrap [caller identity] 与回传条款里的父 pane 地址必须是显式字面值（`herdr:<session>:<pane>`，用 `herdr_resolve` 或 `herdr agent list` 实测后拼入），禁止写「地址见 caller identity」这类依赖运行时注入的表述——`--prompt-file` 投递**不注入** caller identity，peer 只能靠项目名+时间猜父 pane（实证：<pkgfix>-cve 猜中属侥幸；spectraining 首派回报地址写错）
 - `--label L`：可选，tab 标签（默认用 name）
 - `--focus`：可选，创建后聚焦新 tab（默认不抢焦点）
+- `--caller-ws`：可选。把 tab pin 到**调用者 pane 所在的 herdr workspace**（从 `$HERDR_PANE_ID` 解析），而不是按 cwd 尾段推断目标项目 ws。herdr_peer 工具默认传此旗标（对齐"当前 ws 建 peer"语义）；skill 手动调用时通常**不要**传——派活 peer 应落目标项目 ws
+- `--description D`：可选，一句话 peer 职责，写入 AGENT.json
 - `--runtime R`：可选。跨 herdr runtime 创建（`herdr --session R ...`），如从 default runtime 会话往 dev runtime 的目标项目 ws 派 peer；不带则打当前 runtime
 - `--machine M`：可选（herdr ≥ 0.9.5）。在**已保存的 SSH 机器**上创建 peer（`herdr --machine M ...`，与 `--runtime` 互斥——machine 条目自带 session）。cwd 按**远端机器的路径**解释；本机 HERDR_ENV 门对此放宽（SSH 转发不依赖本机 pane）。输出 JSON 带 `machine` 字段；canonical 地址相应为 `herdr:<machine>:<session>:<pane>`。实测案例（2026-10-15）：`--machine wsl --cwd /home/peachest` 在 WSL 侧建出真实 pi peer。**已知坑（2026-10-18）**：跨机路径的 `--prompt-file` 注入只填充对端 pi 输入框、**不自动提交**（本机路径正常）——回执 `prompt: sent` + `status: idle` 不代表 peer 已开跑，需用户手动 Enter 或后续再推一条消息触发；疑似对端 herdr 版本问题（machine API 无法探测对端版本），待升级验证
 
-成功输出一行 JSON：`{"name","tab_id","pane_id","workspace_id","cwd","status","prompt"}`。`workspace_id` 是创建后的实际值；跨 ws 派发时把回执和后续 `herdr:` 地址都用这个 ws 前缀拼。prompt 未带文件时为 `none`——之后用 multi-agent-collab 的发送通道（herdr_send 工具或其 `herdr-send.py`，followUp 门）派活。
+成功输出一行 JSON：`{"name","tab_id","pane_id","workspace_id","cwd","status","prompt","identity","session_id"}`。`workspace_id` 是创建后的实际值；跨 ws 派发时把回执和后续 `herdr:` 地址都用这个 ws 前缀拼。prompt 未带文件时为 `none`——之后用 multi-agent-collab 的发送通道（herdr_send 工具或其 `herdr-send.py`，followUp 门）派活。
+
+**退出码**：`0` 成功（含 registered/skipped-remote-machine）· `1` 用法/校验 · `2` herdr 错误或验证失败（ws 断言不符时脚本已自动关 tab，不残留）· `3` 冲突（agent 重名 / 同名身份已存在；stdout JSON 报已有持有者，用户裁决）· `4` peer 已创建但缺身份 workspace（问用户是否初始化）。
+
+**融合验证**：创建后脚本内建有界活性轮询（`agent list` 确认 agent 存活 + 抓取 pi session UUID），无需 agent 自行组装"建完再查"管道。验证失败自动关 tab 并 exit 2。
 
 ## 完成判据
 
-输出 JSON 中的 `pane_id` 存在、`herdr agent list`（本机）或 `herdr --machine M agent list`（跨机）能看到该 name 即创建完成。跨机 peer 的后续通信用 `herdr --machine M ...`（pitfall #27：pane id 是 machine-local 的）。`agent start` 默认等 30s readiness；超时返回 `agent_not_ready` 时 name 仍保留，等 peer idle 后再发首条消息（见 multi-agent-collab）。
+输出 JSON 中的 `pane_id` 存在、`status` 为 idle/working（融合验证已确认）、`herdr agent list`（本机）或 `herdr --machine M agent list`（跨机）能看到该 pane 即创建完成。exit 4 时 peer 已创建但需向用户提问身份 workspace 初始化（见上）。跨机 peer 的后续通信用 `herdr --machine M ...`（pitfall #27：pane id 是 machine-local 的）。`agent start` 默认等 30s readiness；超时返回 `agent_not_ready` 时 name 仍保留，等 peer idle 后再发首条消息（见 multi-agent-collab）。
