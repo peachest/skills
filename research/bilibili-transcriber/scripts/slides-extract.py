@@ -251,6 +251,19 @@ def ocr_frame(conf: dict, image_path: str, attempts: int = 3) -> str:
     raise last_err  # type: ignore[misc]
 
 
+def extract_frames_adaptive(video: Path, out_dir: Path, threshold: float,
+                            min_frames: int = 3, min_duration: float = 120,
+                            retry_threshold: float = 0.15) -> list[dict]:
+    """讲解类视频转场分值低，高阈值下几乎无切点；切点过少且视频够长时
+    降阈值重试一次。过检由后级 dHash 去重 + OCR [非幻灯片] 判定兜底。"""
+    frames = extract_frames(video, out_dir, threshold)
+    if len(frames) < min_frames and ffprobe_duration(video) > min_duration:
+        print(f"  only {len(frames) - 1} cuts in a long video — "
+              f"retrying threshold={retry_threshold}")
+        frames = extract_frames(video, out_dir, retry_threshold)
+    return frames
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         sys.exit(f"Usage: {sys.argv[0]} <workspace-dir>")
@@ -272,12 +285,7 @@ def main() -> None:
     print(f"[1/4] video: {video.name} ({video.stat().st_size // 1048576}MB)")
 
     print(f"[2/4] scene-cut frames (threshold={threshold})…")
-    frames = extract_frames(video, out_dir, threshold)
-    if len(frames) < 3 and ffprobe_duration(video) > 120:
-        # 讲解类视频转场分值低（0.3 阈值下几乎无切点），降阈值重试一次；
-        # 过检由后级 dHash 去重 + OCR [非幻灯片] 判定兜底
-        print(f"  only {len(frames) - 1} cuts in a long video — retrying threshold=0.15")
-        frames = extract_frames(video, out_dir, 0.15)
+    frames = extract_frames_adaptive(video, out_dir, threshold)
     print(f"  {len(frames) - 1} scene cuts + t=0 frame")
 
     print(f"[3/4] adjacent-frame dedup (dHash hamming ≤ {hash_threshold})…")

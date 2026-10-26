@@ -116,13 +116,14 @@ class TestNoSystemFfmpeg:
         output_wav = tmp_path / "audio.wav"
         _generate_fixture_mp4(fixture)
 
-        # A PATH with python3 but no ffmpeg/ffprobe — emulate a host without
-        # system ffmpeg installed.
-        python3 = shutil.which("python3")
-        assert python3, "python3 required"
-        clean_path = os.path.dirname(python3)
+        # Emulate a host without system ffmpeg: original PATH minus any dir
+        # containing ffmpeg/ffprobe. Keep everything else (bash, date, …) —
+        # the invariant under test is "no system ffmpeg", not a bare env.
+        ff = Path(ff).resolve().parent
+        stripped = [d for d in os.environ.get("PATH", "").split(os.pathsep)
+                    if d and Path(d).resolve() != ff]
         env = dict(os.environ)
-        env["PATH"] = clean_path
+        env["PATH"] = os.pathsep.join(stripped)
 
         result = _run_transcode(fixture, output_wav, env=env)
         assert result.returncode == 0, (
