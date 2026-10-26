@@ -31,9 +31,9 @@ Communication to and from subagents should be sparse. Communicate primarily thro
    - calls the Skill tool with `tdd` to build the ticket;
    - merges the integration branch tip into its own branch before reporting done
 
-5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**.
+5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**. The standard merge route is the platform MR: push the implementer's branch, open a merge request into the integration branch (glab/gh per the repo's remote), and merge it there — branch protection and the review trail both live on the MR, and every real run has used this route; `wt merge` merges locally and skips both. Only fall back to direct git merge when the target has no remote or the platform is unreachable.
 
-   **[rolling-review]** When a merge conflicts, adjudicate three recurring classes before resolving mechanically: (1) two workers each added functions to the same file — usually keep both, and let the next rolling review judge the joined result; (2) a later ticket's new validation correctly rejects an earlier ticket's test payload — this is the design working, fix the payload, not the validator; (3) append-only ledger/log files both sides touched — keep both, dedupe only identical lines. Anything outside these classes goes to the user.
+   **[rolling-review]** When a merge conflicts, adjudicate three recurring classes before resolving mechanically: (1) two workers each added functions to the same file — usually keep both, and let the next rolling review judge the joined result; (2) a later ticket's new validation correctly rejects an earlier ticket's test payload — this is the design working, fix the payload, not the validator; (3) append-only ledger/log files both sides touched — keep both, dedupe only identical lines. Anything outside these classes goes to the user. Note: platform **squash merges make the source branch's commits non-ancestors** of the integration branch — verify content (`git diff <branch> <integration> -- <files>`) before deleting anything; ancestor checks will false-negative.
 
    **[rolling-review]** Immediately after each merge, kick off a **rolling review** of the integration branch in the background (see below), then continue with step 6 without waiting for it. Record the review task so its findings are triaged when they arrive (step 5.5).
 
@@ -51,7 +51,7 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 
 8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
 
-9. Clean up all **implementer subagent** worktrees.
+9. Clean up all **implementer subagent** worktrees. Platform squash merges leave the source branches non-ancestors of the integration branch: verify content matches (`git diff <branch> <integration>`) before `git branch -D` — wt/git "unmerged" warnings are false positives here.
 
 ## [rolling-review] Running the rolling review
 
