@@ -7,6 +7,10 @@ cd "$(dirname "$0")"
 HDIR="$PWD"                    # hooks 目录绝对路径（后续测试段会 cd 走）
 HOOK="$PWD/commit-msg"          # 供临时仓内调用的绝对路径
 pass=0; fail=0; skipped=0   # skipped：缺工具链的 SKIP 用例计数（r17 no174）
+# 配置隔离（r18 no192·medium）：t() 形态矩阵以真实仓库为 cwd 跑钩子副本，钩子会读
+# git config core.commentchar——屏蔽全局/系统级配置，防环境相关假红/假绿；
+# IT6 等本地配置不受影响
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 T=$(mktemp -d) || { echo "FAIL: mktemp -d 失败"; exit 1; }
 MSG=$(mktemp) || { echo "FAIL: mktemp 失败"; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
@@ -81,6 +85,17 @@ bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
 [ $? != 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 空范围应默认拒绝（r17 no168）"; }
 COMMIT_CI_ALLOW_EMPTY=1 bash "$HOOK" --ci HEAD HEAD >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 空范围豁免后应放行"; }
+# Merge 反伪造（r18 no181·medium）：手写 "Merge branch 'x'" 主题的普通提交 → CI 拒绝
+git -C "$D" commit -q --allow-empty --no-verify -m "Merge branch 'fake'" || { echo "FAIL: 反伪造用例 seed 失败"; exit 1; }
+FAKE=$(git -C "$D" rev-parse HEAD)
+bash "$HOOK" --ci "$FAKE~1" "$FAKE" >/dev/null 2>&1
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 应拒手写 Merge 主题（反伪造）"; }
+# 真 merge commit（>=2 parent）→ 放行
+git -C "$D" checkout -q -b mbranch HEAD~1 && git -C "$D" commit -q --allow-empty -m "feat: mside" && git -C "$D" checkout -q - >/dev/null 2>&1
+git -C "$D" merge -q --no-ff --no-edit mbranch >/dev/null 2>&1 || { echo "FAIL: 反伪造用例 merge seed 失败"; exit 1; }
+MERGE=$(git -C "$D" rev-parse HEAD)
+bash "$HOOK" --ci "$MERGE~1" "$MERGE" >/dev/null 2>&1
+[ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --ci 应放行真 merge commit"; }
 # fail-closed：不可达范围
 bash "$HOOK" --ci 0000000000000000000000000000000000000000 HEAD >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: fail-closed 不可达范围"; }
@@ -104,7 +119,7 @@ out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.s
 case "$out" in *$'\033'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 ESC" ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: ESC 用例输出异常: $out" ;; esac   # [ 转义（r15 no141：未闭合 [ 按字面是冷门巧合语义）
 # UTF-8 C1 定点剥除（r17 no158）：8 位 CSI/OSC 起始符不得透传
 out=$(NO_COLOR=1 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xc2\x9d')" 2>&1)
-case "$out" in *$'\xc2\x9b'*|*$'\xc2\x9d'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 UTF-8 C1" ;; *x[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: C1 用例输出异常" ;; esac
+case "$out" in *$'\xc2\x9b'*|*$'\xc2\x9d'*) fail=$((fail+1)); echo "FAIL: log_warn 未剥离 UTF-8 C1" ;; *x\[31my*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL: C1 用例输出异常" ;; esac   # 同 r15 no141 转义口径（r18 no195）
 # install.sh：hooksPath 写入断言（临时主仓 = 当前 clone 之外的测试 clone 语义）。
 # cp 不接 2>/dev/null：环境准备失败必须显式暴露而非让断言假阳性（r7 no17）
 IT=$(mktemp -d) && git init -q "$IT" && mkdir -p "$IT/tools/git-hooks" \
@@ -149,8 +164,9 @@ git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
 git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
 # 悬空 worktree：目录已删但元数据残留 → 跳过校验 + prune 提示，不置 mismatch（r11 no 75）
 rm -rf "$WT"
-(cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
-    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 悬空 worktree 应跳过不报错"; }
+mig_out=$(cd "$IT2" && bash tools/git-hooks/install.sh 2>&1); mig_rc=$?
+{ [ "$mig_rc" = "0" ] && [[ "$mig_out" == *"worktree prune"* ]]; } \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: 悬空 worktree 应跳过且输出 prune 提示（r18 no194，got rc=$mig_rc）"; }
 rm -rf "$IT2"
 # pre-commit 零依赖冒烟（r11 no 72）：空仓上应干净通过（无 staged 文件、无 HEAD）
 IT=$(mktemp -d) && git init -q "$IT" \
@@ -172,6 +188,15 @@ fi
 rm -rf "$IT"
 # clang-format 拦截路径（r16 no166·medium）：未格式化 .c staged → 拦截 + "无法读取
 # staged 内容"分支同链路（r16 no153/no165）
+# 空白符检查分支（r18 no190）：staged 含行尾空白 → 拦截（覆盖 diff-index --check 路径）
+IT=$(mktemp -d) && git init -q "$IT" \
+    && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
+    || { echo "FAIL: 空白用例环境准备失败"; exit 1; }
+printf 'package x\n// trailing \n' > "$IT/ws.go"
+git -C "$IT" add ws.go || { echo "FAIL: 空白用例 git add 失败"; exit 1; }
+(cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: pre-commit 应拦行尾空白（r18 no190）"; }
+rm -rf "$IT"
 if command -v clang-format >/dev/null; then
     IT=$(mktemp -d) && git init -q "$IT" \
         && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
@@ -213,7 +238,7 @@ rm -rf "$IT5"
 #   WT_NO_HOOKS=1 → exit 0（静默跳过）；旧分支无 install.sh → exit 0；install.sh 失败 → 非零传播
 # 提取前提（r14 no120）：hooks 行为单行单值、无行尾注释；内层不含 TOML 转义（r14 no112
 # 已重写 hooks 行避免 \"），提取后须含 install.sh 关键字方可作为有效命令串
-hooks_lines=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | wc -l)
+hooks_lines=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | grep -c .)   # grep -c 而非 wc -l（BSD 前导空格，r18 no191 同 r15 no138）
 [ "$hooks_lines" = "1" ] || { echo "FAIL: wt.toml 存在 $hooks_lines 行 hooks 键（提取契约定为单行，r17 no175）"; exit 1; }
 HOOKS_WRAP=$(sed -n 's/^hooks = "//p' "$HDIR/../../.config/wt.toml" | sed 's/"$//')
 [ -n "$HOOKS_WRAP" ] && case "$HOOKS_WRAP" in *install.sh*) ;; *) echo "FAIL: 提取的 hooks 包装命令非法: $HOOKS_WRAP"; exit 1 ;; esac \

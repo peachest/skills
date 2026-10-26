@@ -140,14 +140,6 @@ validate_range() {
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
     [ "$(printf '%s\n' "$shas" | wc -l)" -gt 200 ] && log_warn "范围 $base..$tip 提交数超过 200——确认 base 是否错配（校验耗时会线性增长）"
     while IFS= read -r sha; do
-        # Merge 豁免反伪造（r17 no170）：真 merge commit 恒有 >=2 parent；手写
-        # "Merge branch 'x'" subject 的普通提交在此被拒（L2 有 sha 可查，L1 维持 subject 口径）
-        case "$(git log -1 --format=%s "$sha")" in
-            "Merge branch "*|"Merge branches "*|"Merge tag "*|"Merge tags "*|"Merge commit "*|"Merge remote-tracking "*|"Merge pull request "*)
-                parents=$(git rev-list --parents -n1 "$sha" | wc -w)
-                [ "$parents" -lt 3 ] && { log_error "$sha 手写 Merge 主题但非 merge commit（parent 数 $((parents-1))）——请改写为 conventional 格式"; return 1; }
-                ;;
-        esac
         body=$(git log -1 --format=%B "$sha") \
             || { log_error "commit ${sha:0:8}: 无法读取提交信息"; bad=1; continue; }
         # 消息含 0x1e 一律拒绝（L1 钩子同口径；攻击者可借此伪造分隔符）
@@ -156,11 +148,35 @@ validate_range() {
             bad=1
             continue
         fi
+        # sed -n 取首行（SIGPIPE 防护 r12 no83）；剥前导空行同钩子口径（r13 no97）
+        first_line=$(printf '%s\n' "$body" | sed '/./,$!d' | sed -n '1{s/[[:space:]]*$//p;}')
+        # Merge 豁免反伪造（r17 no170，r18 no182 改用已算的 first_line 省一次子进程）：
+        # 真 merge commit 恒有 >=2 parent；手写 "Merge branch 'x'" subject 的普通提交
+        # 在此被拒（L2 有 sha 可查，L1 维持 subject 口径）。形态列表须与 EXEMPT 的
+        # branch(es)/tag(s)/commit(s) 对齐（r18 no180）
+        case "$first_line" in
+            "Merge branch "*|"Merge branches "*|"Merge tag "*|"Merge tags "*|"Merge commit "*|"Merge commits "*|"Merge remote-tracking "*|"Merge pull request "*)
+                # 显式设防（r18 no179·medium）：|| 列表左支内 set -e 被禁用，赋值失败会
+                # 使 -lt 比较报错短路、反伪造被静默跳过——fail-closed 须手动拦截
+                if ! parents=$(git rev-list --parents -n1 "$sha" | wc -w) || [ -z "$parents" ] || ! [ "$parents" -eq "$parents" ] 2>/dev/null; then
+                    log_error "commit ${sha:0:8}: 无法确定 parent 数（浅克隆截断/仓库损坏？）——merge 主题提交需完整 parent 信息"
+                    bad=1
+                    continue
+                fi
+                if [ "$parents" -lt 3 ]; then
+                    # 浅克隆 graft 裁剪会让真 merge 也只报 1 parent（r18 no183）：诊断区分
+                    if git rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then
+                        log_error "commit ${sha:0:8} 为浅克隆截断的 merge commit（parent 信息不全）——请 fetch-depth: 0 后重试"
+                    else
+                        log_error "commit ${sha:0:8} 手写 Merge 主题但非 merge commit（parent 数 $((parents-1))）——请改写为 conventional 格式"
+                    fi
+                    bad=1
+                fi
+                ;;
+        esac
         # 只去尾随空白：不裁前导空白——" Merge branch x"/" feat: x" 前置空格
         # 属格式违规，与 CI 拒绝口径一致（r7 no11）。[[:space:]] 含 \r（r10 no c4be）
-        # sed -n 替代 head -n1：大消息时 head 提前退出触发 SIGPIPE→141（set -o pipefail，r12 no83）；
-        # 剥前导空行——与钩子模式 cleanup 口径一致（verbatim/plumbing 入库的空行首，r13 no97）
-        first_line=$(printf '%s\n' "$body" | sed '/./,$!d' | sed -n '1{s/[[:space:]]*$//p;}')
+        # first_line 已在 0x1e 检查后统一计算（r18 no182：反伪造与格式校验共用）
         if ! validate_one "$first_line" "$body"; then
             log_error "  ↳ commit ${sha:0:8}: $(printf '%s' "$first_line" | tr -d '\000-\013\016-\037')"
             bad=1

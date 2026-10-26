@@ -8,7 +8,7 @@
 # FORCE_COLOR 显式开色（供 selftest 在非 TTY 管道环境注入验证着色路径，r7 no19；
 # 0/false 视为未开，r9 no 6e4b/r12 no77 社区约定）
 force_color_on=false
-case "${FORCE_COLOR:-}" in ""|0|[Ff]alse|[Nn]o|[Oo][Ff][Ff]) ;; *) force_color_on=true ;; esac   # 关断值大小写不敏感（r17 no160；不用 ${,,}——macOS bash 3.2）
+case "${FORCE_COLOR:-}" in ""|0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]) ;; *) force_color_on=true ;; esac   # 关断值大小写不敏感（r17 no160/r18 no177；不用 ${,,}——macOS bash 3.2）
 if [[ -z "${NO_COLOR:-}" ]] && { { [[ -t 1 && -t 2 ]] && [[ "${TERM:-}" != dumb ]]; } || $force_color_on; }; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
@@ -33,7 +33,9 @@ sanitize_log() {
     m=$(printf '%s' "$*" | tr -d '\000-\010\013\014\015\016-\037\177') || true
     # UTF-8 编码的 C1（C2 80–9F）中可承载/扰动终端序列的定点剥除（r16 no143/r17 no157）：
     # CSI/OSC/DCS/SOS/PM/APC 起始符 + NEL/RI 行为扰动符；均固定两字节序列，UTF-8 自
-    # 同步保证定点删除不误伤多字节字符
+    # 同步保证定点删除不误伤多字节字符。已知取舍（r18 no178）：保留 LF 以支持多行消息
+# ——外部输入可注入无前缀的伪造日志行，属可接受的显示层风险（行结构由 [INFO] 等前缀
+# 标识，机器解析不应信任无前缀行）
     m=${m//$'\xc2\x85'/}   # NEL
     m=${m//$'\xc2\x8d'/}   # RI
     m=${m//$'\xc2\x90'/}   # DCS
