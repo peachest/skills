@@ -37,6 +37,11 @@ Rank modification approaches by sync cost, always take the lowest that works:
 
 <!-- internal original changes carry [<org>] prefix — the only way to tell "our commits" from upstream's during sync. Cherry-picked upstream commits stay verbatim (git cherry-pick -x). -->
 
+<!-- 强制层：规则的「正典实现」是 tools/git-hooks/commit-msg 头部配置块
+     （COMMIT_PREFIX / EXEMPT；本地钩子 L1 与 CI 兜底 L2 调同一脚本，口径天然一致）。
+     改规则先改脚本，再同步本节散文；本节只写语义（为何要前缀、豁免的同步语义），
+     不重复枚举正则。钩子尚未安装时跑 /skill:setup-git-hooks。 -->
+
 ### Anchor comments
 
 <!-- when a core file must change, wrap with greppable anchors; state WHY, not what:
@@ -77,3 +82,15 @@ git cherry-pick -x <upstream_sha>
 ## 7. Making agents follow this spec
 
 <!-- pointer files: AGENTS.md / CLAUDE.md auto-load entry, rules dirs, plus hard constraints that don't rely on agent discipline (protected branches, commit-msg hooks) -->
+
+<!-- 硬约束三层（规范只靠自觉会衰减）：
+
+     | 层 | 机制 | 堵住的缺口 | 残余缺口 |
+     |---|---|---|---|
+     | L0 提示 | 本文件 + AGENTS.md 自动加载 | agent 不知道规范 | 无强制力 |
+     | L1 本地钩子 | tools/git-hooks/（core.hooksPath，install.sh 两行装） | 直接拦提交 | 仅限装了钩子的检出；--no-verify |
+     | L1.5 检出即装 | wt [pre-start] 跑 install.sh | per-clone 分发缺口（K8s 生态因此放弃本地钩子） | 不走 wt 的检出 |
+     | L2 服务端 | CI 兜底 job 调 commit-msg --ci | 跨检出 / --no-verify 都拦住 | 只对新 push 生效（存量豁免） |
+
+     L1 与 L2 调同一个 commit-msg 脚本（--ci 模式），口径天然一致；
+     安装与生成流程见 /skill:setup-git-hooks。 -->

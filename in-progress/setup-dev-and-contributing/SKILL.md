@@ -56,7 +56,14 @@ Show drafts of DEVELOPMENT.md and every contributing page — seed templates ada
 
 ### 4. Write
 
-Write `DEVELOPMENT.md` at repo root and `docs/contributing/*.md`. Then make agents find them:
+Write `DEVELOPMENT.md` at repo root and `docs/contributing/*.md`.
+
+**Hook policy 回填（fork posture 时）**：若仓内已有 `tools/git-hooks/commit-msg`（或
+`hack/git-hooks/commit-msg`），把 §2.2 定下的 `<org>` 前缀回填其头部配置块的
+`COMMIT_PREFIX`（豁免规则同源于 §2.2 的同步语义），并提示用户
+`/skill:setup-git-hooks` 可补齐 L1/L2 强制层。钩子尚不存在时只写文档 + 指引，不代建。
+
+Then make agents find them:
 
 - If an `## Agent skills` section exists in `AGENTS.md`/`CLAUDE.md`, add a `### Development and contributing` sub-block pointing to both (one line each).
 - Else if either file exists, add a two-line pointer near its top.
