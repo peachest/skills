@@ -16,7 +16,7 @@ cd "$repo_root" || exit 1
 
 zero=0000000000000000000000000000000000000000
 checked=""
-build_base="/tmp/build-<device-plugin-repo>"
+build_base="/tmp/build-example-plugin"
 
 # 清理上次失败的残留
 git worktree prune 2>/dev/null
@@ -40,7 +40,7 @@ clone_replace_deps() {
             continue
         fi
 
-        local gitlab_url="ssh://git@gitlab.example.com/llm/<platform>/hami/${dir_name}.git"   # 按仓填内部 GitLab SSH 地址
+        local gitlab_url="ssh://git@gitlab.example.com/<group>/<project>.git"   # 按仓填内部 GitLab SSH 地址
         log_info "克隆依赖: $dir_name <- $gitlab_url (dev)"
         local clone_err
         if ! clone_err=$(git clone --quiet --depth 1 -b dev "$gitlab_url" "$target" 2>&1); then
