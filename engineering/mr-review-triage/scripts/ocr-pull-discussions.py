@@ -181,7 +181,7 @@ def _pull_gitlab(mr_iid, skip_resolved=True):
         return []
 
     all_issues = []
-    max_pages = 5
+    max_pages = 50   # 5 页 x100 会静默截断大 MR（!46 实证 555 条 45 条丢失）；50 页 + 末页拉满警告兜底
 
     for page in range(1, max_pages + 1):
         endpoint = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions?per_page=100&page={page}"
