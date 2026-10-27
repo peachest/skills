@@ -9,6 +9,8 @@ Take a list of code review findings — from `/skill:triage-mr`, `/skill:code-re
 
 A finding is a claim, not a fact. The skill's job is to **verify** each claim before acting on it, then **fix** the ones that hold up. Verify before grill, grill before fix — inverting this order is the skill's defining failure.
 
+Many findings arriving fresh from triage-mr/ocr review and worth parallel adversarial challenge? Route the verdict pass to `/skill:challenge-and-fix` first, then fix the ACCEPT/PROPOSE survivors here.
+
 ## Input
 
 A list of findings in this uniform format, regardless of source:

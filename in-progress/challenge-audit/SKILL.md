@@ -15,7 +15,7 @@ A review report is itself a set of claims. Reviewers invent gaps, misquote sourc
 | **challenge-audit** | the whole report | Can I trust this reviewer at all, and what did it miss? |
 | **challenger** (agent) | a design artifact | Where is this spec / ADR itself wrong? |
 
-Run this first when report trust is in doubt; run `fix` on the findings that survive.
+Run this first when report trust is in doubt. Findings that survive route to `fix` (serial, main session) or `challenge-and-fix` (per-finding adversarial subagents, many findings).
 
 ## Process
 
