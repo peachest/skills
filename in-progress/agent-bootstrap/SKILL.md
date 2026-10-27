@@ -39,7 +39,7 @@ description: 为当前 session 或指定 agent 创建持久身份（manifest + c
 2. `charter.md`——使命/职责/红线/协作规则；
 3. `peers.md`——peer 名单/用途/拓扑；
 4. `STATE.md`——按当前上下文如实填写「战役快照/活跃后台任务/Backlog/交接附言」；全新 agent 则写初始态；
-5. `sessions.log`——自举模式追加第一行：`{"sessionId": "<当前 session UUID>", "startedAt": "<now ISO>", "endedAt": null, "note": "自举上岗"}`；建目录模式不写。
+5. `sessions.log`——自举模式追加第一行：`{"sessionId": "<当前 session UUID>", "startedAt": "<now ISO>", "endedAt": null, "note": "自举上岗"}`；建目录模式不写。sessionId 必须用 `agent-session-id` 工具取（历届事故均源于手抄错 id），禁止手写。
 
 ### 4. 更新 workspace AGENTS.md 的 agent 索引
 
@@ -58,7 +58,7 @@ description: 为当前 session 或指定 agent 创建持久身份（manifest + c
 
 ### 5. 收尾输出
 
-打印身份卡给用户确认：目录路径、五个文件清单、当值 session id（自举模式）、下一步提示（如「换届用 /agent-renew（待扩展落地）；给 peer 建身份可再次运行本 skill 带参数模式」）。
+打印身份卡给用户确认：目录路径、五个文件清单、当值 session id（自举模式）、下一步提示（换届已可用：当值 session 内 `/renew` 触发（可附补充要求 `/renew <text>`）；给 peer 建身份可再次运行本 skill 带参数模式）。
 
 ## 红线
 
