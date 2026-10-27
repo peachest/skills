@@ -1,0 +1,15 @@
+# fusion-search runtime config — cp to runtime.conf and fill in.
+# runtime.conf is gitignored: node-specific values (internal IPs) never get tracked.
+
+# Judge = any OpenAI-compatible chat endpoint used for rerank + relevance scores.
+# Placeholder host; ask platform team or check ~/ops notes for the current internal gateway.
+JUDGE_URL=http://<judge-gateway>:8000/v1/chat/completions
+JUDGE_MODEL=<judge-model>
+# Reasoning-capable judge models cannot disable thinking; lower effort instead.
+# Set to {} for plain chat models.
+JUDGE_REQUEST_EXTRA={"chat_template_kwargs":{"reasoning_effort":"low"}}
+
+# Optional overrides (sensible defaults otherwise):
+# DEEPSEEK_SEARCH_URL=https://api.deepseek.com/v1/tools/search
+# ANYSEARCH_CLI=/path/to/anysearch_cli.py
+# ANYSEARCH_PYTHON=/usr/bin/python3   # sibling CLI's interpreter; must have `requests`
