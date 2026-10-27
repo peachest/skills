@@ -47,14 +47,20 @@ def test_clean_chunk_sends_configured_model():
     captured = {}
 
     class FakeResp:
-        def raise_for_status(self):
-            pass
+        # mimic aiohttp: post() returns an async context manager
+        status = 200
 
         async def json(self):
             return {"choices": [{"message": {"content": " cleaned "}}]}
 
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
     class FakeSession:
-        async def post(self, url, headers=None, json=None, timeout=None):
+        def post(self, url, headers=None, json=None, timeout=None):
             captured.update(url=url, json=json, headers=headers)
             return FakeResp()
 

@@ -16,6 +16,7 @@ Resumable: OCR results cached in slides.json keyed by frame filename.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -25,7 +26,6 @@ import sys
 import time
 from pathlib import Path
 
-import requests
 from PIL import Image
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -43,24 +43,15 @@ PROMPT = (
 NON_SLIDE = "[非幻灯片]"
 
 
-def load_conf() -> dict:
-    keys = ("OCR_LLM_BASEURL", "OCR_LLM_MODEL", "OCR_LLM_KEY",
-            "SLIDE_SCENE_THRESHOLD", "SLIDE_HASH_THRESHOLD")
-    conf = {k: os.environ.get(k, "") for k in keys}
-    rc = SKILL_DIR / "runtime.conf"
-    if rc.is_file():
-        for line in rc.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k in conf and not conf[k]:
-                conf[k] = v
-    missing = [k for k in ("OCR_LLM_BASEURL", "OCR_LLM_MODEL") if not conf[k]]
-    if missing:
-        sys.exit(f"FAIL missing config: {missing} (env or runtime.conf)")
-    return conf
+from _conf import load_conf
+
+
+def _ocr_conf() -> dict:
+    return load_conf(
+        "OCR_LLM_BASEURL", "OCR_LLM_MODEL",
+        keys=("OCR_LLM_BASEURL", "OCR_LLM_MODEL", "OCR_LLM_KEY",
+              "SLIDE_SCENE_THRESHOLD", "SLIDE_HASH_THRESHOLD"),
+    )
 
 
 def parse_showinfo_pts(stderr_text: str) -> list[float]:
@@ -228,27 +219,20 @@ def upscale(image_path: str, factor: int = 2) -> str:
 
 
 def ocr_frame(conf: dict, image_path: str, attempts: int = 3) -> str:
+    from _llm import chat_once
     b64 = base64.b64encode(Path(image_path).read_bytes()).decode()
-    url = conf["OCR_LLM_BASEURL"].rstrip("/") + "/chat/completions"
-    payload = {
-        "model": conf["OCR_LLM_MODEL"],
-        "messages": [{"role": "user", "content": [
+    return asyncio.run(chat_once(
+        baseurl=conf["OCR_LLM_BASEURL"],
+        model=conf["OCR_LLM_MODEL"],
+        key=conf.get("OCR_LLM_KEY", ""),
+        messages=[{"role": "user", "content": [
             {"type": "text", "text": PROMPT},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
         ]}],
-        "temperature": 0,
-    }
-    headers = {"Authorization": f"Bearer {conf['OCR_LLM_KEY']}"} if conf["OCR_LLM_KEY"] else {}
-    last_err: Exception | None = None
-    for i in range(attempts):
-        try:
-            resp = requests.post(url, timeout=120, headers=headers, json=payload)
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
-        except Exception as e:  # noqa: BLE001 — retry, keep last error
-            last_err = e
-            time.sleep(2 * (i + 1))
-    raise last_err  # type: ignore[misc]
+        temperature=0,
+        timeout=120,
+        retries=attempts,
+    ))
 
 
 def extract_frames_adaptive(video: Path, out_dir: Path, threshold: float,
@@ -270,7 +254,7 @@ def main() -> None:
     workspace = Path(sys.argv[1])
     if not workspace.is_dir():
         sys.exit(f"FAIL workspace not found: {workspace}")
-    conf = load_conf()
+    conf = _ocr_conf()
     threshold = float(conf["SLIDE_SCENE_THRESHOLD"] or 0.3)
     hash_threshold = int(conf["SLIDE_HASH_THRESHOLD"] or 8)
 

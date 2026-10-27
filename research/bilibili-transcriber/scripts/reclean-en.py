@@ -50,26 +50,14 @@ PROMPT = """你是一名专业转录校对员。下面提供：
 输出校对后的中文转录稿："""
 
 
-def load_conf() -> dict:
-    conf = {
-        "CLEAN_LLM_BASEURL": "",
-        "CLEAN_LLM_MODEL": "",
-        "CLEAN_LLM_KEY": "",
-    }
-    rc = Path(__file__).resolve().parent.parent / "runtime.conf"
-    if rc.is_file():
-        for line in rc.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k in conf and not conf[k]:
-                conf[k] = v
-    missing = [k for k in ("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL") if not conf[k]]
-    if missing:
-        sys.exit(f"missing CLEAN_LLM config: {', '.join(missing)} (env or runtime.conf)")
-    return conf
+from _conf import load_conf
+
+
+def _clean_conf() -> dict:
+    return load_conf(
+        "CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL",
+        keys=("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL", "CLEAN_LLM_KEY"),
+    )
 
 
 def split_body(text: str) -> str:
@@ -99,16 +87,17 @@ def align_slices(parts: list[str], ref: str) -> list[str]:
 
 
 async def clean_chunk(sess: aiohttp.ClientSession, conf: dict, prompt: str, sem: asyncio.Semaphore) -> str:
+    from _llm import chat as llm_chat
     async with sem:
-        r = await sess.post(
-            f"{conf['CLEAN_LLM_BASEURL']}/chat/completions",
-            headers={"Authorization": f"Bearer {conf['CLEAN_LLM_KEY']}"} if conf["CLEAN_LLM_KEY"] else {},
-            json={"model": conf["CLEAN_LLM_MODEL"], "temperature": 0.1,
-                  "messages": [{"role": "user", "content": prompt}]},
-            timeout=aiohttp.ClientTimeout(total=900),
+        return await llm_chat(
+            sess,
+            baseurl=conf["CLEAN_LLM_BASEURL"],
+            model=conf["CLEAN_LLM_MODEL"],
+            key=conf.get("CLEAN_LLM_KEY", ""),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            timeout=900,
         )
-        r.raise_for_status()
-        return (await r.json())["choices"][0]["message"]["content"].strip()
 
 
 async def main() -> int:
@@ -121,7 +110,7 @@ async def main() -> int:
     ap.add_argument("--out", help="output path (default: <raw stem>-reclean.md beside input)")
     args = ap.parse_args()
 
-    conf = load_conf()
+    conf = _clean_conf()
     raw_path, en_path = Path(args.raw), Path(args.en_ref)
     zh = split_body(raw_path.read_text(encoding="utf-8"))
     en = en_path.read_text(encoding="utf-8").strip()

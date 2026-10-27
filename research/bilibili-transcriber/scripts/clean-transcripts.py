@@ -39,32 +39,10 @@ from pathlib import Path
 
 import aiohttp
 
+from _conf import load_conf
+from _llm import chat as llm_chat
+
 DIVIDER = re.compile(r"^---\s*$", re.M)
-
-
-def load_conf() -> dict:
-    conf = {
-        "CLEAN_LLM_BASEURL": os.environ.get("CLEAN_LLM_BASEURL", ""),
-        "CLEAN_LLM_MODEL": os.environ.get("CLEAN_LLM_MODEL", ""),
-        "CLEAN_LLM_KEY": os.environ.get("CLEAN_LLM_KEY", ""),
-        "CLEAN_LLM_FALLBACK": os.environ.get("CLEAN_LLM_FALLBACK", ""),
-        "CLEAN_LLM_EFFORT": os.environ.get("CLEAN_LLM_EFFORT", ""),
-        "CLEAN_LANG": os.environ.get("CLEAN_LANG", ""),
-    }
-    rc = Path(__file__).resolve().parent.parent / "runtime.conf"
-    if rc.is_file():
-        for line in rc.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k in conf and not conf[k]:
-                conf[k] = v
-    missing = [k for k in ("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL") if not conf[k]]
-    if missing:
-        sys.exit(f"FAIL missing config: {missing} (env or runtime.conf)")
-    return conf
 
 
 def split_body(text: str) -> tuple[str, str]:
@@ -147,35 +125,17 @@ def has_repeated_sentences(text: str, min_len: int = 40) -> bool:
 
 async def clean_one_chunk(sess, conf, title, raw, sem, retries=3, model=None, temp=0.0, fp=0.3, tmpl=None):
     async with sem:
-        payload = {
-            "model": model or conf["CLEAN_LLM_MODEL"],
-            "messages": [{"role": "user", "content": (tmpl or PROMPT_TMPL).format(title=title, raw=raw)}],
-            "temperature": temp,
-            "frequency_penalty": fp,
-            "max_tokens": 32000,
-        }
-        # GLM-5.3 reasoning knob: thinking cannot be disabled; low effort is
-        # the only speed lever (5.5x measured). Harmless to omit for flash.
-        if conf.get("CLEAN_LLM_EFFORT"):
-            payload["chat_template_kwargs"] = {"reasoning_effort": conf["CLEAN_LLM_EFFORT"]}
-        headers = {"Content-Type": "application/json"}
-        if conf["CLEAN_LLM_KEY"]:
-            headers["Authorization"] = f"Bearer {conf['CLEAN_LLM_KEY']}"
-        url = conf["CLEAN_LLM_BASEURL"].rstrip("/") + "/chat/completions"
-        for attempt in range(retries):
-            try:
-                async with sess.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=300)) as r:
-                    if r.status != 200:
-                        raise RuntimeError(f"HTTP {r.status}: {(await r.text())[:200]}")
-                    data = await r.json()
-                    out = data["choices"][0]["message"]["content"].strip()
-                    if out.startswith("```"):
-                        out = out.strip("`").lstrip("\n")
-                    return out
-            except Exception:
-                if attempt == retries - 1:
-                    raise
-                await asyncio.sleep(2 * (attempt + 1))
+        return await llm_chat(
+            sess,
+            baseurl=conf["CLEAN_LLM_BASEURL"],
+            model=model or conf["CLEAN_LLM_MODEL"],
+            key=conf.get("CLEAN_LLM_KEY", ""),
+            messages=[{"role": "user", "content": (tmpl or PROMPT_TMPL).format(title=title, raw=raw)}],
+            temperature=temp,
+            extra={"frequency_penalty": fp},
+            effort=conf.get("CLEAN_LLM_EFFORT", ""),
+            retries=retries,
+        )
 
 
 def is_cleaned(d: Path) -> bool:

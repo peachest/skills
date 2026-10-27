@@ -231,58 +231,31 @@ def run_en_pass(ws: Path) -> bool:
     return bool(ok)
 
 
-def load_conf() -> dict:
-    conf = {
-        "CLEAN_LLM_BASEURL": os.environ.get("CLEAN_LLM_BASEURL", ""),
-        "CLEAN_LLM_MODEL": os.environ.get("CLEAN_LLM_MODEL", ""),
-        "CLEAN_LLM_KEY": os.environ.get("CLEAN_LLM_KEY", ""),
-        "CLEAN_LLM_EFFORT": os.environ.get("CLEAN_LLM_EFFORT", ""),
-    }
-    rc = SKILL_DIR / "runtime.conf"
-    if rc.is_file():
-        for line in rc.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k in conf and not conf[k]:
-                conf[k] = v
-    if not conf["CLEAN_LLM_BASEURL"] or not conf["CLEAN_LLM_MODEL"]:
-        sys.exit("FAIL missing CLEAN_LLM_* config")
-    return conf
+from _conf import load_conf
+
+
+def _merge_conf() -> dict:
+    return load_conf(
+        "CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL",
+        keys=("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL", "CLEAN_LLM_KEY", "CLEAN_LLM_EFFORT"),
+    )
 
 
 async def llm_merge_batch(sess, conf, windows: list[dict], sem) -> list[str]:
     """Merge a batch of windows in one LLM call."""
     import aiohttp
-    payload = {
-        "model": conf["CLEAN_LLM_MODEL"],
-        "messages": [{"role": "user", "content": MERGE_PROMPT.format(windows=build_merge_input(windows))}],
-        "temperature": 0.0,
-        "max_tokens": 32000,
-    }
-    # GLM-5.3 reasoning knob: thinking cannot be disabled; low effort is the
-    # only speed lever (5.5x measured). Omitted for non-glm53 models.
-    if conf.get("CLEAN_LLM_EFFORT"):
-        payload["chat_template_kwargs"] = {"reasoning_effort": conf["CLEAN_LLM_EFFORT"]}
-    headers = {"Content-Type": "application/json"}
-    if conf["CLEAN_LLM_KEY"]:
-        headers["Authorization"] = f"Bearer {conf['CLEAN_LLM_KEY']}"
-    url = conf["CLEAN_LLM_BASEURL"].rstrip("/") + "/chat/completions"
+    from _llm import chat as llm_chat
     async with sem:
-        for attempt in range(3):
-            try:
-                async with sess.post(url, json=payload, headers=headers,
-                                     timeout=aiohttp.ClientTimeout(total=300)) as r:
-                    if r.status != 200:
-                        raise RuntimeError(f"HTTP {r.status}")
-                    out = (await r.json())["choices"][0]["message"]["content"].strip()
-                return parse_merge_output(out, len(windows))
-            except Exception:
-                if attempt == 2:
-                    raise
-                await asyncio.sleep(3 * (attempt + 1))
+        out = await llm_chat(
+            sess,
+            baseurl=conf["CLEAN_LLM_BASEURL"],
+            model=conf["CLEAN_LLM_MODEL"],
+            key=conf.get("CLEAN_LLM_KEY", ""),
+            messages=[{"role": "user", "content": MERGE_PROMPT.format(windows=build_merge_input(windows))}],
+            temperature=0.0,
+            effort=conf.get("CLEAN_LLM_EFFORT", ""),
+        )
+        return parse_merge_output(out, len(windows))
 
 
 async def process_target(item: dict, sess, conf, args, sem, asr_sem, stats, lock):
@@ -346,7 +319,7 @@ async def main() -> int:
     targets = json.loads(Path(args.targets).read_text(encoding="utf-8"))
     if args.limit:
         targets = targets[: args.limit]
-    conf = load_conf()
+    conf = _merge_conf()
     stats = {"ok": 0, "failed": []}
     lock = asyncio.Lock()
     sem = asyncio.Semaphore(args.concurrency)      # LLM calls
