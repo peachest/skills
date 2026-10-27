@@ -18,7 +18,7 @@ cd "$repo_root" || exit 1
 
 zero=0000000000000000000000000000000000000000
 checked=""
-build_base="/tmp/build-ppu-device-plugin"
+build_base="/tmp/build-go-project"
 
 # 清理上次失败的残留
 git worktree prune 2>/dev/null
