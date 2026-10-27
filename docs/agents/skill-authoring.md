@@ -155,6 +155,12 @@ Rules:
   dependencies beyond bash + coreutils, idempotent, fast (<10s).
 - Run it: on a new node, after a service moves, before a long batch.
 
+## Cross-skill dependencies (how to write them)
+
+A skill that references another skill must carry the dependency's verb: `/skill:xxx` alone is ambiguous (it can mean delegate, read, or route). Full verb taxonomy and writing rules: [`skill-dependencies.md`](skill-dependencies.md).
+
+Corpus-verified effectiveness (2026-10-27, 5593 sessions / 7721 skill injections / 183 declared edges): a **read pointer naming the exact file** materializes in sessions at 48–66% — the strongest form by far; **invoke** (delegate/run) materializes mostly as action inside tool calls (22%), not as text (3%); bare **mention** is weakest (9%). When a dependency must fire, write `read /skill:xxx 的 <file>`; pure name-drops do not transfer.
+
 ## Diagnose companion skills (suggested, not mandatory)
 
 A separate `diagnose-<target>` skill — one that owns the troubleshooting
