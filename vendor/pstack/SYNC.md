@@ -32,7 +32,7 @@ Sync rules mirror `vendor/mattpocock/MIRROR.md`; pstack-specific notes below.
 
 Only these skills are installed to the global agent (install list is the source of truth):
 
-`how`, `why`, `blast-radius`, `correct`, `benchmark-checklist`, `statechart`, `arena`, `sharpen`, `ketchup`
+`how`, `why`, `blast-radius`, `correct`, `benchmark-checklist`, `statechart`, `arena`, `sharpen`, `ketchup`, `no-comments`
 
 Machine check — run after any install/uninstall or sync:
 
