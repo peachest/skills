@@ -13,7 +13,7 @@ description: 评审意见逐条对抗核实——triage-mr / 本地 ocr 评审�
 | **challenge-audit** | 整份报告 | 这位评审还值得信吗 |
 | **challenge-and-fix** | 一条意见 × 一个 subagent | 意见成立吗？方案最优吗？并行定谳 |
 
-意见多、或想并行处理时用本 skill；主 session 只做派发、综合、修复三件事，对抗外包，修复不外包。
+意见多、或想并行处理时用本 skill；主 session 只做派发、综合、修复三件事，对抗外包，修复不外包。链路：报告可信度存疑先走 `challenge-audit`，本 skill 定谳后，修复执行与回归验证按 `fix` 的方法域走。
 
 ## 主 session 流程
 
