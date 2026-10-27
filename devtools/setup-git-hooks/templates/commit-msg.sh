@@ -30,8 +30,8 @@ BODY_EXEMPT=(
 
 set -euo pipefail
 
-SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（readlink -f 旧 macOS 缺失，r12 no81）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
-source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"   # cd+pwd -P 可移植（readlink -f 旧 macOS 缺失，r12 no81/r23 no271）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
+source "$SCRIPT_DIR/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 # 配置块自检：拼错会静默 fail-open（跳过全部格式校验），与"单一事实源"定位不符（r9 no e3d5）
 case "$COMMIT_FORMAT" in conventional|none) ;; *) echo "错误: COMMIT_FORMAT 配置非法: $COMMIT_FORMAT" >&2; exit 1 ;; esac
@@ -147,6 +147,7 @@ validate_range() {
         # 全部校验，且 L1（grep 原文件）能看到，破坏同口径
         git cat-file commit "$sha" > "$msg_tmp" 2>/dev/null \
             || { log_error "commit ${sha:0:8}: 无法读取提交对象"; bad=1; continue; }
+        local raw_len nonul_len   # 不泄漏全局（r23 no264）
         raw_len=$(wc -c < "$msg_tmp" | tr -d "[:space:]")
         nonul_len=$(LC_ALL=C tr -d '\000' < "$msg_tmp" | wc -c | tr -d "[:space:]")
         if [ "$raw_len" != "$nonul_len" ]; then
@@ -179,7 +180,9 @@ validate_range() {
                 fi
                 if [ "$parents" -lt 3 ]; then
                     # 浅克隆 graft 裁剪会让真 merge 也只报 1 parent（r18 no183）：诊断区分
-                    if git rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then
+                    # is-shallow-repository 需 git ≥2.15，旧版报错兜底为非浅克隆（r23 no265）
+                    shallow=$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)
+                    if [ "$shallow" = "true" ]; then
                         log_error "commit ${sha:0:8} 为浅克隆截断的 merge commit（parent 信息不全）——请 fetch-depth: 0 后重试"
                     else
                         log_error "commit ${sha:0:8} 手写 Merge 主题但非 merge commit（parent 数 $((parents-1))）——请改写为 conventional 格式"
@@ -213,11 +216,14 @@ case "${1:-}" in
         # 消息落临时文件：NUL 检测需字节级读取，命令替换会静默丢弃 \0（r22 no255）
         msg_tmp=$(mktemp) || { log_error "无法创建临时文件"; exit 1; }
         trap 'rm -f "$msg_tmp"' EXIT
+        trap 'rm -f "$msg_tmp"; exit 130' INT TERM HUP   # 信号清理（r23 no262）
         validate_range "$2" "$3" || exit 1
         [ "${empty_range:-0}" = 1 ] || log_info "CI commit 检查通过。"   # 空范围不报"通过"（r12 no78：WARN 与通过矛盾）
         ;;
     *)
         [ -f "${1:-}" ] || { log_error "未提供提交信息文件"; exit 1; }
+        # 已知 L1/L2 口径边界（r23 no261）：手写 Merge/Revert 主题在 L1 按 subject 豁免
+        # 放行（本地无 sha/尾注可查反伪造）——L2 会拒，本地过 push 后 CI 红属预期
         # L1 与 L2 同源：本地钩子也拒 0x1e（消息文件即将入库，可预检）
         if grep -q $'\x1e' "$1"; then
             log_error "提交信息包含非法控制字符 0x1e（与 CI 校验协议冲突）"
@@ -231,7 +237,19 @@ case "${1:-}" in
         # / 会破坏 sed 地址定界符（转义后仍歧义），显式拒绝而非晦涩报错（r14 no114）
         [ "$comment_char" = "/" ] && { echo "错误: 不支持的 core.commentchar 值: /（请改用其他注释符）" >&2; exit 1; }
         esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
-        msg_clean=$(sed "/^$esc_cc/d" "$1" | sed '/./,$!d')
+        # scissors 截断（r23 no259·medium）：git commit -v 的编辑文件在 # ---- >8 ----
+        # 后附 diff——diff 中可能出现与真实签署归一化后相同的行，误报告重；L2 读 %B
+        # 不含 diff，两口径分叉
+        msg_clean=$(sed -e "/^$esc_cc/d" -e "/^$esc_cc ---- >8 ----/,\$d" "$1" | sed '/./,$!d')   # scissors 起至文件尾删除
+        # L1 NUL 检测（r23 no260，与 L2 r22 no255 同口径）：sed 丢弃 NUL 后其后内容
+        # 对查重/格式校验不可见；字节数对比
+        # 钩子分支位于顶层作用域（非函数），无需 local（r23 no264 仅适用于 L2 函数内）
+        raw_len=$(wc -c < "$1" | tr -d "[:space:]")
+        nonul_len=$(LC_ALL=C tr -d '\000' < "$1" | wc -c | tr -d "[:space:]")
+        if [ "$raw_len" != "$nonul_len" ]; then
+            log_error "提交信息包含 NUL 字节（与 CI 校验协议冲突）"
+            exit 1
+        fi
         # 已知 L1/L2 边界（r14 no115）：-m/-F 提交的默认 cleanup=whitespace 不剥注释行，
         # `#` 开头的 subject 会入库；此处按 strip 模拟会误删该行——多行 -m 时本地放行、
         # CI 按 %B 原文拒绝（fail-closed 方向）。按 commit.cleanup 区分属后续增强

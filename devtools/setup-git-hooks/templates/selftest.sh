@@ -16,7 +16,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYST
 T=$(mktemp -d) || { echo >&2 "FAIL: mktemp -d 失败" >&2; exit 1; }
 MSG=$(mktemp) || { echo >&2 "FAIL: mktemp 失败" >&2; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
-trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${IT4:-}" "${IT5:-}" "${IT6:-}" "${WT:-}"' EXIT   # IT4 同纳入（r15 no140）
+trap 'rm -rf "$T" "$MSG" "${D:-}" "${IT:-}" "${IT2:-}" "${IT3:-}" "${IT4:-}" "${IT5:-}" "${IT6:-}" "${IT7:-}" "${WT:-}"' EXIT   # IT4 同纳入（r15 no140）
 cp commit-msg common.sh "$T/" || { echo >&2 "FAIL: 副本复制失败" >&2; exit 1; }
 
 t() { # t <期望exit> <描述> <msg文件内容>
@@ -63,7 +63,9 @@ t 0 "[TW]+conventional 通过"   $'[TW] feat(x): ok\n'
 t 1 "前缀子串注入拦截"         $'xxx feat: add [TW]\n'
 t 0 "前缀后多空格归一化"       $'[TW]  feat(x): ok\n'
 t 0 "Revert 豁免优先于前缀"    $'Revert "[TW] feat(x): ok"\n'
-sed 's/^COMMIT_PREFIX="\[TW\]"/COMMIT_PREFIX=""/' "$HDIR/commit-msg" > "$T/commit-msg"
+# 还原对象是 $T 副本（其 COMMIT_PREFIX 已为 [TW]，r23 no273：读源文件是 no-op）
+sed 's/^COMMIT_PREFIX="\[TW\]"/COMMIT_PREFIX=""/' "$T/commit-msg" > "$T/commit-msg.r" \
+    && mv "$T/commit-msg.r" "$T/commit-msg"
 grep -q '^COMMIT_PREFIX=""' "$T/commit-msg" || { echo >&2 "FAIL: 前缀还原 sed 未命中" >&2; exit 1; }
 cd "$HDIR" || exit 1   # 矩阵结束回源目录（r22 no256）
 # --ci 批量形态（临时仓，身份用本地假值即可——commit-msg 不校验作者）
@@ -188,16 +190,17 @@ git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init"
 git -C "$IT2" config extensions.worktreeConfig true || { echo >&2 "FAIL: extensions.worktreeConfig 开启失败" >&2; exit 1; }
 WT=$(mktemp -d)
 git -C "$IT2" worktree add -q -b tmp-mig-wt "$WT" HEAD >/dev/null 2>&1 || { echo >&2 "FAIL: 迁移用例 worktree 创建失败" >&2; exit 1; }
-git -C "$WT" config --worktree core.hooksPath "/stale/hooks" || { echo >&2 "FAIL: worktree 级 hooksPath 写入失败（断言会空转）" >&2; exit 1; }   # 模拟旧 install-hooks.sh 残留
+git -C "$WT" config --worktree core.hooksPath "$WT/.git/worktrees/wt/hooks" || { echo >&2 "FAIL: worktree 级 hooksPath 写入失败（断言会空转）" >&2; exit 1; }   # 模拟旧 install-hooks.sh 残留（gitdir hooks 形态，r23 no266）
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     || { fail=$((fail+1)); echo >&2 "FAIL: 迁移用例 install.sh 非零退出（r8 no34ab）" >&2; }
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: install.sh 未清除 worktree 级 hooksPath" >&2; }
 # 多值清理用例（r10 no cf09 → r12 no86 修订）：worktree 级同键双值在 --unset 下必败，
 # 已改用 --unset-all——本用例验证多值也能清理成功（exit 0），不再走 fail-loud
 # 注意首次 install 已把残留清空，需连加两个值才能构成多值场景
-git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
+STALE="$WT/.git/worktrees/wt/hooks"
+git -C "$WT" config --worktree --add core.hooksPath "$STALE" \
     || { echo >&2 "FAIL: 多值 --add 1 失败（断言会空转）" >&2; exit 1; }
-git -C "$WT" config --worktree --add core.hooksPath /stale/hooks \
+git -C "$WT" config --worktree --add core.hooksPath "$STALE" \
     || { echo >&2 "FAIL: 多值 --add 2 失败（断言会空转）" >&2; exit 1; }
 [ "$(git -C "$WT" config --worktree --get-all core.hooksPath | grep -c .)" = "2" ] \
     || { echo >&2 "FAIL: 多值场景未构造成功（get-all 计数非 2）" >&2; exit 1; }   # 环境断言（r13 no107）；grep -c 而非 wc -l（BSD 前导空格填充，r15 no138）
@@ -265,6 +268,15 @@ IT=$(mktemp -d) && git init -q "$IT" \
 (cd "$IT" && env -u PATH -u HOME bash "$IT/pre-push" </dev/null >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: pre-push env -u PATH/HOME 冒烟失败" >&2; }
 rm -rf "$IT"
+# mismatch 聚合 → exit 1（r23 no267·medium）：环境级 GIT_CONFIG_COUNT 注入 hooksPath
+# 覆盖——check_wt 实际生效值非 HOOKS_DIR，聚合后必须 exit 1（wt pre-start 依赖该信号）
+IT7=$(mktemp -d) && git init -q "$IT7" && mkdir -p "$IT7/tools/git-hooks" \
+    && cp "$HDIR"/{install.sh,common.sh} "$IT7/tools/git-hooks/" \
+    || { echo >&2 "FAIL: mismatch 用例环境准备失败"; exit 1; }
+mig_out=$(cd "$IT7" && GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/other bash tools/git-hooks/install.sh 2>&1); mig_rc=$?
+{ [ "$mig_rc" = "1" ] && [[ "$mig_out" == *"hooksPath 校验未通过"* ]]; } \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 环境级覆盖应 mismatch 聚合 exit 1（r23 no267，got rc=$mig_rc）"; }
+rm -rf "$IT7"
 # 聚合失败 → 非零（r16 no148·medium）：损坏 config.worktree 使后续 git config 全部 fatal——
 # 迁移分支被跳过、配置写入本身也 128 退出；可观测契约是“非零感知”，不锁定具体退出码
 # （wt pre-start / make setup 只消费非零信号）
@@ -335,6 +347,12 @@ printf 'feat: clean\n' > "$IT4/clean.msg"   # 阳性对照（r19 no211）：同�
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 干净消息应通过（阳性对照，r19 no211）" >&2; }
 (cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/msg" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 应拒含 0x1e 的消息文件" >&2; }
+# L1 NUL（r23 no260，与 L2 同口径）——bash printf 无法输出 NUL，用 /dev/zero 拼接
+{ printf 'feat: x'; head -c 1 /dev/zero; printf 'hidden\n'; } > "$IT4/nulmsg" \
+    && [ "$(wc -c < "$IT4/nulmsg")" -gt 13 ] \
+    || { echo >&2 "SKIP: 无法构造含 NUL 文件，跳过 L1 NUL 用例"; skipped=$((skipped+1)); }
+(cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/nulmsg" >/dev/null 2>&1)
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 应拒含 NUL 的消息文件（r23 no260）"; }
 rm -rf "$IT4"
 # 0x1e 拒绝回归（body 含独立 \t\x1e 行形态——涵盖伪造终止符攻击的输入特征；
 # r11 重写后不再有记录协议，0x1e 一律 fail-closed，r12 no92 注释对齐）。

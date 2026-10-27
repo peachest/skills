@@ -5,8 +5,8 @@
 # 凭证扫描请另装 gitleaks 并在此追加（除 gofmt/clang-format 工具链外零其他依赖、不内置任何扫描器；工具缺失/版本过旧由下方预检拦截并给出指引，r14 no117/r20 no222）
 
 set -euo pipefail   # 入口自行声明（common.sh 不带副作用）；本钩子全部检查为 if/exit 结构，-e 可安全兜住未来新增检查的未防护失败
-SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd -P)"/$(basename "$0")   # cd+pwd -P 可移植（r12 no81/r19 no208）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
-source "$(dirname "$SCRIPT_PATH")/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"   # cd+pwd -P 可移植（r12 no81/r19 no208/r23 no271：省 basename 往返）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
+source "$SCRIPT_DIR/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 

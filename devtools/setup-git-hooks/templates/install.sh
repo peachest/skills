@@ -56,7 +56,9 @@ if old="$(git config --show-origin --get core.hooksPath 2>/dev/null)"; then
     fi
 fi
 # porcelain 每块以空行结尾；先落盘再循环：进程替换的退出码不传播，pipefail 下 git 失败
-# 会静默空循环（r9 no 9e3e）。清理与校验两个循环共用同一快照
+# 会静默空循环（r9 no 9e3e）。清理与校验两个循环共用同一快照。快照边界（r23 no270）：
+# 快照后并发增删的 worktree 不在处理范围——新增 worktree 读共享配置天然生效、
+# 悬空场景有警告兜底、幂等重跑可收敛；clean_wt 探测与 unset 间亦有 TOCTOU 窗口
 wts=$(git worktree list --porcelain) || { echo "错误: git worktree list 失败" >&2; exit 1; }
 
 # porcelain 共享解析：attached 块以 branch 行收尾，detached 块以 detached 行收尾，空行即块界。
@@ -81,22 +83,29 @@ each_wt() {  # $1 = 回调函数名（接受 worktree 路径参数）
 # worktree 都写了各自的 worktree 级 hooksPath（指向已悬空的 gitdir hooks），
 # 优先级高于 clone 级配置。遍历全部 worktree 统一清理
 if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; then
-    clean_fail=0
-    clean_wt() {  # $1 = worktree 路径：存在 worktree 级 hooksPath 则清除
+    clean_wt() {  # $1 = worktree 路径：旧 install-hooks.sh 残留则清除
         local old_val
         if old_val=$(git -C "$1" config --worktree --get core.hooksPath 2>/dev/null); then   # 单次调用探测+取值（r15 no135：消竞态）
-            if git -C "$1" config --worktree --unset-all core.hooksPath; then
-                echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值是用户恢复的唯一线索，统一走 stderr（r22 no247）
-            else
-                echo "警告: $1 清理失败" >&2
-                return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
-            fi
+            # 收窄清理范围（r23 no266·medium）：仅清旧脚本残留形态（gitdir hooks 路径）。
+            # pre-start 使本脚本每次建仓都跑——"一律清除"会让用户自意的 worktree 级
+            # 配置无感知丢失（恢复线索只在触发者终端）。非残留形态仅警告跳过
+            case "$old_val" in
+                */.git/worktrees/*/hooks|*/.git/worktrees/*/hooks/)
+                    if git -C "$1" config --worktree --unset-all core.hooksPath; then
+                        echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值可恢复线索，走 stderr（r22 no247）
+                    else
+                        echo "警告: $1 清理失败" >&2
+                        return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
+                    fi
+                    ;;
+                *)
+                    echo "警告: $1 存在非迁移残留的 worktree 级 hooksPath（原值: $old_val）——保留不动；如需统一请手动 unset" >&2
+                    ;;
+            esac
         fi
     }
-    # 旧 install-hooks.sh 残留形态即 gitdir hooks 路径；用户自意的其他 worktree 级配置
-    # 也会被清——原值已在上条提示保留可恢复（r12 no88，取舍：迁移脚本语义即统一）
     each_wt clean_wt
-    clean_fail=$CALLBACK_FAILED   # 共享遍历器的失败聚合（r12 no89）
+    clean_fail=$CALLBACK_FAILED   # 共享遍历器的失败聚合（r12 no89）；未进本分支时由 ${clean_fail:-0} 兜底（r23 no268）
     CALLBACK_FAILED=0
 fi
 
@@ -116,7 +125,7 @@ check_wt() {  # $1 = worktree 路径：校验实际生效值（悬空跳过并�
         echo "警告: $1 的 hooksPath 读取失败（元数据损坏？）" >&2
         return 1
     fi
-    actual="${actual%/}"   # 尾斜杠归一化（r22 no248：语义等价的既有配置不误报）
+    while [ "${actual%/}" != "$actual" ]; do actual="${actual%/}"; done   # 剥全部尾斜杠（r22 no248/r23 no269：tools/git-hooks// 等语义等价不误报）
     if [ "$actual" != "$HOOKS_DIR" ]; then
         # 打印实际生效值（r19 no202）：mismatch 成因多样（worktree 级残留/local include/
         # 环境级 GIT_CONFIG_* 覆盖/尾部斜杠差异），实测值帮助定位
