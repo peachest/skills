@@ -6,7 +6,7 @@ description: >
   commit, or branch diff), audit existing code without a diff (ocr scan), resume or
   look up a previous review session, re-review after fixes, or set up / verify /
   troubleshoot the ocr LLM provider (LLM timeouts, concurrency, thinking-disable).
-  Enforces gateway-safe defaults (OCR_LLM_TIMEOUT=600, --timeout 30 locked,
+  Enforces gateway-safe defaults (OCR_LLM_TIMEOUT=300, --timeout 30 locked,
   concurrency tuned to diff size), persists results as ocr sessions, and hands
   findings to /skill:fix. Reviews run in the background (bg_run) or via a
   subagent so they never block the foreground task. Prefer this over the
@@ -29,8 +29,9 @@ which ocr || npm i -g --prefix ~/.npm-global @alibaba-group/open-code-review
 ocr llm test
 ```
 
-Baseline is ocr **v1.11.1+** — `--effort` presets, effort-scaled timeouts, and the
-rule.json arbitrary-file-read fix need it.
+Baseline is ocr **v1.13.3** (audited 2026-10-27; chapter 9 assumes it). `--effort`
+presets need v1.11.1+. If `ocr version` is older than v1.13, reinstall first:
+`npm i -g --prefix ~/.npm-global @alibaba-group/open-code-review`.
 
 **Done when** `ocr llm test` reports success. On failure → chapter 2.
 
@@ -39,9 +40,10 @@ rule.json arbitrary-file-read fix need it.
 The provider (`internal-gw`) is configured globally at `~/.opencodereview/config.json`.
 Two facts govern every config decision:
 
-- **`ocr config` only supports `set`** — there is no `get`. Inspect the config
-  file with python instead, and redact any `api_key`/`auth_token` values before
-  showing them.
+- **`ocr config` has `set` and `unset` but no `get`.** `unset` removes a whole
+  `custom_providers.<name>` / `mcp_servers.<name>` entry — it cannot delete
+  individual leaf keys (measured v1.13.3). Inspect the config file with python
+  instead, and redact any `api_key`/`auth_token` values before showing them.
 - **When `provider <name>` is active, every `llm.*` setting is ignored.** The
   resolver takes the provider path and returns; `ocr config set llm.extra_body`
   is a silent no-op (ocr prints a WARNING). This exact mistake has propagated
@@ -94,7 +96,7 @@ reasoning_content against a live endpoint) use the ocr-image repo's
 
 | Parameter | Value | Rule |
 |---|---|---|
-| `OCR_LLM_TIMEOUT` | `300` | Export on every invocation. Per-LLM-request timeout in seconds; the only knob for it (`timeout_sec` is not in the `ocr config set` whitelist). Measured healthy-request p99 ≤ 276s across 19.5k local requests; the SDK hardcodes 5 retries, so the worst chain is 6× this value — 300s bounds that at 30 min instead of a full hour. |
+| `OCR_LLM_TIMEOUT` | `300` | Export on every invocation. Per-LLM-request timeout in seconds. Since v1.12 a per-provider `custom_providers.<name>.timeout_sec` is also settable, but the env var wins when both are set (measured v1.13.3: `OCR_LLM_TIMEOUT=60` beat `timeout_sec=5` against a 30s-delay fake server). Measured healthy-request p99 ≤ 276s across 19.5k local requests; the SDK hardcodes 5 retries, so the worst chain is 6× this value — 300s bounds that at 30 min instead of a full hour. |
 | `--timeout 30` | locked | Per-file-group agentic-loop timeout in minutes. The agent never changes this value. (v1.11 default is 15, scaled by effort — our explicit 30 stays the safe upper bound.) |
 | `--concurrency` | 2 default | Gateway is shared — high concurrency queues requests until they time out. Judge the scope first with `--preview`: ≤5 files → 4; 6–15 → 2–4 (e2e: 12 files at 4 with `--effort low` finished in ~16 min); >15 → 1–2. Whole-repo scan → 1. |
 | `--effort medium` | default | Review rounds per file: low=1, medium=2, high=3. Medium for the first full review. Use `low` when verification matters more than depth: re-review after `/skill:fix`, large scopes (>15 files), quick pre-MR sanity checks — it halves the LLM work. |
@@ -225,10 +227,35 @@ Work the layers in order: **config → `ocr llm test` → grouping → per-file 
 | Reviews keep timing out across every parameter combination | Model/gateway choice dominates parameters — measured: vibecoding+glm-5 ~4 min/file vs internal-gateway glm53-test finishing 12 files in ~16 min with the same flags | Switch model/gateway (chapter 2) before tuning anything else |
 | Per-file failures on a large project | Concurrency too high for the shared gateway | Drop concurrency to 1, keep `OCR_LLM_TIMEOUT=600` and `--timeout 30` |
 | No progress visible while a review runs | `--audience agent` discards progress lines entirely | Debug-run with `--audience human --format json -o /tmp/r.json 2>/tmp/ocr-stderr.log` — progress goes to stderr, stdout stays pure JSON |
-| A review hangs past `--timeout` and never finishes | Comment-relocation LLM calls run under `context.WithoutCancel` — they escape the per-file timeout entirely (upstream bug, unfixed in v1.11.2, `internal/llmloop/loop.go:383`) | Interrupt and re-run with `--resume <session-id>`; a wall-clock `timeout` wrapper is the CI-side workaround |
+| A review hangs past `--timeout` and never finishes | Comment-relocation LLM calls run under `context.WithoutCancel` — they escape the per-file timeout entirely (upstream bug, still unfixed in v1.13.3, `internal/llmloop/loop.go:826`) | Interrupt and re-run with `--resume <session-id>`; a wall-clock `timeout` wrapper is the CI-side workaround |
 | Want fewer per-file LLM rounds | `--max-tools` cannot go below the per-group template default (v1.11: default 100, min clamp 50) — it is not a knob for reducing tool rounds | Use `--effort low` instead (halves full review rounds); `--no-filter` additionally skips the per-file REVIEW_FILTER_TASK post-processing (~4% of requests) at the cost of noise |
 | An `--exclude` pattern doesn't take effect | Matching is doublestar full-path, not gitignore basename — bare patterns only match the repo root | Check `ocr review --preview --format json` first: the `exclude_reason` field shows whether a file fell to `default_path` (built-in list) or `user_exclude` (your pattern) — faster than guessing pattern syntax |
 | `provider "internal-gw" is active and takes precedence over llm.*` warning | `llm.*` settings are ignored | Move the setting to `custom_providers.internal-gw.*` |
+
+## 9. New surface in v1.12 → v1.13 (audited 2026-10-27 against installed v1.13.3)
+
+Everything below arrived after this skill's v1.11 baseline. Verified against
+`--help` output and the upstream changelog; the timeout precedence claim was
+additionally A/B-measured against a delay fake server.
+
+| Surface | What it does | When to reach for it |
+|---|---|---|
+| `ocr review -B <file>` (`--background-file`) | Requirement context from a Markdown file; takes precedence over `-b` | Long review checklists — write a file instead of cramming `-b` |
+| `--provider <p> --model <m>` | Per-run LLM override, no config change | A/B a candidate model on one review before switching the gateway default |
+| `--format sarif` | SARIF output alongside text/json | CI security-gate ingestion |
+| `ocr delegate preview` / `delegate rule` | Prints the would-be-reviewed file list + resolved rules with **no LLM call** | Cheap scope check before dispatching a real review; hand the rule set to a pi subagent that runs its own LLM review |
+| `ocr viewer` | WebUI over saved sessions at `localhost:5483` | Browsing long session history in a browser instead of `session show` |
+| `ocr session export [id] -o x.html` | Self-contained offline HTML of one session (viewer assets inlined) | Archiving CI review evidence. **Caution: embeds source excerpts — run sanitize-check before the artifact leaves the machine** |
+| `ocr session rm <id> [--yes]` | Delete a saved session (irrecoverable; confirms first without `--yes`) | Cleaning garbage sessions out of `~/.opencodereview/sessions/` |
+| `ocr rules check <path>` | Shows which review rule matches a file | Debugging rule/exclude assignment without a full `--preview` |
+| `ocr scan --no-dedup --no-summary` | Skip per-batch DEDUP and post-run PROJECT_SUMMARY | Extra scan cost knobs beyond `--no-plan` (chapter 6) |
+| `review/scan --max-git-procs` | Cap concurrent git subprocesses (default 16) | Huge repos or busy machines |
+| `custom_providers.<name>.timeout_sec`, `mcp_servers.<name>` config | Per-provider request timeout; MCP servers reachable from the review tool loop | timeout: only when the env var can't be set (env wins — chapter 3); MCP: give the reviewer repo-specific tools |
+| New rule packs: Rego, PowerShell, Nushell, shader languages | Auto-applied review rules | Nothing to do — just explains new finding categories |
+
+Known-bug recheck in the same audit: the comment-relocation `WithoutCancel`
+timeout escape (chapter 8) is **still present in v1.13.3** — the workaround
+there remains valid.
 
 Deep-dive tooling (fake server, config test matrix, resolver source notes):
 `~/projects/ocr-image/diagnostics/`. The `diagnose-ocr-ci` skill automates mining
