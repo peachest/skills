@@ -8,7 +8,9 @@
 # 跳过检查: git push --no-verify
 
 set -uo pipefail   # 入口自行声明（common.sh 不带副作用）；不用 -e：pre-push 需捕获 wiki.py 的设计内退出码
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"   # cd+pwd -P 可移植（r12 no81/r19 no208/r23 no271：省 basename 往返）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
+# cd 失败 fail-closed（r26 no36：静默置空会让 source 找不到 common.sh 而晦涩报错）；
+# cd+pwd -P 可移植（r12 no81/r19 no208/r23 no271）；不解析 $0 符号链接——install.sh 以 hooksPath 直指仓内目录
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)" || { echo "错误: 钩子目录不可达（$0）" >&2; exit 1; }
 source "$SCRIPT_DIR/common.sh" || { echo "无法加载 common.sh" >&2; exit 1; }
 
 repo_root=$(git rev-parse --show-toplevel) || exit 1
@@ -57,7 +59,9 @@ clone_replace_deps() {
 # go1.26.5 之类升级后即消失）；~/go/bin 提供 golangci-lint 等 make 依赖。
 # PATH 幂等，置于循环外只拼一次；删除远端分支的推送不需要 go，
 # 故 command -v 检查放在循环内 skip 之后（见下）。
-# 首段 GO 工具链（HOME 防未绑定）；末段缺省避免 PATH 未设时尾冒号（空元素=当前目录，r7 no2）
+# 首段 GO 工具链（HOME 防未绑定）；末段缺省避免 PATH 未设时尾冒号（空元素=当前目录，r7 no2）。
+# path_fallback 实际不可达（r26 no25）：bash/env -u PATH 会预置默认 PATH，git 恒能找到——
+# 保留作语义声明，非可达分支
 gopath_prefix="${HOME:+$HOME/sdk/go/bin:}${HOME:+$HOME/go/bin:}"
 path_fallback="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH="${gopath_prefix}${PATH:-$path_fallback}"

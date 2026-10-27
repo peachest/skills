@@ -137,7 +137,7 @@ validate_range() {
         return 1
     fi
 
-    local sha body first_line
+    local sha body first_line parents shallow   # parents/shallow 补声明（r26 no23）
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
     [ "$(printf '%s\n' "$shas" | wc -l)" -gt 200 ] && log_warn "范围 $base..$tip 提交数超过 200——确认 base 是否错配（校验耗时会线性增长）"
     while IFS= read -r sha; do
@@ -193,7 +193,8 @@ validate_range() {
             "Revert \""*)
                 # Revert 反伪造（r19 no196·medium，与 Merge 反伪造对称）：git revert 模板
                 # 恒含 "This reverts commit <40-hex>." 尾注——缺失即手写伪造
-                if ! printf '%s\n' "$body" | grep -qE '^This reverts commit [0-9a-f]{40,64}\.'; then   # {40,64}：SHA-256 对象格式仓为 64 位（r20 no216）
+                # [.,] 兼容普通 revert（句点）与 merge revert（", reversing" 续行，r26 no20·high 实测）
+                if ! printf '%s\n' "$body" | grep -qE '^This reverts commit [0-9a-f]{40,64}[.,]'; then
                     log_error "commit ${sha:0:8} 手写 Revert 主题但正文无 'This reverts commit <sha>.' 尾注——请改写为 conventional 格式或用 git revert 生成"
                     bad=1
                 fi
@@ -216,7 +217,9 @@ case "${1:-}" in
         # 消息落临时文件：NUL 检测需字节级读取，命令替换会静默丢弃 \0（r22 no255）
         msg_tmp=$(mktemp) || { log_error "无法创建临时文件"; exit 1; }
         trap 'rm -f "$msg_tmp"' EXIT
-        trap 'rm -f "$msg_tmp"; exit 130' INT TERM HUP   # 信号清理（r23 no262）
+        trap 'rm -f "$msg_tmp"; exit 129' HUP
+        trap 'rm -f "$msg_tmp"; exit 130' INT
+        trap 'rm -f "$msg_tmp"; exit 143' TERM   # 128+N 惯例（r26 no24/no32）   # 信号清理（r23 no262）
         validate_range "$2" "$3" || exit 1
         [ "${empty_range:-0}" = 1 ] || log_info "CI commit 检查通过。"   # 空范围不报"通过"（r12 no78：WARN 与通过矛盾）
         ;;
@@ -236,7 +239,9 @@ case "${1:-}" in
         # 通配 --* 兼容任意线长。截断后 0x1e/NUL/查重只作用于真实消息区域（r24 no277）
         hook_tmp=$(mktemp) || { log_error "无法创建临时文件"; exit 1; }
         trap 'rm -f "$hook_tmp"' EXIT
-        trap 'rm -f "$hook_tmp"; exit 130' INT TERM HUP
+        trap 'rm -f "$hook_tmp"; exit 129' HUP
+        trap 'rm -f "$hook_tmp"; exit 130' INT
+        trap 'rm -f "$hook_tmp"; exit 143' TERM
         sed -e "/^$esc_cc --* >8 --*/,\$d" "$1" > "$hook_tmp"
         # L1 与 L2 同源：本地钩子也拒 0x1e / NUL（消息文件即将入库，可预检；
         # NUL 同 L2 r22 no255 口径：sed 会丢弃它，其后内容对校验不可见）
@@ -250,18 +255,9 @@ case "${1:-}" in
             log_error "提交信息包含 NUL 字节（与 CI 校验协议冲突）"
             exit 1
         fi
-        # 不裁前导空白（r7 no11，同 --ci 口径）。钩子拿到的是 git cleanup（剥离注释行/
-        # 首尾空行）之前的文件——先模拟 cleanup=strip 再取首行，否则模板块首行空行/注释误拦（r9 no 360f）。
-        # commentchar 跟随 core.commentchar 配置（r12 no80；auto 模式取 #）
-        comment_char=$(git config core.commentchar || echo '#')
-        [ "$comment_char" = "auto" ] && comment_char='#'
-        # / 会破坏 sed 地址定界符（转义后仍歧义），显式拒绝而非晦涩报错（r14 no114）
-        [ "$comment_char" = "/" ] && { echo "错误: 不支持的 core.commentchar 值: /（请改用其他注释符）" >&2; exit 1; }
-        esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
-        # scissors 截断（r23 no259·medium）：git commit -v 的编辑文件在 # ---- >8 ----
-        # 后附 diff——diff 中可能出现与真实签署归一化后相同的行，误报告重；L2 读 %B
-        # 不含 diff，两口径分叉
-        msg_clean=$(sed "/^$esc_cc/d" "$hook_tmp" | sed '/./,$!d')   # 截断后再剥注释行
+        # 不裁前导空白（r7 no11，同 --ci 口径）。commentchar 解析在 scissors 截断前已完成
+        # （r26 no22/no30：单次解析复用 esc_cc，防两段口径分叉）——此处仅剥注释行。
+        msg_clean=$(sed "/^$esc_cc/d" "$hook_tmp" | sed '/./,$!d')
         # 已知 L1/L2 边界（r14 no115）：-m/-F 提交的默认 cleanup=whitespace 不剥注释行，
         # `#` 开头的 subject 会入库；此处按 strip 模拟会误删该行——多行 -m 时本地放行、
         # CI 按 %B 原文拒绝（fail-closed 方向）。按 commit.cleanup 区分属后续增强

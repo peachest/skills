@@ -12,7 +12,15 @@ pass=0; fail=0; skipped=0   # skipped：缺工具链的 SKIP 用例计数（r17 
 # IT6 等本地配置不受影响
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1
 # 前提（r20 no226）：GLOBAL/SYSTEM 变量需 git ≥2.32；更旧版本会静默忽略、全局/系统
-# 配置仍生效（NOSYSTEM 仅兜住系统级）——形态矩阵在旧 git 上可能残留环境漂移
+# 配置仍生效（NOSYSTEM 仅兜住系统级）。运行时探测（r26 no7）：设一个哨兵值，若
+# include 链未按预期隔离则 git config 读不到——隔离失效即 fail-loud
+env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM git config --global triage.sentinel "probe-$$" 2>/dev/null || true   # 写真实 ~/.gitconfig（解除上方 export 污染——CI 实证 /dev/null fatal）
+if [ "$(GIT_CONFIG_GLOBAL=/dev/null git config --global triage.sentinel 2>/dev/null)" = "probe-$$" ]; then
+    echo >&2 "FAIL: git config 全局隔离失效（旧版 git 忽略 GIT_CONFIG_GLOBAL？隔离后仍能读到真实全局值）——形态矩阵会有环境漂移，请升级 git"
+    git config --global --unset triage.sentinel 2>/dev/null || true
+    exit 1
+fi
+git config --global --unset triage.sentinel 2>/dev/null || true   # 清理哨兵
 T=$(mktemp -d) || { echo >&2 "FAIL: mktemp -d 失败" >&2; exit 1; }
 MSG=$(mktemp) || { echo >&2 "FAIL: mktemp 失败" >&2; exit 1; }
 D=""   # 先初始化防 trap 引用未赋值（set -u）；IT/IT2/IT3/WT 同理由 :- 守护（r8 no8577/r9 no8523）
@@ -111,8 +119,10 @@ bash "$HOOK" --ci "$TREV~1" "$TREV" >/dev/null 2>&1
 # 的提交对象——git 判 bogus、读取命令 128 失败，validate_range 各环节 fail-closed
 # bash printf 无法输出 NUL（C 字符串截断）——用 /dev/zero 补 1 字节 NUL
 { printf 'tree %s\nparent %s\nauthor t <t@t> 1700000000 +0800\ncommitter t <t@t> 1700000000 +0800\n\nfeat: nul' \
-    "$(git -C "$D" rev-parse HEAD^{tree})" "$(git -C "$D" rev-parse HEAD)"; head -c 1 /dev/zero; printf 'hidden\n'; } \
-    > "$T/nul-obj" || { echo >&2 "FAIL: nul 对象构造失败"; exit 1; }
+    "$(git -C "$D" rev-parse HEAD^{tree})" "$(git -C "$D" rev-parse HEAD)" \
+    && head -c 1 /dev/zero && printf 'hidden\n'; } > "$T/nul-obj" \
+    || { echo >&2 "FAIL: nul 对象构造失败（r26 no6：&& 链全部守卫）"; exit 1; }
+[ "$(wc -c < "$T/nul-obj")" -gt 150 ] || { echo >&2 "FAIL: nul-obj 字节数异常（head -c 失败静默截断？r26 no6）"; exit 1; }
 NULSHA=$(git -C "$D" hash-object -t commit --literally -w --stdin < "$T/nul-obj") || { echo >&2 "FAIL: nul 对象写入失败"; exit 1; }
 bash "$HOOK" --ci "$(git -C "$D" rev-parse HEAD)" "$NULSHA" >/dev/null 2>&1
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应拒含 NUL 的提交对象（bogus fail-closed，r22 no255）"; }
@@ -152,12 +162,14 @@ out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$
 # UTF-8 locale 分支（r21 no232·medium）：CI 未设 LANG 恒走字节剥除分支，UTF-8
 # 分支在门禁中零覆盖——LC_ALL=C.UTF-8 用例锁定两字节替换 + 多字节字符保留
 out=$(LC_ALL=C.UTF-8 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xe5\x8d\x81')" 2>&1)
-case "$out" in *$'\xc2\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支未替换 C1 CSI" ;; *"x?[31my"*$(printf '\xe5\x8d\x81')*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支用例输出异常（多字节字符被误伤？）" ;; esac
+# 期望恰为 "[WARN] x?[31my十"（C1 两字节 → '?'，"十" 原样保留）
+case "$out" in *$'\xc2\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支未替换 C1 CSI" ;; "[WARN] x?[31my$(printf '\xe5\x8d\x81')") pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支输出异常（多字节字符被误伤？）: $(printf '%s' "$out" | od -An -c | head -1)" ;; esac
 # ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
 # 非 UTF-8 locale 分支（r24 no274）：显式 LC_ALL=C 锁定裸 C1 字节剥除路径，
 # 开发机默认 UTF-8 locale 时该分支无覆盖
 out=$(LC_ALL=C LANG=C bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\x9b[31my')" 2>&1)
-case "$out" in *$'\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: 非 UTF-8 分支未剥裸 C1 字节" ;; *x[31my*|*"x\x9b"*) pass=$((pass+1)) ;; *) pass=$((pass+1)) ;; esac   # 关键断言：0x9b 不透传
+# 期望输出恰为 "x[31my"（0x9b 被剥、[31m 文本保留）——唯一通过形态（r26 no28：收紧死模式）
+case "$out" in *$'\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: 非 UTF-8 分支未剥裸 C1 字节" ;; "[WARN] x[31my") pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: 非 UTF-8 分支输出异常: $(printf '%s' "$out" | od -An -c | head -1)" ;; esac
 # FORCE_COLOR 关断值边界（r21 no233）：0/off/FALSE 不开色
 for v in 0 off FALSE; do
     out=$(FORCE_COLOR=$v bash -c 'source "$1" 2>/dev/null; log_warn x' _ "$T/common.sh" 2>&1)
@@ -194,14 +206,15 @@ git -C "$IT2" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "init"
 git -C "$IT2" config extensions.worktreeConfig true || { echo >&2 "FAIL: extensions.worktreeConfig 开启失败" >&2; exit 1; }
 WT=$(mktemp -d)
 git -C "$IT2" worktree add -q -b tmp-mig-wt "$WT" HEAD >/dev/null 2>&1 || { echo >&2 "FAIL: 迁移用例 worktree 创建失败" >&2; exit 1; }
-git -C "$WT" config --worktree core.hooksPath "$WT/.git/worktrees/wt/hooks" || { echo >&2 "FAIL: worktree 级 hooksPath 写入失败（断言会空转）" >&2; exit 1; }   # 模拟旧 install-hooks.sh 残留（gitdir hooks 形态，r23 no266）
+STALE="$(git -C "$WT" rev-parse --absolute-git-dir)/hooks"   # 旧 install-hooks.sh 残留 = 自身 gitdir hooks（r23 no266/r26 no34 动态判定）
+git -C "$WT" config --worktree core.hooksPath "$STALE" || { echo >&2 "FAIL: worktree 级 hooksPath 写入失败（断言会空转）" >&2; exit 1; }
 (cd "$IT2" && bash tools/git-hooks/install.sh >/dev/null 2>&1) \
     || { fail=$((fail+1)); echo >&2 "FAIL: 迁移用例 install.sh 非零退出（r8 no34ab）" >&2; }
 [ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: install.sh 未清除 worktree 级 hooksPath" >&2; }
 # 多值清理用例（r10 no cf09 → r12 no86 修订）：worktree 级同键双值在 --unset 下必败，
 # 已改用 --unset-all——本用例验证多值也能清理成功（exit 0），不再走 fail-loud
 # 注意首次 install 已把残留清空，需连加两个值才能构成多值场景
-STALE="$WT/.git/worktrees/wt/hooks"
+STALE="$(git -C "$WT" rev-parse --absolute-git-dir)/hooks"
 git -C "$WT" config --worktree --add core.hooksPath "$STALE" \
     || { echo >&2 "FAIL: 多值 --add 1 失败（断言会空转）" >&2; exit 1; }
 git -C "$WT" config --worktree --add core.hooksPath "$STALE" \
@@ -213,6 +226,22 @@ git -C "$WT" config --worktree --add core.hooksPath "$STALE" \
 [ -z "$(git -C "$WT" config --worktree --get-all core.hooksPath 2>/dev/null)" ] \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 多值未清空" >&2; }
 git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
+# 非残留形态（r26 no35）：保留原值但聚合计失败（exit 1）——钩子确实不生效，用户显式决策
+git -C "$WT" config --worktree core.hooksPath "/my/custom/hooks" \
+    || { echo >&2 "FAIL: 非残留形态写入失败"; exit 1; }
+keep_out=$(cd "$IT2" && bash tools/git-hooks/install.sh 2>&1); keep_rc=$?
+{ [ "$keep_rc" = "1" ] && [[ "$keep_out" == *"保留未清除"* ]] \
+    && [ "$(git -C "$WT" config --worktree --get core.hooksPath)" = "/my/custom/hooks" ]; } \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 非残留形态应保留原值且 exit 1（r26 no35，rc=$keep_rc）"; }
+git -C "$WT" config --worktree --unset-all core.hooksPath 2>/dev/null || true
+# 主检残留形态（r24 no278/r26 no35）：absolute-git-dir/hooks（主检出 gitdir）也应被清
+MAIN_HOOKS="$(git -C "$IT2" rev-parse --absolute-git-dir)/hooks"
+git -C "$IT2" config --worktree core.hooksPath "$MAIN_HOOKS" \
+    || { echo >&2 "FAIL: 主检残留形态写入失败"; exit 1; }
+m_out=$(cd "$IT2" && bash tools/git-hooks/install.sh 2>&1); m_rc=$?
+{ [ "$m_rc" = "0" ] && [[ "$m_out" == *"已清除"* ]] \
+    && [ -z "$(git -C "$IT2" config --worktree --get core.hooksPath 2>/dev/null)" ]; } \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 主检残留形态应被清（r26 no35，rc=$m_rc）"; }
 # 悬空 worktree：目录已删但元数据残留 → 跳过校验 + prune 提示，不置 mismatch（r11 no 75）
 rm -rf "$WT"
 mig_out=$(cd "$IT2" && bash tools/git-hooks/install.sh 2>&1); mig_rc=$?
@@ -249,12 +278,13 @@ git -C "$IT" add link.go || { echo >&2 "FAIL: symlink git add 失败"; exit 1; }
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1) \
     && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: pre-commit 应跳过 symlink（r24 no282）"; }
 rm -rf "$IT"
-# 空白符检查分支（r18 no190）：staged 含行尾空白 → 拦截（覆盖 diff-index --check 路径）
+# 空白符检查分支（r18 no190/r26 no4·no45·no8-1a45a824）：用 ws.txt——*.md 已豁免、
+# *.go 会先被 gofmt 拦（行尾空白属 gofmt 规范化范围），txt 才能独立触发空白检查
 IT=$(mktemp -d) && git init -q "$IT" \
     && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
     || { echo >&2 "FAIL: 空白用例环境准备失败" >&2; exit 1; }
-printf 'package x\n// trailing \n' > "$IT/ws.go"
-git -C "$IT" add ws.go || { echo >&2 "FAIL: 空白用例 git add 失败" >&2; exit 1; }
+printf 'text line \n' > "$IT/ws.txt"
+git -C "$IT" add ws.txt || { echo >&2 "FAIL: 空白用例 git add 失败" >&2; exit 1; }
 (cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: pre-commit 应拦行尾空白（r18 no190）" >&2; }
 rm -rf "$IT"
@@ -300,7 +330,7 @@ IT5=$(mktemp -d) && git init -q "$IT5" && mkdir -p "$IT5/tools/git-hooks" \
     || { echo >&2 "FAIL: 聚合失败用例环境准备失败" >&2; exit 1; }
 git -C "$IT5" commit -q --allow-empty --no-verify -m "init" || { echo >&2 "FAIL: 聚合用例 seed 失败" >&2; exit 1; }
 git -C "$IT5" config extensions.worktreeConfig true || { echo >&2 "FAIL: worktreeConfig 开启失败" >&2; exit 1; }
-printf 'this is not valid git-config\x00garbage' > "$IT5/.git/config.worktree"
+printf 'this is not valid git-config\x00rubbish\n' > "$IT5/.git/config.worktree"   # NUL 经 /dev/zero 无必要——\x00 字面量在 printf 中已生效（r26 no27：去多余 garbage 说明）
 (cd "$IT5" && bash tools/git-hooks/install.sh >/dev/null 2>&1)
 [ $? != 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: 清理/写入失败应非零感知（r16 no148）" >&2; }
 rm -rf "$IT5"
@@ -361,12 +391,16 @@ printf 'feat: clean\n' > "$IT4/clean.msg"   # 阳性对照（r19 no211）：同�
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 干净消息应通过（阳性对照，r19 no211）" >&2; }
 (cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/msg" >/dev/null 2>&1)
 [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 应拒含 0x1e 的消息文件" >&2; }
-# L1 NUL（r23 no260，与 L2 同口径）——bash printf 无法输出 NUL，用 /dev/zero 拼接
-{ printf 'feat: x'; head -c 1 /dev/zero; printf 'hidden\n'; } > "$IT4/nulmsg" \
-    && [ "$(wc -c < "$IT4/nulmsg")" -gt 13 ] \
-    || { echo >&2 "SKIP: 无法构造含 NUL 文件，跳过 L1 NUL 用例"; skipped=$((skipped+1)); }
-(cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/nulmsg" >/dev/null 2>&1)
-[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 应拒含 NUL 的消息文件（r23 no260）"; }
+# L1 NUL（r23 no260，与 L2 同口径）——bash printf 无法输出 NUL，用 /dev/zero 拼接；
+# 构造失败走 SKIP 并收纳断言（r26 no26/no44：防 SKIP 后断言空转假绿）
+if { printf 'feat: x'; head -c 1 /dev/zero; printf 'hidden\n'; } > "$IT4/nulmsg" \
+    && [ "$(wc -c < "$IT4/nulmsg")" -ge 15 ]; then   # 无 NUL 恰 14 字节，-ge 15 防护栏差一（r26 no5）
+    (cd "$IT4" && bash "$IT4/tools/git-hooks/commit-msg" "$IT4/nulmsg" >/dev/null 2>&1)
+    [ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: L1 应拒含 NUL 的消息文件（r23 no260）"; }
+else
+    echo >&2 "SKIP: 无法构造含 NUL 文件，跳过 L1 NUL 用例（r26 no5）"
+    skipped=$((skipped+1))
+fi
 rm -rf "$IT4"
 # 0x1e 拒绝回归（body 含独立 \t\x1e 行形态——涵盖伪造终止符攻击的输入特征；
 # r11 重写后不再有记录协议，0x1e 一律 fail-closed，r12 no92 注释对齐）。

@@ -37,7 +37,12 @@ case "$HOOKS_DIR" in /*) echo "错误: HOOKS_DIR 必须为相对路径（见上�
 # 不变式（r21 no231 措辞对齐）：目录内应只放钩子与 *.sh/*.md 辅助文件——其他
 # 无扩展名文件也会被 chmod +x（git 按精确文件名识别钩子，无扩展名是钩子约定）
 for hook in "$HOOKS_DIR"/*; do
-    [ -f "$hook" ] || continue   # 跳过子目录（glob 字面量已被上方 -d 拦，防御空目录场景）
+    [ -f "$hook" ] || continue   # 跳过子目录与 glob 字面量
+    # 目录不可读（r26 no14）：glob 保持字面量会被上面 continue 静默吞掉——fail-loud
+    if [ "$hook" = "$HOOKS_DIR/*" ]; then
+        echo "错误: $HOOKS_DIR 不可读（权限/ACL 异常），钩子清单无法枚举" >&2
+        exit 1
+    fi
     case "${hook##*/}" in
         *.sh|*.md) continue ;;   # *.sh 辅助脚本；*.md 文档（r9 no 6b3a：文档不应被 chmod +x）
     esac
@@ -89,22 +94,24 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
             # 收窄清理范围（r23 no266·medium）：仅清旧脚本残留形态（gitdir hooks 路径）。
             # pre-start 使本脚本每次建仓都跑——"一律清除"会让用户自意的 worktree 级
             # 配置无感知丢失（恢复线索只在触发者终端）。非残留形态仅警告跳过
-            case "$old_val" in
-                # 旧 install-hooks.sh 写 "$(git rev-parse --absolute-git-dir)/hooks"：
-                # 主检出解析为 <root>/.git/hooks（最常见升级路径），linked 为
-                # <root>/.git/worktrees/<n>/hooks——两者都属残留（r24 no278·high）
-                */.git/hooks|*/.git/hooks/|*/.git/worktrees/*/hooks|*/.git/worktrees/*/hooks/)
-                    if git -C "$1" config --worktree --unset-all core.hooksPath; then
-                        echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值可恢复线索，走 stderr（r22 no247）
-                    else
-                        echo "警告: $1 清理失败" >&2
-                        return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
-                    fi
-                    ;;
-                *)
-                    echo "警告: $1 存在非迁移残留的 worktree 级 hooksPath（原值: $old_val）——保留不动；如需统一请手动 unset" >&2
-                    ;;
-            esac
+            # 旧 install-hooks.sh 写 "$(git rev-parse --absolute-git-dir)/hooks"：主检出
+            # 解析为 <root>/.git/hooks，linked 为 <root>/.git/worktrees/<n>/hooks，
+            # --separate-git-dir 为 <gitdir>/hooks（r24 no278·high/r26 no34）——统一按
+            # "该 worktree 自身 gitdir 的 hooks 目录"动态判定（case 模式不能变量展开）
+            wt_gitdir_hooks="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/hooks"
+            if [ "$old_val" = "$wt_gitdir_hooks" ] || [ "$old_val" = "$wt_gitdir_hooks/" ]; then
+                if git -C "$1" config --worktree --unset-all core.hooksPath; then
+                    echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值可恢复线索，走 stderr（r22 no247）
+                else
+                    echo "警告: $1 清理失败" >&2
+                    return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
+                fi
+            else
+                # 保留原值但聚合计失败（r26 no266/35 语义统一）：该 worktree 钩子确实
+                # 不生效，exit 1 让用户显式决策（手动 unset 后重跑，或接受不生效）
+                echo "警告: $1 存在非迁移残留的 worktree 级 hooksPath（原值: $old_val）——已保留未清除；该 worktree 钩子不生效，如需统一请手动 unset 后重跑" >&2
+                return 1
+            fi
         fi
     }
     each_wt clean_wt

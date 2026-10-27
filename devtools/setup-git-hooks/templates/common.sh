@@ -34,18 +34,18 @@ sanitize_log() {
     local m
     # LC_ALL=C 锁定字节级 tr 语义（r19 no201：多字节 locale 下 GNU tr 按字符处理有实现差异）
     m=$(printf '%s' "$*" | LC_ALL=C tr -d '\000-\010\013\014\015\016-\037\177') || true
-    # 非 UTF-8 locale（LANG=C 等）下终端把原始单字节 0x80-0x9F 解释为 C1 控制符（r19 no198）。
-    # 收窄为确定危险的裸 C1 字节（r20 no218：整区间剥除会把合法多字节字符的续字节
-    # 一并删掉，希腊/西里尔文等文件名乱码）；声明与终端实际编码错配残余风险见注释
-    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
-        *[Uu][Tt][Ff]*) ;;   # UTF-8 终端：仅靠下方 C1 两字节定点替换
-        *) m=$(printf '%s' "$m" | LC_ALL=C tr -d '\205\215\220\230\233\234\235\236\237') || true ;;
-    esac
+    # 裸 C1 处理改为按**数据有效性**而非 locale 声明分支（r26 no8/no9·security medium：
+    # 旧逻辑按声明分支——声明非 UTF-8 时剥字节会砸碎合法 UTF-8 续字节；声明 UTF-8 时
+    # 对非法字节流透传裸 C1）。iconv 校验：合法 UTF-8 → 规范保证无裸 C1，仅两字节
+    # 替换兜底；非法字节流（错配/攻击）→ 裸 C1 危险字节剥除
+    if ! printf '%s' "$m" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
+        m=$(printf '%s' "$m" | LC_ALL=C tr -d '\205\215\220\230\233\234\235\236\237') || true
+    fi
     # UTF-8 编码的 C1（C2 80–9F）中可承载/扰动终端序列的定点剥除（r16 no143/r17 no157）：
     # CSI/OSC/DCS/SOS/PM/APC 起始符 + NEL/RI 行为扰动符；均固定两字节序列，UTF-8 自
-    # 定点替换不误伤多字节字符。已知取舍（r18/r19 no178，r20 no219 措辞对齐）：
-    # ① 保留内部 LF 支持多行消息——外部输入可注入含 [ERROR] 等任意前缀的伪造行
-    #  （不止无前缀行），机器解析不应信任日志行；② 命令替换剥结尾全部 LF（尾部空行静默丢失）
+    # 内部 LF 单行化（r26 no10·security medium：pre-commit -z 支持含换行文件名后，
+    # 文件名可注入含 [ERROR] 前缀的伪日志行）——调用方均为单行消息，无功能损失；
+    # 命令替换已剥结尾全部 LF（尾部空行静默丢失，r19 no178 口径并入此条）
     m=${m//$'\xc2\x85'/'?'}   # NEL
     m=${m//$'\xc2\x8c'/'?'}   # PLD
     m=${m//$'\xc2\x8d'/'?'}   # RI
@@ -62,6 +62,7 @@ sanitize_log() {
     m=${m//$'\xc2\x9d'/'?'}   # OSC
     m=${m//$'\xc2\x9e'/'?'}   # PM
     m=${m//$'\xc2\x9f'/'?'}   # APC
+    m=${m//$'\n'/' '}   # LF → 空格：单行化防日志伪造（见上）
     printf '%s' "$m"
 }
 # 公共实现（r23 no275 → r24 重构落位）：级别前缀/颜色变量/输出流三参数化，防三份模板口径分叉
@@ -70,7 +71,8 @@ _log() { # $1=级别标签 $2=颜色变量名 $3=输出fd，$4+=消息
     shift 3
     local m
     m=$(sanitize_log "$*") || true
-    # 动态 fd：命令替换内嵌套会丢 || true 语义，故显式分支
+    # 动态 fd：命令替换内嵌套会丢 || true 语义，故显式分支；fd 收敛为 out/err 二值（r26 no12）
+    [ "$fd" = "out" ] || fd="err"
     if [ "$fd" = "err" ]; then
         printf '%s\n' "[$label] ${!color}${m}${NC}" >&2 || true
     else
