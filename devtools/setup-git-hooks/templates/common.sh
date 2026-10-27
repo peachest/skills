@@ -64,6 +64,19 @@ sanitize_log() {
     m=${m//$'\xc2\x9f'/'?'}   # APC
     printf '%s' "$m"
 }
-log_info()  { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[INFO] ${GREEN}${m}${NC}" || true; }
-log_warn()  { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[WARN] ${YELLOW}${m}${NC}" >&2 || true; }
-log_error() { local IFS=' '; local m; m=$(sanitize_log "$*") || true; printf '%s\n' "[ERROR] ${RED}${m}${NC}" >&2 || true; }
+# 公共实现（r23 no275 → r24 重构落位）：级别前缀/颜色变量/输出流三参数化，防三份模板口径分叉
+_log() { # $1=级别标签 $2=颜色变量名 $3=输出fd，$4+=消息
+    local IFS=' ' label="$1" color="$2" fd="$3"
+    shift 3
+    local m
+    m=$(sanitize_log "$*") || true
+    # 动态 fd：命令替换内嵌套会丢 || true 语义，故显式分支
+    if [ "$fd" = "err" ]; then
+        printf '%s\n' "[$label] ${!color}${m}${NC}" >&2 || true
+    else
+        printf '%s\n' "[$label] ${!color}${m}${NC}" || true
+    fi
+}
+log_info()  { _log INFO GREEN out "$@"; }
+log_warn()  { _log WARN YELLOW err "$@"; }
+log_error() { _log ERROR RED err "$@"; }

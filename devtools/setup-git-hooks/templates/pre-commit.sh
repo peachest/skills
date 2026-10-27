@@ -17,10 +17,12 @@ read_fail=0   # 读取失败与格式失败分列，末尾提示按因区分（r
 # 且 git show 失败在管道/进程替换里会被静默吞掉（fail-open）——两条链路统一为
 # fail-loud：读取失败即拦截，不再依赖 diff 双空判等
 fmt_tmp=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
-trap 'rm -f "$fmt_tmp"' EXIT   # 第一个文件创建即挂清理（r22 no252：消除第二个 mktemp 失败的泄漏窗口）
+trap 'rm -f "$fmt_tmp"' EXIT   # 第一个文件创建即挂清理（r22 no252：消除后续 mktemp 失败的泄漏窗口）
 fmt_out=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }   # 0600 副文件（r20 no220：重定向创建为 644 且有 symlink 竞争窗口）
-trap 'rm -f "$fmt_tmp" "$fmt_out"' EXIT   # 兜底清理
-trap 'rm -f "$fmt_tmp" "$fmt_out"; exit 130' INT TERM HUP   # 信号清理后显式退出（r20 no220/r21 no236：不退出会继续运行重建 0644 临时文件）
+list_go=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
+list_c=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
+trap 'rm -f "$fmt_tmp" "$fmt_out" "$list_go" "$list_c"' EXIT   # 兜底清理
+trap 'rm -f "$fmt_tmp" "$fmt_out" "$list_go" "$list_c"; exit 130' INT TERM HUP   # 信号清理后显式退出（r20 no220/r21 no236）
 # 文件清单先取再校验退出码：进程替换吞退出码会让 git 失败时静默跳过全部检查
 # （fail-open 与本文件 fail-loud 原则矛盾，r18 no188）。
 # 已知限制（r18 no187，同 install.sh 口径）：按行解析无法表示含换行的文件名；
@@ -29,19 +31,21 @@ trap 'rm -f "$fmt_tmp" "$fmt_out"; exit 130' INT TERM HUP   # 信号清理后显
 # --raw 一次拿到模式列（r22 no249·perf medium：省去逐文件 ls-files 子进程）；
 # 行格式：:100644 100644 <sha> <sha> M\t<path>。quotePath=off：非 ASCII 文件名按
 # 字面输出，否则 git show 必失败（r19 no206）
-if ! files_go=$(git -c core.quotePath=off diff --cached --raw --no-renames --diff-filter=ACM -- '*.go'); then
+# -z：路径原样输出（消除换行/引号/控制字符文件名限制，r24 no280·medium）；NUL 经
+# 命令替换会丢，故直接落临时文件再解析
+if ! git diff --cached --raw -z --no-renames --diff-filter=ACM -- '*.go' > "$list_go"; then
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
-if ! files_c=$(git -c core.quotePath=off diff --cached --raw --no-renames --diff-filter=ACM -- '*.c' '*.h'); then
+if ! git diff --cached --raw -z --no-renames --diff-filter=ACM -- '*.c' '*.h' > "$list_c"; then
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
 
 # 工具链预检（r18 no184）：保持 fail-closed，但区分"工具缺失"与"格式不通过"——
 # 缺工具时提示装工具或 --no-verify，而非误导性的"运行 make fmt"
-go_files=$(printf '%s\n' "$files_go" | grep -c . || true)
-c_files=$(printf '%s\n' "$files_c" | grep -c . || true)
+go_files=$(grep -c . "$list_go" || true)
+c_files=$(grep -c . "$list_c" || true)
 if [ "${go_files:-0}" -gt 0 ]; then
     if ! command -v gofmt >/dev/null; then
         log_error "gofmt 未安装（staged 含 .go 文件）——请安装 Go 工具链，或 git commit --no-verify 跳过本次检查"
@@ -67,11 +71,11 @@ if [ "${c_files:-0}" -gt 0 ]; then
     fi
 fi
 
-# 1. staged Go 文件 → gofmt 检查（raw 行解析：路径 = tab 后内容，新模式 = 第二列，
-# r22 no249：免逐文件 ls-files 子进程）
-while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    f="${line##*$'\t'}"; meta="${line%%$'\t'*}"; newmode="$(printf '%s' "$meta" | awk '{print $2}')"
+# 1. staged Go 文件 → gofmt 检查（-z 记录解析：meta\tpath，r22 no249/r24 no280）
+while IFS= read -r -d '' meta && IFS= read -r -d '' f; do
+    # -z 格式：meta 与 path 以 NUL 分隔（无 tab），交替成对出现
+    [ -z "$meta" ] && continue
+    newmode="$(printf '%s' "$meta" | awk '{print $2}')"
     case "$newmode" in
         120000|160000) continue ;;   # symlink/gitlink（r21 no235）：show 输出目标路径/commit 内容，格式检查无意义且必误拦
     esac
@@ -96,12 +100,12 @@ while IFS= read -r line; do
         diff "$fmt_tmp" "$fmt_out" 2>/dev/null | head -5 | sed 's/^/  /' >&2 || true
         fail=1
     fi
-done <<< "$files_go"
+done < "$list_go"
 
 # 2. staged C 文件 → clang-format 检查
-while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    f="${line##*$'\t'}"; meta="${line%%$'\t'*}"; newmode="$(printf '%s' "$meta" | awk '{print $2}')"
+while IFS= read -r -d '' meta && IFS= read -r -d '' f; do
+    [ -z "$meta" ] && continue
+    newmode="$(printf '%s' "$meta" | awk '{print $2}')"
     case "$newmode" in
         120000|160000) continue ;;   # symlink/gitlink（r21 no235）
     esac
@@ -117,7 +121,7 @@ while IFS= read -r line; do
         printf '%s\n' "$cf_err" | head -5 | sed 's/^/  /' >&2 || true   # 诊断摘要（r18 no189；head SIGPIPE 兜底 r19 no205）
         fail=1
     fi
-done <<< "$files_c"
+done < "$list_c"
 
 if [ "$fail" -ne 0 ]; then
     # 提示按失败原因区分（r19 no209）：读取失败应重新 add 而非 make fmt；

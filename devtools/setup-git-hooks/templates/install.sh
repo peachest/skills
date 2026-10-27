@@ -50,7 +50,7 @@ if old="$(git config --show-origin --get core.hooksPath 2>/dev/null)"; then
     if [ "$old" != "$HOOKS_DIR" ]; then
         # worktree 级来源将被下方迁移清理而非覆盖（r12 no87 口径区分）
         case "$origin" in
-            *config.worktree*) echo "注意: 发现 worktree 级 core.hooksPath（来自 ${origin#file:}）: $old——将随迁移清理" >&2 ;;
+            *config.worktree*) echo "注意: 发现 worktree 级 core.hooksPath（来自 ${origin#file:}）: $old——若为旧脚本残留形态将随迁移清理，否则保留并告警（r24 no279 口径对齐）" >&2 ;;
             *)                 echo "注意: 覆盖已有 core.hooksPath（来自 ${origin#file:}）: $old -> $HOOKS_DIR" >&2 ;;
         esac
     fi
@@ -90,7 +90,10 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
             # pre-start 使本脚本每次建仓都跑——"一律清除"会让用户自意的 worktree 级
             # 配置无感知丢失（恢复线索只在触发者终端）。非残留形态仅警告跳过
             case "$old_val" in
-                */.git/worktrees/*/hooks|*/.git/worktrees/*/hooks/)
+                # 旧 install-hooks.sh 写 "$(git rev-parse --absolute-git-dir)/hooks"：
+                # 主检出解析为 <root>/.git/hooks（最常见升级路径），linked 为
+                # <root>/.git/worktrees/<n>/hooks——两者都属残留（r24 no278·high）
+                */.git/hooks|*/.git/hooks/|*/.git/worktrees/*/hooks|*/.git/worktrees/*/hooks/)
                     if git -C "$1" config --worktree --unset-all core.hooksPath; then
                         echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值可恢复线索，走 stderr（r22 no247）
                     else

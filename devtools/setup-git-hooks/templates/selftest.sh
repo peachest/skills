@@ -154,6 +154,10 @@ out_w=$(bash -c 'source "$1"; log_warn w' _ "$T/common.sh" 2>/dev/null); out_e=$
 out=$(LC_ALL=C.UTF-8 bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\xc2\x9b[31my\xe5\x8d\x81')" 2>&1)
 case "$out" in *$'\xc2\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支未替换 C1 CSI" ;; *"x?[31my"*$(printf '\xe5\x8d\x81')*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo >&2 "FAIL: UTF-8 分支用例输出异常（多字节字符被误伤？）" ;; esac
 # ESC 剥离（r14 no111）：消息内嵌 ANSI 序列时输出不得含原始 ESC，正文文本保留
+# 非 UTF-8 locale 分支（r24 no274）：显式 LC_ALL=C 锁定裸 C1 字节剥除路径，
+# 开发机默认 UTF-8 locale 时该分支无覆盖
+out=$(LC_ALL=C LANG=C bash -c 'source "$1" 2>/dev/null; log_warn "$2"' _ "$T/common.sh" "$(printf 'x\x9b[31my')" 2>&1)
+case "$out" in *$'\x9b'*) fail=$((fail+1)); echo >&2 "FAIL: 非 UTF-8 分支未剥裸 C1 字节" ;; *x[31my*|*"x\x9b"*) pass=$((pass+1)) ;; *) pass=$((pass+1)) ;; esac   # 关键断言：0x9b 不透传
 # FORCE_COLOR 关断值边界（r21 no233）：0/off/FALSE 不开色
 for v in 0 off FALSE; do
     out=$(FORCE_COLOR=$v bash -c 'source "$1" 2>/dev/null; log_warn x' _ "$T/common.sh" 2>&1)
@@ -235,6 +239,16 @@ fi
 rm -rf "$IT"
 # clang-format 拦截路径（r16 no166·medium）：未格式化 .c staged → 拦截 + "无法读取
 # staged 内容"分支同链路（r16 no153/no165）
+# symlink 跳过（r24 no282）：staged symlink 命名 *.go → 跳过格式检查不误拦
+IT=$(mktemp -d) && git init -q "$IT" \
+    && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \
+    || { echo >&2 "FAIL: symlink 用例环境准备失败"; exit 1; }
+printf 'package x\n' > "$IT/real.go"
+ln -s real.go "$IT/link.go"
+git -C "$IT" add link.go || { echo >&2 "FAIL: symlink git add 失败"; exit 1; }
+(cd "$IT" && bash "$IT/pre-commit" >/dev/null 2>&1) \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: pre-commit 应跳过 symlink（r24 no282）"; }
+rm -rf "$IT"
 # 空白符检查分支（r18 no190）：staged 含行尾空白 → 拦截（覆盖 diff-index --check 路径）
 IT=$(mktemp -d) && git init -q "$IT" \
     && cp "$HDIR"/{pre-commit,common.sh} "$IT/" \

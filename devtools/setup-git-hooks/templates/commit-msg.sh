@@ -224,9 +224,30 @@ case "${1:-}" in
         [ -f "${1:-}" ] || { log_error "未提供提交信息文件"; exit 1; }
         # 已知 L1/L2 口径边界（r23 no261）：手写 Merge/Revert 主题在 L1 按 subject 豁免
         # 放行（本地无 sha/尾注可查反伪造）——L2 会拒，本地过 push 后 CI 红属预期
-        # L1 与 L2 同源：本地钩子也拒 0x1e（消息文件即将入库，可预检）
-        if grep -q $'\x1e' "$1"; then
+        # commentchar 跟随 core.commentchar 配置（r12 no80；auto 模式取 #）
+        comment_char=$(git config core.commentchar || echo '#')
+        [ "$comment_char" = "auto" ] && comment_char='#'
+        # / 会破坏 sed 地址定界符（转义后仍歧义），显式拒绝而非晦涩报错（r14 no114）
+        [ "$comment_char" = "/" ] && { echo "错误: 不支持的 core.commentchar 值: /（请改用其他注释符）" >&2; exit 1; }
+        esc_cc=$(printf '%s' "$comment_char" | sed 's/[][\.^$*]/\\&/g')   # 元字符转义再进 BRE（r13 no99）
+        # 先截断 scissors（r23 no259/r24 no276·medium）：git commit -v 在
+        # "# -------- >8 --------"（wt-status cut_line，两侧各 24 个 -）后附 diff——
+        # 截断必须先于注释剥离（分隔线以注释符开头，先 d 会删掉它使范围地址失效）；
+        # 通配 --* 兼容任意线长。截断后 0x1e/NUL/查重只作用于真实消息区域（r24 no277）
+        hook_tmp=$(mktemp) || { log_error "无法创建临时文件"; exit 1; }
+        trap 'rm -f "$hook_tmp"' EXIT
+        trap 'rm -f "$hook_tmp"; exit 130' INT TERM HUP
+        sed -e "/^$esc_cc --* >8 --*/,\$d" "$1" > "$hook_tmp"
+        # L1 与 L2 同源：本地钩子也拒 0x1e / NUL（消息文件即将入库，可预检；
+        # NUL 同 L2 r22 no255 口径：sed 会丢弃它，其后内容对校验不可见）
+        if grep -q $'\x1e' "$hook_tmp"; then
             log_error "提交信息包含非法控制字符 0x1e（与 CI 校验协议冲突）"
+            exit 1
+        fi
+        raw_len=$(wc -c < "$hook_tmp" | tr -d "[:space:]")
+        nonul_len=$(LC_ALL=C tr -d '\000' < "$hook_tmp" | wc -c | tr -d "[:space:]")
+        if [ "$raw_len" != "$nonul_len" ]; then
+            log_error "提交信息包含 NUL 字节（与 CI 校验协议冲突）"
             exit 1
         fi
         # 不裁前导空白（r7 no11，同 --ci 口径）。钩子拿到的是 git cleanup（剥离注释行/
@@ -240,16 +261,7 @@ case "${1:-}" in
         # scissors 截断（r23 no259·medium）：git commit -v 的编辑文件在 # ---- >8 ----
         # 后附 diff——diff 中可能出现与真实签署归一化后相同的行，误报告重；L2 读 %B
         # 不含 diff，两口径分叉
-        msg_clean=$(sed -e "/^$esc_cc/d" -e "/^$esc_cc ---- >8 ----/,\$d" "$1" | sed '/./,$!d')   # scissors 起至文件尾删除
-        # L1 NUL 检测（r23 no260，与 L2 r22 no255 同口径）：sed 丢弃 NUL 后其后内容
-        # 对查重/格式校验不可见；字节数对比
-        # 钩子分支位于顶层作用域（非函数），无需 local（r23 no264 仅适用于 L2 函数内）
-        raw_len=$(wc -c < "$1" | tr -d "[:space:]")
-        nonul_len=$(LC_ALL=C tr -d '\000' < "$1" | wc -c | tr -d "[:space:]")
-        if [ "$raw_len" != "$nonul_len" ]; then
-            log_error "提交信息包含 NUL 字节（与 CI 校验协议冲突）"
-            exit 1
-        fi
+        msg_clean=$(sed "/^$esc_cc/d" "$hook_tmp" | sed '/./,$!d')   # 截断后再剥注释行
         # 已知 L1/L2 边界（r14 no115）：-m/-F 提交的默认 cleanup=whitespace 不剥注释行，
         # `#` 开头的 subject 会入库；此处按 strip 模拟会误删该行——多行 -m 时本地放行、
         # CI 按 %B 原文拒绝（fail-closed 方向）。按 commit.cleanup 区分属后续增强
