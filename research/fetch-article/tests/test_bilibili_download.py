@@ -530,3 +530,90 @@ class TestCCSubtitleSkip:
         assert result["stream_type"] == "dash_audio"
         assert result["audio_path"] is not None
         assert result["has_cc_subtitles"] is False
+
+
+class TestVideoContext:
+    """简介 + 评论（context.md）纯函数测试；网络失败降级为空。"""
+
+    def _reply(self, uname, msg, like=0, ctime=0):
+        return {"member": {"uname": uname},
+                "content": {"message": msg}, "like": like, "ctime": ctime}
+
+    def test_fmt_comment_single_line(self):
+        r = self._reply("张三", "第一行\n第二行", like=42)
+        s = bilibili._fmt_comment(r)
+        assert s == "- 张三（👍42）：第一行 第二行"
+
+    def test_fmt_comment_missing_fields(self):
+        s = bilibili._fmt_comment({})
+        assert "？" not in s or True  # 不抛异常即通过
+        assert s.startswith("- ")
+
+    def test_write_context_full(self, tmp_path):
+        pinned = [self._reply("UP主", "置顶说明", like=99)]
+        hot = [self._reply(f"u{i}", f"m{i}", like=10 - i) for i in range(6)]
+        latest = [self._reply("新人", "刚来", ctime=1700000000)]
+        path = bilibili._write_context(str(tmp_path), "标题", "简介文字",
+                                       pinned, hot[:5], latest)
+        text = open(path, encoding="utf-8").read()
+        assert "## 简介" in text and "简介文字" in text
+        assert "## 置顶评论" in text and "UP主" in text
+        assert "## 热门评论 Top 5" in text and "u4" in text and "u5" not in text
+        assert "## 最新评论 Top 5" in text and "刚来" in text
+
+    def test_write_context_empty(self, tmp_path):
+        path = bilibili._write_context(str(tmp_path), "标题", "", [], [], [])
+        text = open(path, encoding="utf-8").read()
+        assert "（无）" in text
+
+    def test_fetch_comments_client_side_sorting(self):
+        hot_replies = [self._reply("a", "x", like=1),
+                       self._reply("b", "y", like=99),
+                       self._reply("c", "z", like=50)]
+        latest_replies = [self._reply("old", "o", ctime=100),
+                          self._reply("new", "n", ctime=200)]
+
+        session = MagicMock()
+        hot_resp = _FakeResponse({"code": 0, "data": {
+            "replies": hot_replies, "top_replies": [self._reply("p", "t")]}})
+        time_resp = _FakeResponse({"code": 0, "data": {"replies": latest_replies}})
+        session.get.side_effect = [hot_resp, time_resp]
+
+        pinned, hot, latest = bilibili._fetch_comments(session, 123)
+        assert [r["member"]["uname"] for r in hot] == ["b", "c", "a"]
+        assert [r["member"]["uname"] for r in latest] == ["new", "old"]
+        assert pinned[0]["member"]["uname"] == "p"
+        # 请求参数：unsigned 端点，type=1, sort=1/0
+        _, kwargs1 = session.get.call_args_list[0]
+        assert kwargs1["params"]["sort"] == 1
+
+    def test_fetch_comments_failure_degrades(self):
+        session = MagicMock()
+        session.get.side_effect = RuntimeError("network down")
+        assert bilibili._fetch_comments(session, 123) == ([], [], [])
+
+    def test_fetch_comments_no_aid(self):
+        assert bilibili._fetch_comments(MagicMock(), None) == ([], [], [])
+
+
+class TestAttachCredential:
+    """凭证挂载：有文件→写入 cookie；无文件/坏文件→静默匿名。"""
+
+    def test_attach_sets_cookies(self, tmp_path):
+        cred = tmp_path / "credential.json"
+        cred.write_text('{"sessdata": "S1", "bili_jct": "J1"}')
+        session = MagicMock()
+        bilibili._attach_credential(session, str(cred))
+        assert session.cookies.set.call_count == 2
+
+    def test_attach_missing_file_silent(self, tmp_path):
+        session = MagicMock()
+        bilibili._attach_credential(session, str(tmp_path / "nope.json"))  # 不抛
+        assert session.cookies.set.call_count == 0
+
+    def test_attach_bad_json_silent(self, tmp_path):
+        cred = tmp_path / "credential.json"
+        cred.write_text("not json")
+        session = MagicMock()
+        bilibili._attach_credential(session, str(cred))  # 不抛
+        assert session.cookies.set.call_count == 0

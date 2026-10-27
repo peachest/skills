@@ -157,6 +157,82 @@ def _extract_page(url: str) -> int:
         return 1
 
 
+BILI_CRED_PATH = "~/.bilibili-cli/credential.json"
+
+
+def _attach_credential(session, cred_path=BILI_CRED_PATH):
+    """Best-effort load bilibili-cli credential cookies into the session.
+
+    Anonymous comment-API calls get risk-control degraded results (3 of 20
+    replies observed); logged-in cookies restore full data. Missing file is
+    fine (anonymous mode).
+    """
+    try:
+        with open(Path(cred_path).expanduser()) as f:
+            cred = json.load(f)
+        for name, key in (("SESSDATA", "sessdata"), ("bili_jct", "bili_jct")):
+            if cred.get(key):
+                session.cookies.set(name, cred[key], domain=".bilibili.com")
+    except Exception:
+        pass
+
+
+def _fetch_comments(session, aid):
+    """Fetch comments for aid. Returns (pinned, hot_top5, latest_top5).
+
+    Unsigned /x/v2/reply endpoint (wbi/main is -403 without gaia ticket);
+    sorting done client-side so API order doesn't matter. Call
+    _attach_credential() first — anonymous calls are degraded by risk
+    control. Any failure degrades to empty lists (non-fatal).
+    """
+    if not aid:
+        return [], [], []
+    try:
+        j = session.get("https://api.bilibili.com/x/v2/reply",
+                        params={"type": 1, "oid": aid, "sort": 1, "ps": 20},
+                        timeout=15).json()
+        d = j.get("data") or {}
+        hot = sorted(d.get("replies") or [],
+                     key=lambda r: r.get("like", 0), reverse=True)[:5]
+        pinned = list(d.get("top_replies") or [])
+    except Exception:
+        return [], [], []
+    try:
+        j2 = session.get("https://api.bilibili.com/x/v2/reply",
+                         params={"type": 1, "oid": aid, "sort": 0, "ps": 20},
+                         timeout=15).json()
+        latest = sorted((j2.get("data") or {}).get("replies") or [],
+                        key=lambda r: r.get("ctime", 0), reverse=True)[:5]
+    except Exception:
+        latest = []
+    return pinned, hot, latest
+
+
+def _fmt_comment(r):
+    msg = ((r.get("content") or {}).get("message", "")
+           .strip().replace("\n", " "))
+    uname = (r.get("member") or {}).get("uname", "?")
+    return f"- {uname}（👍{r.get('like', 0)}）：{msg}"
+
+
+def _write_context(output_dir, title, desc, pinned, hot, latest):
+    """Write context.md (description + comments) into the workspace."""
+    lines = [f"# 视频上下文：{title}", ""]
+    lines += ["## 简介", desc.strip() or "（无）", ""]
+    lines += ["## 置顶评论", *(_fmt_comment(r) for r in pinned)] if pinned \
+        else ["## 置顶评论", "（无）"]
+    lines.append("")
+    lines += ["## 热门评论 Top 5", *(_fmt_comment(r) for r in hot)] if hot \
+        else ["## 热门评论 Top 5", "（无）"]
+    lines.append("")
+    lines += ["## 最新评论 Top 5", *(_fmt_comment(r) for r in latest)] if latest \
+        else ["## 最新评论 Top 5", "（无）"]
+    path = os.path.join(output_dir, "context.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
 def fetch(url: str, output_dir: str = None) -> dict:
     """
     Download Bilibili video audio via WBI-signed API.
@@ -216,6 +292,18 @@ def fetch(url: str, output_dir: str = None) -> dict:
     pubdate = info.get("pubdate", 0)
     print(f"  Page {page_num}/{page_count}, cid={cid}, duration={duration}s",
           file=sys.stderr)
+
+    # 简介 + 评论（观众/作者视角，供下游了解视频整体内容；失败不致命）
+    desc = info.get("desc", "")
+    try:
+        _attach_credential(session)
+        pinned, hot, latest = _fetch_comments(session, info.get("aid"))
+        cpath = _write_context(output_dir, title, desc, pinned, hot, latest)
+        print(f"  Context → {cpath} "
+              f"(置顶{len(pinned)}/热门{len(hot)}/最新{len(latest)})",
+              file=sys.stderr)
+    except Exception:
+        pass
 
     # ── Step 3: Check for CC subtitles ──
     print(f"  [3/4] Checking CC subtitles…", file=sys.stderr)

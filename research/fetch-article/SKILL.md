@@ -89,6 +89,12 @@ Downloads audio via WBI-signed API. Only downloads — does NOT transcribe.
 If CC subtitles are available, saves them directly (skip ASR).
 Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
 
+Also writes `context.md` into the workspace: 简介 (video description) + 置顶评论
++ 热门评论 Top 5 + 最新评论 Top 5 — the author/audience perspective around the
+video. Comment calls attach `~/.bilibili-cli/credential.json` cookies when
+present (anonymous requests get risk-control degraded results); all comment
+failures degrade to empty sections, never fatal.
+
 See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR. The
 transcriber's runtime moved (2026-10) to a faster-whisper backend reached
 via SSH tunnel — see its SKILL.md / runtime.conf.example. The old cluster ASR backend is deprecated.

@@ -13,6 +13,10 @@ description: |
 fetch-article (download audio) → this skill (transcribe → slides → merge)
 ```
 
+The fetch stage also writes `context.md` into the workspace — 简介、置顶评论、
+热门评论 Top 5、最新评论 Top 5（作者/观众视角，与转写正文互补；详见
+fetch-article SKILL.md 的 Bilibili 节）。
+
 ### One-shot entry (RECOMMENDED)
 
 The whole chain in one command — creates the venv if missing (`uv sync`),
