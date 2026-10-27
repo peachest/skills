@@ -17,6 +17,7 @@ read_fail=0   # 读取失败与格式失败分列，末尾提示按因区分（r
 # 且 git show 失败在管道/进程替换里会被静默吞掉（fail-open）——两条链路统一为
 # fail-loud：读取失败即拦截，不再依赖 diff 双空判等
 fmt_tmp=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }
+trap 'rm -f "$fmt_tmp"' EXIT   # 第一个文件创建即挂清理（r22 no252：消除第二个 mktemp 失败的泄漏窗口）
 fmt_out=$(mktemp) || { echo "错误: 无法创建临时文件" >&2; exit 1; }   # 0600 副文件（r20 no220：重定向创建为 644 且有 symlink 竞争窗口）
 trap 'rm -f "$fmt_tmp" "$fmt_out"' EXIT   # 兜底清理
 trap 'rm -f "$fmt_tmp" "$fmt_out"; exit 130' INT TERM HUP   # 信号清理后显式退出（r20 no220/r21 no236：不退出会继续运行重建 0644 临时文件）
@@ -25,11 +26,14 @@ trap 'rm -f "$fmt_tmp" "$fmt_out"; exit 130' INT TERM HUP   # 信号清理后显
 # 已知限制（r18 no187，同 install.sh 口径）：按行解析无法表示含换行的文件名；
 # --no-renames（r18 no186）：rename 检测下 R 状态对被本过滤器整体排除，禁用后退化为
 # D+A、新路径以 A 纳入检查；typechange（file<->symlink）仍不在检查范围
-if ! files_go=$(git -c core.quotePath=off diff --cached --name-only --no-renames --diff-filter=ACM -- '*.go'); then   # quotePath=off：非 ASCII 文件名按字面输出，否则 git show 必失败（r19 no206）
+# --raw 一次拿到模式列（r22 no249·perf medium：省去逐文件 ls-files 子进程）；
+# 行格式：:100644 100644 <sha> <sha> M\t<path>。quotePath=off：非 ASCII 文件名按
+# 字面输出，否则 git show 必失败（r19 no206）
+if ! files_go=$(git -c core.quotePath=off diff --cached --raw --no-renames --diff-filter=ACM -- '*.go'); then
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
-if ! files_c=$(git -c core.quotePath=off diff --cached --name-only --no-renames --diff-filter=ACM -- '*.c' '*.h'); then
+if ! files_c=$(git -c core.quotePath=off diff --cached --raw --no-renames --diff-filter=ACM -- '*.c' '*.h'); then
     log_error "无法读取 staged 文件清单（索引不可用？）"
     exit 1
 fi
@@ -38,9 +42,17 @@ fi
 # 缺工具时提示装工具或 --no-verify，而非误导性的"运行 make fmt"
 go_files=$(printf '%s\n' "$files_go" | grep -c . || true)
 c_files=$(printf '%s\n' "$files_c" | grep -c . || true)
-if [ "${go_files:-0}" -gt 0 ] && ! command -v gofmt >/dev/null; then
-    log_error "gofmt 未安装（staged 含 .go 文件）——请安装 Go 工具链，或 git commit --no-verify 跳过本次检查"
-    exit 1
+if [ "${go_files:-0}" -gt 0 ]; then
+    if ! command -v gofmt >/dev/null; then
+        log_error "gofmt 未安装（staged 含 .go 文件）——请安装 Go 工具链，或 git commit --no-verify 跳过本次检查"
+        exit 1
+    fi
+    # 能力探测（r22 no250·medium，与 clang-format 探测对齐）：旧工具链遇新语法解析
+    # 失败会被误诊为"WIP 语法错误"——预检时即区分
+    if ! printf 'package p\n' | gofmt -l >/dev/null 2>&1; then
+        log_error "gofmt 不可用或版本过旧（基础探测失败）——请检查 Go 工具链"
+        exit 1
+    fi
 fi
 if [ "${c_files:-0}" -gt 0 ]; then
     if ! command -v clang-format >/dev/null; then
@@ -55,11 +67,13 @@ if [ "${c_files:-0}" -gt 0 ]; then
     fi
 fi
 
-# 1. staged Go 文件 → gofmt 检查
-while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    case "$(git ls-files -s -- "$f" | awk '{print $1}')" in
-        120000|160000) continue ;;   # symlink/gitlink（r21 no235·medium）：show 输出的是目标路径/commit 内容，格式检查无意义且必误拦
+# 1. staged Go 文件 → gofmt 检查（raw 行解析：路径 = tab 后内容，新模式 = 第二列，
+# r22 no249：免逐文件 ls-files 子进程）
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    f="${line##*$'\t'}"; meta="${line%%$'\t'*}"; newmode="$(printf '%s' "$meta" | awk '{print $2}')"
+    case "$newmode" in
+        120000|160000) continue ;;   # symlink/gitlink（r21 no235）：show 输出目标路径/commit 内容，格式检查无意义且必误拦
     esac
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
@@ -72,7 +86,7 @@ while IFS= read -r f; do
     gofmt_err=$(gofmt "$fmt_tmp" 2>&1 > "$fmt_out") || true
     if [ -n "$gofmt_err" ]; then
         # 语法错误与格式差异区分（r20 no223）：make fmt 修不了语法错误
-        log_error "gofmt 解析失败（语法错误？WIP 提交请用 --no-verify）: $f"
+        log_error "gofmt 解析失败（语法错误/WIP 用 --no-verify；也可能是 Go 工具链过旧）: $f"   # 归因补充（r22 no250）
         printf '%s\n' "$gofmt_err" | head -5 | sed 's/^/  /' >&2 || true
         fail=1
     elif ! diff -q "$fmt_tmp" "$fmt_out" >/dev/null 2>&1; then
@@ -85,12 +99,13 @@ while IFS= read -r f; do
 done <<< "$files_go"
 
 # 2. staged C 文件 → clang-format 检查
-while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    # 同 Go 链路口径（r16 no167）：失败 fail-loud；临时文件保字节原样（r16 no165）
-    case "$(git ls-files -s -- "$f" | awk '{print $1}')" in
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    f="${line##*$'\t'}"; meta="${line%%$'\t'*}"; newmode="$(printf '%s' "$meta" | awk '{print $2}')"
+    case "$newmode" in
         120000|160000) continue ;;   # symlink/gitlink（r21 no235）
     esac
+    # 同 Go 链路口径（r16 no167）：失败 fail-loud；临时文件保字节原样（r16 no165）
     if ! git show ":$f" > "$fmt_tmp" 2>/dev/null; then
         log_error "无法读取 staged 内容: $f（索引并发修改？请重新 git add）"
         read_fail=1

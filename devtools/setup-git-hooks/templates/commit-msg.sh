@@ -141,8 +141,21 @@ validate_range() {
     # 规模护栏：范围错配到很远的历史时逐提交校验线性变慢，WARN 提示（r12 no84）
     [ "$(printf '%s\n' "$shas" | wc -l)" -gt 200 ] && log_warn "范围 $base..$tip 提交数超过 200——确认 base 是否错配（校验耗时会线性增长）"
     while IFS= read -r sha; do
-        body=$(git log -1 --format=%B "$sha") \
-            || { log_error "commit ${sha:0:8}: 无法读取提交信息"; bad=1; continue; }
+        # NUL 截断（r22 no255·security medium，selftest 实证）：含 NUL 的对象
+        # rev-parse/rev-list/log 全部正常工作且 log 自身按 NUL 截断——必须读原始
+        # cat-file 内容检测；命令替换静默丢 \0，NUL 之后的字节逃过 0x1e/查重/格式
+        # 全部校验，且 L1（grep 原文件）能看到，破坏同口径
+        git cat-file commit "$sha" > "$msg_tmp" 2>/dev/null \
+            || { log_error "commit ${sha:0:8}: 无法读取提交对象"; bad=1; continue; }
+        raw_len=$(wc -c < "$msg_tmp" | tr -d "[:space:]")
+        nonul_len=$(LC_ALL=C tr -d '\000' < "$msg_tmp" | wc -c | tr -d "[:space:]")
+        if [ "$raw_len" != "$nonul_len" ]; then
+            log_error "commit ${sha:0:8} 提交对象包含 NUL 字节（命令替换会截断校验范围）"
+            bad=1
+            continue
+        fi
+        # 头部（git 生成，不含 NUL）后首个空行起为消息体
+        body=$(sed '1,/^$/d' "$msg_tmp")
         # 消息含 0x1e 一律拒绝（L1 钩子同口径；攻击者可借此伪造分隔符）
         if [[ "$body" == *$'\x1e'* ]]; then
             log_error "commit ${sha:0:8} 提交信息包含非法控制字符 0x1e"
@@ -197,6 +210,9 @@ validate_range() {
 case "${1:-}" in
     --ci)
         [ $# -eq 3 ] || { log_error "用法: commit-msg --ci <base-sha> <tip-sha>"; exit 1; }
+        # 消息落临时文件：NUL 检测需字节级读取，命令替换会静默丢弃 \0（r22 no255）
+        msg_tmp=$(mktemp) || { log_error "无法创建临时文件"; exit 1; }
+        trap 'rm -f "$msg_tmp"' EXIT
         validate_range "$2" "$3" || exit 1
         [ "${empty_range:-0}" = 1 ] || log_info "CI commit 检查通过。"   # 空范围不报"通过"（r12 no78：WARN 与通过矛盾）
         ;;

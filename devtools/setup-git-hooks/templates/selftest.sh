@@ -27,7 +27,10 @@ t() { # t <期望exit> <描述> <msg文件内容>
     if [ "$got" = "$want" ]; then pass=$((pass+1)); else
         fail=$((fail+1)); echo >&2 "FAIL: $desc (want=$want got=$got)" >&2; fi
 }
-# 钩子形态边界
+# 钩子形态边界（矩阵在中性 cwd 执行，r22 no256·medium：commit-msg L1 会读
+# core.commentchar——真实仓库本地 .git/config 仍会渗入；$T 非仓目录则只剩已屏蔽
+# 的全局/系统级，回落默认 '#'。sed 取数改 HDIR 绝对路径）
+cd "$T" || exit 1
 t 0 "conventional 通过"        $'feat(x): ok\n'
 t 1 "非 conventional 拦截"     $'updated stuff\n'
 t 0 "merge 豁免（subject）"    $'Merge branch a\n'   # 模板恒为 "Merge branch 'x'"：branch 后必空格
@@ -53,15 +56,16 @@ t 1 "signoff 无空格变体"       $'feat(x): ok\n\nSigned-off-by:A <a@t>\nSign
 t 0 "不同签署人不误判"          $'feat(x): ok\n\nSigned-off-by: A <a@t>\nSigned-off-by: B <b@t>\n'
 t 0 "单个 signoff 通过"        $'feat(x): ok\n\nSigned-off-by: A <a@t>\n'
 # 前缀（fork 语义，对副本临时开启）
-sed 's/^COMMIT_PREFIX=""/COMMIT_PREFIX="[TW]"/' commit-msg > "$T/commit-msg"
+sed 's/^COMMIT_PREFIX=""/COMMIT_PREFIX="[TW]"/' "$HDIR/commit-msg" > "$T/commit-msg"
 grep -q '^COMMIT_PREFIX="\[TW\]"' "$T/commit-msg" || { echo >&2 "FAIL: 前缀 sed 未命中" >&2; exit 1; }
 t 1 "缺前缀拦截"               $'feat(x): no\n'
 t 0 "[TW]+conventional 通过"   $'[TW] feat(x): ok\n'
 t 1 "前缀子串注入拦截"         $'xxx feat: add [TW]\n'
 t 0 "前缀后多空格归一化"       $'[TW]  feat(x): ok\n'
 t 0 "Revert 豁免优先于前缀"    $'Revert "[TW] feat(x): ok"\n'
-sed 's/^COMMIT_PREFIX="\[TW\]"/COMMIT_PREFIX=""/' commit-msg > "$T/commit-msg"
+sed 's/^COMMIT_PREFIX="\[TW\]"/COMMIT_PREFIX=""/' "$HDIR/commit-msg" > "$T/commit-msg"
 grep -q '^COMMIT_PREFIX=""' "$T/commit-msg" || { echo >&2 "FAIL: 前缀还原 sed 未命中" >&2; exit 1; }
+cd "$HDIR" || exit 1   # 矩阵结束回源目录（r22 no256）
 # --ci 批量形态（临时仓，身份用本地假值即可——commit-msg 不校验作者）
 D=$(mktemp -d)
 git init -q "$D" || { echo >&2 "FAIL: git init" >&2; exit 1; }
@@ -101,6 +105,15 @@ git -C "$D" revert --no-edit HEAD >/dev/null 2>&1 || { echo >&2 "FAIL: revert se
 TREV=$(git -C "$D" rev-parse HEAD)
 bash "$HOOK" --ci "$TREV~1" "$TREV" >/dev/null 2>&1
 [ $? = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应放行真 git revert 提交（r20 no215）"; }
+# NUL 截断（r22 no255·security medium）：plumbing hash-object --literally 造含 NUL
+# 的提交对象——git 判 bogus、读取命令 128 失败，validate_range 各环节 fail-closed
+# bash printf 无法输出 NUL（C 字符串截断）——用 /dev/zero 补 1 字节 NUL
+{ printf 'tree %s\nparent %s\nauthor t <t@t> 1700000000 +0800\ncommitter t <t@t> 1700000000 +0800\n\nfeat: nul' \
+    "$(git -C "$D" rev-parse HEAD^{tree})" "$(git -C "$D" rev-parse HEAD)"; head -c 1 /dev/zero; printf 'hidden\n'; } \
+    > "$T/nul-obj" || { echo >&2 "FAIL: nul 对象构造失败"; exit 1; }
+NULSHA=$(git -C "$D" hash-object -t commit --literally -w --stdin < "$T/nul-obj") || { echo >&2 "FAIL: nul 对象写入失败"; exit 1; }
+bash "$HOOK" --ci "$(git -C "$D" rev-parse HEAD)" "$NULSHA" >/dev/null 2>&1
+[ $? = 1 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo >&2 "FAIL: --ci 应拒含 NUL 的提交对象（bogus fail-closed，r22 no255）"; }
 # Merge 反伪造（r18 no181·medium）：手写 "Merge branch 'x'" 主题的普通提交 → CI 拒绝
 git -C "$D" commit -q --allow-empty --no-verify -m "Merge branch 'fake'" || { echo >&2 "FAIL: 反伪造用例 seed 失败" >&2; exit 1; }
 FAKE=$(git -C "$D" rev-parse HEAD)

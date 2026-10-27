@@ -86,7 +86,7 @@ if [ "$(git config --bool extensions.worktreeConfig 2>/dev/null)" = "true" ]; th
         local old_val
         if old_val=$(git -C "$1" config --worktree --get core.hooksPath 2>/dev/null); then   # 单次调用探测+取值（r15 no135：消竞态）
             if git -C "$1" config --worktree --unset-all core.hooksPath; then
-                echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）"   # 带原值可追溯（r12 no88）
+                echo "✓ 已清除 $1 的旧 worktree 级 hooksPath（原值: $old_val）" >&2   # 原值是用户恢复的唯一线索，统一走 stderr（r22 no247）
             else
                 echo "警告: $1 清理失败" >&2
                 return 1   # 显式失败：否则赋值 return 0，each_wt 聚合永远不触发（r13 no102·high）
@@ -110,7 +110,13 @@ check_wt() {  # $1 = worktree 路径：校验实际生效值（悬空跳过并�
         echo "警告: $1 已不存在（悬空 worktree 元数据），跳过校验，建议 git worktree prune" >&2
         return 0
     fi
-    actual="$(git -C "$1" config core.hooksPath 2>/dev/null)"
+    # 显式容错（r22 no245·medium）：git 失败时按 mismatch 聚合而非依赖
+    # "恒经 each_wt 调用所以 errexit 被抑制"的隐式前提
+    if ! actual="$(git -C "$1" config core.hooksPath 2>/dev/null)"; then
+        echo "警告: $1 的 hooksPath 读取失败（元数据损坏？）" >&2
+        return 1
+    fi
+    actual="${actual%/}"   # 尾斜杠归一化（r22 no248：语义等价的既有配置不误报）
     if [ "$actual" != "$HOOKS_DIR" ]; then
         # 打印实际生效值（r19 no202）：mismatch 成因多样（worktree 级残留/local include/
         # 环境级 GIT_CONFIG_* 覆盖/尾部斜杠差异），实测值帮助定位
