@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -134,7 +135,8 @@ def render_report(workspace: Path, td: Path, title: str, final_body: str) -> str
     if ctx.is_file():
         ctx_body = ctx.read_text(encoding="utf-8")
         ctx_body = ctx_body.split("\n", 1)[1] if ctx_body.startswith("# ") else ctx_body
-        lines += ["---", "", "## 附录：视频上下文（简介与评论）", "", ctx_body.strip(), ""]
+        snap = datetime.fromtimestamp(ctx.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        lines += ["---", "", f"## 附录：视频上下文（简介与评论）· 快照于 {snap}", "", ctx_body.strip(), ""]
     return "\n".join(lines)
 
 
