@@ -30,6 +30,17 @@ This skill adds what the upstream doc does not know: running headless on a proxi
 4. **`--remote-debugging-port` coexists with playwright's pipe.** Adding it to `launchOptions.args` in the config file opens a standard CDP HTTP endpoint on the daemon browser, which observation scripts attach to (`chromium.connectOverCDP`). This is how screencast sees the same page the CLI operates.
 5. **Daemon browsers die with their parent session** — do not expect a daemon started in one agent session to survive into another. Storage state files are the persistence layer, not the daemon.
 
+## Ref & retry discipline (distilled from a cua-repl teardown, 2026-10-28)
+
+The snapshot ref model has the same failure modes as OpenAI's cua-repl (`getAXState` + `element_index`). Verified live against a React SPA; these are agent-facing rules, not daemon config:
+
+1. **Refs are not persistent IDs.** Every navigation or re-render invalidates the whole numbering — re-run `snapshot` and use fresh refs. Never reuse a ref from a previous snapshot (same lesson for scripted Playwright: don't cache Locators/ElementHandles across page-state changes).
+2. **A command timing out does not mean the action failed.** The click may have landed and the page is just slow to settle. On timeout, `snapshot` first, check what changed, then decide — never blind-retry a click/fill: submit-type actions double-fire.
+3. **Screenshot coordinates and refs are independent systems.** After a screenshot-only observation, re-take a snapshot before using refs; the two do not share state (and coordinates drift under zoom/animation — prefer refs or locators).
+4. **DOM-only pages have no named roles.** Custom widgets (div-built "buttons") appear as unnamed `generic` in the snapshot — fall back to locator-style targeting (`getByRole`/`getByLabel`/test ids) instead of hunting for a ref that doesn't exist.
+5. **Tab binding has side effects.** Attaching to an existing tab keeps its form/scroll state; opening the same URL in a new tab does not. Pick per task — the user's half-filled form is only reachable through their tab.
+6. **Partial failure does not condemn the tool.** One tab/target failing does not invalidate the others; report what failed, keep what worked, debug along that one path.
+
 ## Standard flow
 
 ```bash
