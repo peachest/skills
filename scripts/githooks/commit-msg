@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# commit-msg — subject 锚点一致性：同一 commit 内改了 skill 本体 + 台账时，
+# 台账新增行的 commit 列必须等于本 commit subject 原文（原子提交 + subject 锚点，
+# 详见 wiki/README.md skill-impact 节）。回填历史行的 date 不等于今天，自动豁免。
+
+set -u
+msgfile="$1"
+
+python3 "$(dirname "$0")/wiki_check.py" commit-msg "$msgfile" || exit 1
+exit 0

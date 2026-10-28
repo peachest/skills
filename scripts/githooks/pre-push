@@ -50,4 +50,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
 done
 
+# --- wiki ledger 锚点可检索性（subject 检索 / legacy hash 存活性，防漂移）---
+python3 "$(dirname "$0")/wiki_check.py" pre-push || fail=1
+
 exit "$fail"

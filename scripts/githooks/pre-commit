@@ -23,4 +23,8 @@ if ! "${cmd[@]}" >&2; then
     echo "pre-commit: BLOCKED — gitleaks found issues in the staged diff. Unstage / remove them, or use --no-commit-hooks ONLY if you are certain the match is a false positive." >&2
     exit 1
 fi
+
+# --- wiki ledger 校验：skill↔wiki 配对 + 新增行格式（详见 wiki/README.md skill-impact 节）---
+python3 "$(dirname "$0")/wiki_check.py" pre-commit || exit 1
+
 exit 0
