@@ -11,7 +11,9 @@ bare transport — validation is identical for both) and for each entry:
      revision is a REVISED verdict (verdict.py --force) → re-post, the
      superseded reply stays as history
   3. Resolves the thread iff the entry's per-item `resolved` field says so —
-     post executes the verdict-time decision, it never re-judges
+     post executes the verdict-time decision, it never re-judges; a GitLab
+     resolve counts only after a GET read-back confirms the platform state
+     (a 2xx PUT alone is intent, not state — the MR !46 incident)
 
 Join + anchor validation (hard-fail BEFORE any platform call):
   - every entry's discussion_id must byte-match an id in the pull state
@@ -122,6 +124,7 @@ import json
 import os
 import re
 import sys
+import time
 
 from ocr_platform import detect_platform, load_pull_findings, run_auth_probe, triage_state_dir
 
@@ -698,23 +701,51 @@ def _sweep_notes_gitlab(base, disc_id, curl):
     return remaining == 0
 
 
+def _read_resolved_gitlab(base, disc_id, curl):
+    """Platform-side truth after a resolve PUT: every resolvable note on the
+    discussion reports resolved. Returns None when the read itself fails —
+    inconclusive, never conflated with confirmed."""
+    status, disc, _ = curl(f"{base}/discussions/{disc_id}")
+    if status != 200 or not isinstance(disc, dict):
+        return None
+    return all(
+        n.get("resolved", False)
+        for n in disc.get("notes", [])
+        if isinstance(n, dict) and n.get("resolvable", False)
+    )
+
+
 def _resolve_gitlab_thread(base, disc_id, curl):
     """Resolve one GitLab thread: discussion-level PUT first; when that fails
     structurally (some instances 500 on it), the note sweep is the working
-    fallback resolve path. Returns True iff the thread ends up resolved."""
-    status, _, _ = curl(
-        f"{base}/discussions/{disc_id}",
-        method="PUT",
-        data={"resolved": True},
-    )
-    if 200 <= status < 300:
-        _sweep_notes_gitlab(base, disc_id, curl)
-        return True
-    if _sweep_notes_gitlab(base, disc_id, curl):
+    fallback resolve path. A 2xx PUT is intent, not platform state — the MR !46
+    incident returned 2xx on every outdated-position thread while all stayed
+    open — so success is counted only after a GET read-back reports resolved;
+    one PUT+read retry absorbs the transient window, then the item fails
+    closed (the closure gate remains the final truth-teller)."""
+    status = None
+    for attempt in (1, 2):
+        status, _, _ = curl(
+            f"{base}/discussions/{disc_id}",
+            method="PUT",
+            data={"resolved": True},
+        )
+        if 200 <= status < 300 and _read_resolved_gitlab(base, disc_id, curl):
+            _sweep_notes_gitlab(base, disc_id, curl)
+            return True
+        if not (200 <= status < 300):
+            break  # structural PUT failure → note-level fallback; retry won't help
+        print(f"[WARN] resolve {_tid(disc_id)}: PUT HTTP {status} but read-back "
+              f"not resolved (attempt {attempt}/2)", file=sys.stderr)
+        time.sleep(0.5)
+    if status is not None and not (200 <= status < 300) \
+            and _sweep_notes_gitlab(base, disc_id, curl) \
+            and _read_resolved_gitlab(base, disc_id, curl):
         print(f"[WARN] discussion PUT {_tid(disc_id)}: HTTP {status} — "
-              f"resolved via note-level fallback", file=sys.stderr)
+              f"resolved via note-level fallback (read-back confirmed)", file=sys.stderr)
         return True
-    print(f"[FAIL] resolve {_tid(disc_id)}: HTTP {status}", file=sys.stderr)
+    print(f"[FAIL] resolve {_tid(disc_id)}: read-back not resolved after PUT"
+          + (f" (HTTP {status})" if status is not None else ""), file=sys.stderr)
     return False
 
 

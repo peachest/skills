@@ -122,11 +122,12 @@ Script errors are script bugs: fix the script or report — a hand-written
 `glab api` bypasses join validation and dedup, re-creating the incident family
 this pipeline exists to prevent.
 
-**Completion criterion**: exit 0 — every finding replied (or deduped) and
-resolved per its verdict. A non-zero exit caused **solely** by ⚠️ error-class
-summary threads is expected (gate stays red, human-in-loop by design) — proceed
-to Step 4 and report. Failed classified items → fix the cause, re-run
-(idempotent).
+**Completion criterion**: exit 0, then run `verify --json` immediately and read
+the open count（resolve 校验不依赖 CI，这一步不等 pipeline）——ok 计数经读回确认，
+但 verify 的 open 计数是唯一平台侧终态。A non-zero exit caused **solely** by
+⚠️ error-class summary threads is expected (gate stays red, human-in-loop by
+design) — proceed to Step 4 and report. Failed classified items → fix the
+cause, re-run (idempotent).
 
 ### 4. Verify closure (the gate)
 

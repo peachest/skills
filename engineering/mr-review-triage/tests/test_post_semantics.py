@@ -91,7 +91,7 @@ def marked_thread_routes(tmp_path, anchor, rev, disc_id=DISC_A):
     GET needs its own (empty) route — "discussions?per_page" wins before
     "/discussions" because fake_api is first-pattern-wins."""
     thread = {"id": disc_id, "notes": [
-        {"id": 201, "resolvable": True, "resolved": False,
+        {"id": 201, "resolvable": True, "resolved": True,
          "body": f"### 🟡 边缘\n\n**原因**: earlier verdict\n\n<!-- triage-anchor: {anchor} rev:{rev} -->"}]}
     return serve(tmp_path, {"discussions?per_page": {"file": "listing.json", "content": []},
                             "/discussions": {"file": "thread.json", "content": thread}})
@@ -289,7 +289,7 @@ def test_revised_verdict_reposts_over_superseded_reply(workdir, tmp_path, api_lo
     routes = serve(tmp_path, {
         "discussions?per_page": {"file": "listing.json", "content": []},
         "/discussions": {"file": "thread.json", "content": {"id": DISC_A, "notes": [
-            {"id": 201, "resolvable": True, "resolved": False, "body": BODY_A},
+            {"id": 201, "resolvable": True, "resolved": True, "body": BODY_A},
             {"id": 202, "resolvable": False, "resolved": False,
              "body": (f"### ⏸️ 需讨论\n\nneeds input\n\n"
                       f"<!-- triage-anchor: {anchor} rev:{rev_of('Question', 'needs input')} -->")}]}},
@@ -416,6 +416,102 @@ def test_docstring_semantics_rewritten():
     text = POST_SCRIPT.read_text(encoding="utf-8")
     assert "stay open in both modes" not in text
     assert "--pull-file" in text and "--force" in text
+
+
+# ── ⑥ GitLab resolve read-back: a 2xx PUT is intent, not state (MR !46) ──
+
+
+def _load_post_module():
+    """Load ocr-post-labels.py by path for unit-level resolve tests; module
+    imports (ocr_platform) resolve via conftest's sys.path insert."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ocr_post_labels_testmod", POST_SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_resolve_readback_still_open_fails_after_retry(workdir, api_log, tmp_path):
+    """PUT returns 2xx while the platform keeps the thread open — post retries
+    once, then counts the item as fail (exit non-zero, no resolved ok line)."""
+    routes = serve(tmp_path, {
+        "discussions?per_page": {"file": "listing.json", "content": []},
+        "PUT /discussions": {},
+        "POST /discussions/": {},
+        "GET /discussions/": {"file": "thread.json", "content": {
+            "id": DISC_A, "notes": [
+                {"id": 201, "resolvable": True, "resolved": False, "body": BODY_A}]}},
+    })
+    entries = [{"discussion_id": DISC_A, "no": 1, "anchor": anchor_of(BODY_A),
+                "classification": "FP", "reason": "r", "resolved": True}]
+    path = write_classified(workdir, entries)
+    proc = run_post(MR, "--classified", str(path), api_log=api_log, routes_file=routes)
+    assert proc.returncode == 1, proc.stderr
+    calls = read_api_log(api_log)
+    assert len([c for c in calls if c["method"] == "PUT"]) == 2  # exactly one read-back retry
+    assert "read-back" in proc.stderr
+    assert "already labeled — resolved" not in proc.stderr
+
+
+def test_readback_retry_then_confirm(monkeypatch):
+    mod = _load_post_module()
+    calls = []
+    responses = [
+        (200, None),                                                  # PUT 1
+        (200, {"notes": [{"resolvable": True, "resolved": False}]}),   # read 1 → open
+        (200, None),                                                  # PUT 2 (retry)
+        (200, {"notes": [{"resolvable": True, "resolved": True}]}),    # read 2 → confirmed
+    ]
+
+    def fake_curl(url, method="GET", data=None):
+        calls.append(method)
+        st, body = responses.pop(0)
+        return st, body, {}
+
+    monkeypatch.setattr(mod, "_sweep_notes_gitlab", lambda *a, **k: True)
+    assert mod._resolve_gitlab_thread("/mr/1", "abc", fake_curl) is True
+    assert calls == ["PUT", "GET", "PUT", "GET"]
+
+
+def test_readback_never_confirms_fails(monkeypatch):
+    mod = _load_post_module()
+    open_thread = (200, {"notes": [{"resolvable": True, "resolved": False}]})
+    responses = [(200, None), open_thread, (200, None), open_thread]
+    monkeypatch.setattr(mod, "_sweep_notes_gitlab", lambda *a, **k: True)
+    assert mod._resolve_gitlab_thread("/mr/1", "abc",
+                                      lambda *a, **k: responses.pop(0) + ({},)) is False
+
+
+def test_readback_inconclusive_get_fails_closed(monkeypatch):
+    """GET read-back failing twice is inconclusive, never silently ok."""
+    mod = _load_post_module()
+    responses = [(200, None), (500, None), (200, None), (500, None)]
+    monkeypatch.setattr(mod, "_sweep_notes_gitlab", lambda *a, **k: True)
+    assert mod._resolve_gitlab_thread("/mr/1", "abc",
+                                      lambda *a, **k: responses.pop(0) + ({},)) is False
+
+
+def test_put_failure_fallback_confirmed_by_readback(monkeypatch):
+    mod = _load_post_module()
+    calls = []
+    responses = [(500, None), (200, {"notes": [{"resolvable": True, "resolved": True}]})]
+
+    def fake_curl(url, method="GET", data=None):
+        calls.append(method)
+        st, body = responses.pop(0)
+        return st, body, {}
+
+    monkeypatch.setattr(mod, "_sweep_notes_gitlab", lambda *a, **k: True)
+    assert mod._resolve_gitlab_thread("/mr/1", "abc", fake_curl) is True
+    assert calls == ["PUT", "GET"]
+
+
+def test_put_failure_fallback_unconfirmed_fails(monkeypatch):
+    mod = _load_post_module()
+    responses = [(500, None), (200, {"notes": [{"resolvable": True, "resolved": False}]})]
+    monkeypatch.setattr(mod, "_sweep_notes_gitlab", lambda *a, **k: True)
+    assert mod._resolve_gitlab_thread("/mr/1", "abc",
+                                      lambda *a, **k: responses.pop(0) + ({},)) is False
 
 
 # ── GitHub side ──

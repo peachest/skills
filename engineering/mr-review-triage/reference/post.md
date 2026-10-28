@@ -47,6 +47,10 @@ python3 <SCRIPTS_DIR>/ocr-post-labels.py <MR_OR_PR_ID> --mode triage \
    stay open; default mode: TP stays open for tracking, FP/OOS resolve).
    Mode-map contents: ocr-post-labels.py `_DEFAULT_RESOLVED` / `_TRIAGE_RESOLVED`. A thread is
    never resolved when its reply failed (exit non-zero; `--force` overrides).
+   On GitLab a 2xx resolve PUT is intent, not state — the platform state is
+   confirmed by a GET read-back (one PUT+read retry on a still-open result,
+   then the item fails closed); GitHub asserts `thread.isResolved` from the
+   mutation response itself. `ok` counts confirmed resolutions only.
 3. `posted: true` written back to the `--classified` file on success.
 
 ## OCR summary sweep (after the classified entries)

@@ -177,14 +177,15 @@ GITLAB_DISCUSSIONS = [{
 
 
 def gitlab_env(tmp_path, extra_routes=(), mr="1", discussions=GITLAB_DISCUSSIONS):
+    # extra_routes precede the base routes: they are overrides (first-match-wins)
     routes = [
         PROBE_OK_ROUTE,
+        *extra_routes,
         {"match": "merge_requests/1/discussions", "status": 200, "body": discussions},
         {"match": "merge_requests/1", "status": 200, "body": {
             "title": "Fix thing", "state": "opened",
             "web_url": f"https://{FORKEE_HOST}/team/app/-/merge_requests/{mr}",
         }},
-        *extra_routes,
     ]
     bin_dir, log = fake_bin(tmp_path, routes)
     env = base_env(tmp_path, bin_dir, log)
@@ -227,7 +228,8 @@ def test_ocr_remote_override_post(tmp_path):
         {"match": "discussions/abc123def/notes/1", "method": "PUT", "status": 200, "body": {}},
         {"match": "discussions/abc123def/notes", "method": "POST", "status": 201, "body": {"id": 9}},
         {"match": "discussions/abc123def", "method": "GET", "status": 200,
-         "body": {"id": "abc123def", "notes": GITLAB_DISCUSSIONS[0]["notes"]}},
+         "body": {"id": "abc123def", "notes":
+                  [{**GITLAB_DISCUSSIONS[0]["notes"][0], "resolved": True}]}},
         {"match": "discussions/abc123def", "method": "PUT", "status": 200, "body": {}},
     ]
     env, log = gitlab_env(tmp_path, extra_routes=extra)
