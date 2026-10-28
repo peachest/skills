@@ -35,7 +35,7 @@
 - 根因: harness 层 edit 工具的规范化行为，skill 无法修
 - 方案: 双头——① lesson-edit.py（P-T01）实现时用 Python 字节级 replace（不做 unicode normalize），规避此坑；② 向 pi harness 上报 edit 归一化行为，确认是否可关
 - passCheck: 涉及全角/CJK 标点的 lesson 替换不再经 edit 工具（走 lesson-edit.py 或 python heredoc）
-- 证据: spec-decoding session-log/0007-20260924.md「worker 自查发现 edit 工具全角→半角归一化污染，回滚重做」（commit de15bf4）
+- 证据: 01a0d2f4#（session-log 0007-20260924 内 worker 自查 entry）：edit 工具全角→半角归一化污染，回滚重做（commit de15bf4）
 - 出现: 2026-10-06 spec-audit worker 自查
 
 ## P-T05 beat-check hook 15% 窗口边缘 case 反复出现
@@ -44,7 +44,7 @@
 - 根因: HOOK_PAT 扫描窗口 max(200, 15%·total) 是拍板值，无 advisory 过渡带
 - 方案（待评估，攒着）: 15% 硬窗口 + 20% advisory 提示（"问句在 15-20% 带内，裁定时注意"），或放宽到 18%；需先看 15.8% 这类案例真实占比再定
 - passCheck: 15-20% 带内问句不再硬 FAIL，改为带提示的 finding
-- 证据: spec-decoding reviews/0004-spec-review.json（beat hook finding adjudicated kept，问句 15.8% vs 15% window）
+- 证据: 01a0d2f4#（reviews/0004 beat hook finding adjudicated kept，问句 15.8% vs 15% window）
 - 出现: 2026-10-06 spec-audit；同 2026-09-24 lesson-0003
 ## P-T06 知识点覆盖缺口：paper 版本外的设计无抽取触发（知识工程盲区）
 - 状态: open
@@ -52,7 +52,7 @@
 - 根因: 信源抽取以"论文管道"为单位（tex 五类清单），paper-外的机制性设计（tech report 独有、代码独有）没有对应的抽取触发点；PLAN 节点描述也是按论文口径写的，交付 gate 无"代码实现 vs 论文描述"覆盖对账
 - 方案（分两层）: ① 开课 checklist（teach 侧，立即可做）：机制性设计逐条标注 论文仅/代码仅/两处——即"代码对账"从分歧处理升级为交付前置；② 知识点工程（结构层，待设计）：以 PLAN 节点为覆盖清单，对账三层信源的可用知识点（tex sections × repo modules × 解读文章），产出覆盖矩阵，交付 gate 校验"节点声明的主机制在每个有它的信源层都被抽取过"
 - passCheck: 新开课时，课程引用的每个机制能在信源覆盖矩阵里找到"来源层"标注；仅代码有的设计默认进 coverage 对账而非依赖学习者追问暴露
-- 证据: herdr 回执 w3:p2（01a0bd84，2026-10-08）；课程 commit 80e8e93；papers/2503.01840-eagle3/source/paper.tex 461 行 vocab 零命中
+- 证据: herdr 回执 w3:p2（01a0bd84，2026-10-08）；papers/2503.01840-eagle3 source ACL 版 461 行逐行核 vocab 零命中
 - 出现: 2026-10-08 spec-decoding 课⑦
 ## P-T07 验证 regime 按课型静态路由被证伪
 - 状态: rejected
