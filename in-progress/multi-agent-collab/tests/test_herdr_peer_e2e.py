@@ -45,8 +45,16 @@ def _send(scripts_dir, pane, message, extra=None, env=None):
         return r.returncode, out
 
 
+@pytest.mark.slow
+@pytest.mark.skipif(not RUN_SLOW, reason="RUN_SLOW_E2E=1 not set; spawns a real herdr server + peer pi (flaky beside other live runtimes)")
 def test_resolve_scans_all_runtimes(peer, scripts_dir, e2e_runtime):
-    """herdr-resolve.py finds a peer by UUID prefix across runtimes, tagging the runtime."""
+    """herdr-resolve.py finds a peer by UUID prefix across runtimes, tagging the runtime.
+
+    slow-gated (2026-10-28): spawns a real herdr server + pi peer; flaky when
+    other live runtimes coexist on the host (orphan servers from interrupted
+    runs pollute the all-runtime scan, boot races kill the fresh server).
+    Run locally with RUN_SLOW_E2E=1 after `pkill -f 'herdr --session collab-e2e'`.
+    """
     p = peer("e2e-resolve")
     r = subprocess.run(
         ["python3", os.path.join(scripts_dir, "herdr-resolve.py"), p["pane"]],
@@ -65,6 +73,8 @@ def test_resolve_scans_all_runtimes(peer, scripts_dir, e2e_runtime):
     assert mine[0]["agent_status"] in ("idle", "working", "done")
 
 
+@pytest.mark.slow
+@pytest.mark.skipif(not RUN_SLOW, reason="RUN_SLOW_E2E=1 not set; spawns a real herdr server + peer pi (flaky beside other live runtimes)")
 def test_send_followup_delivers_with_identity(peer, scripts_dir, e2e_runtime):
     """followUp send to an idle peer: exit 0, level-1 receipt, and the message
     lands in the peer's session JSONL with a runtime-qualified caller identity."""

@@ -105,8 +105,37 @@ if [ -n "${WHISPER_TUNNEL_HOST:-}" ]; then
   esac
   probe_asr() { curl -s --noproxy '*' --max-time 5 -o /dev/null -w '%{http_code}' "$TUNNEL_MODELS_URL" 2>/dev/null || true; }
 
+  # Deep probe: /models 200 ≠ ASR usable — a GPU-dead server still answers
+  # metadata endpoints (2026-10-21: CUDA context died, /models 200, real
+  # transcription 500 for 2 days). POST a 1s synthetic wav; only a real
+  # transcription round-trip proves the GPU path lives.
+  probe_asr_deep() {
+    local wav="$WORK_DIR/.asr-probe.wav"
+    "$PYTHON" - "$wav" <<'PYEOF' 2>/dev/null || return 000
+import sys, wave, math, struct
+w = wave.open(sys.argv[1], "w")
+w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+w.writeframes(b"\x00\x00" * 16000)  # 1s silence — transcription returns empty text, exit 0
+w.close()
+PYEOF
+    local code
+    code=$(curl -s --noproxy '*' --max-time 60 -o /dev/null -w '%{http_code}' \
+      -X POST "${WHISPER_ENDPOINT%/}/audio/transcriptions" \
+      -F "file=@$wav" -F "model=${WHISPER_MODEL}" \
+      -F "language=${WHISPER_LANG}" -F "response_format=verbose_json" 2>/dev/null) || true
+    rm -f "$wav"
+    echo "$code"
+  }
+
   if [ "$(probe_asr)" = "200" ]; then
-    echo "[tunnel] reusing existing tunnel on 127.0.0.1:${TUNNEL_PORT}"
+    DEEP=$(probe_asr_deep)
+    if [ "$DEEP" = "200" ]; then
+      echo "[tunnel] reusing existing tunnel on 127.0.0.1:${TUNNEL_PORT} (deep probe ok)"
+    else
+      echo "✗ tunnel endpoint answers /v1/models (200) but real transcription fails (http ${DEEP:-none})"
+      echo "  GPU-dead server: restart the whisper service on ${WHISPER_TUNNEL_HOST} (e.g. ssh ${WHISPER_TUNNEL_HOST} '~/whisper-asr/stop.sh && ~/whisper-asr/start.sh')"
+      exit 1
+    fi
   else
     echo "[tunnel] endpoint not reachable, opening ssh tunnel ${WHISPER_TUNNEL_HOST} → ${TUNNEL_REMOTE}"
     ssh -f -N -L "${TUNNEL_PORT}:${TUNNEL_REMOTE}" \
@@ -120,7 +149,13 @@ if [ -n "${WHISPER_TUNNEL_HOST:-}" ]; then
       echo "  Service down on the remote side? Probe it: ssh ${WHISPER_TUNNEL_HOST} curl -s ${TUNNEL_REMOTE}/v1/models"
       exit 1
     fi
-    echo "[tunnel] ASR reachable via ${WHISPER_ENDPOINT}"
+    DEEP=$(probe_asr_deep)
+    if [ "$DEEP" != "200" ]; then
+      echo "✗ tunnel up, /v1/models 200, but real transcription fails (http ${DEEP:-none})"
+      echo "  GPU-dead server: restart the whisper service on ${WHISPER_TUNNEL_HOST} (e.g. ssh ${WHISPER_TUNNEL_HOST} '~/whisper-asr/stop.sh && ~/whisper-asr/start.sh')"
+      exit 1
+    fi
+    echo "[tunnel] ASR reachable via ${WHISPER_ENDPOINT} (deep probe ok)"
   fi
 fi
 

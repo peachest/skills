@@ -18,13 +18,19 @@ REFERENCES_DIR = Path(__file__).parent.parent / "references"
 
 
 def run_route(claims_json: Path) -> tuple[dict, int]:
+    """Run route-claims.sh; return (updated claims file content, rc).
+
+    Since 3e5d090 the script updates claims.json in-place and stdout only
+    carries stats — callers who need the routed claims read the file back.
+    """
     args = [
         "bash", str(SCRIPTS_DIR / "route-claims.sh"),
         str(claims_json),
         str(REFERENCES_DIR / "regex-rules.json"),
     ]
     result = subprocess.run(args, capture_output=True, text=True, timeout=10)
-    return json.loads(result.stdout), result.returncode
+    data = json.loads(claims_json.read_text(encoding="utf-8"))
+    return data, result.returncode
 
 
 def _write_claims(claims: list[dict], path: Path):
@@ -43,7 +49,7 @@ class TestRouteClaims:
         }], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        claim = data["claims"][0]
+        claim = data[0]
         assert claim["route"] == "rule_engine"
 
     def test_pure_judgment_routed_to_refused(self):
@@ -57,7 +63,7 @@ class TestRouteClaims:
         }], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        claim = data["claims"][0]
+        claim = data[0]
         assert claim["route"] == "refused"
 
     def test_community_attribution_routed_to_web_search(self):
@@ -71,7 +77,7 @@ class TestRouteClaims:
         }], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        claim = data["claims"][0]
+        claim = data[0]
         assert claim["route"] == "web_search"
 
     def test_causal_interpretation_routed_to_inferred(self):
@@ -85,7 +91,7 @@ class TestRouteClaims:
         }], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        claim = data["claims"][0]
+        claim = data[0]
         assert claim["route"] == "inferred"
 
     def test_stats_include_all_categories(self):
@@ -115,10 +121,18 @@ class TestRouteClaims:
         ], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        assert "stats" in data
-        assert data["stats"]["authority_hit"] >= 1
-        assert data["stats"]["judgment_refused"] >= 1
-        assert "judgment_community" in data["stats"]
+        routed = json.loads(claims_file.read_text(encoding="utf-8"))
+        assert routed[0]["route"] == "rule_engine"
+        # stdout-only stats contract (3e5d090): one authority + one refused +
+        # community attribution bucket present
+        proc = subprocess.run(
+            ["bash", str(SCRIPTS_DIR / "route-claims.sh"),
+             str(claims_file), str(REFERENCES_DIR / "regex-rules.json")],
+            capture_output=True, text=True)
+        stats = json.loads(proc.stdout)
+        assert stats["stats"]["authority_hit"] >= 1
+        assert stats["stats"]["judgment_refused"] >= 1
+        assert "judgment_community" in stats["stats"]
 
     def test_unmatched_claims_use_fallback(self):
         claims_file = Path(tempfile.mktemp(suffix=".json"))
@@ -131,7 +145,7 @@ class TestRouteClaims:
         }], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        claim = data["claims"][0]
+        claim = data[0]
         assert "route" in claim
         assert claim["route"] == "web_search"
 
@@ -144,8 +158,8 @@ class TestRouteClaims:
         ], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        assert len(data["claims"]) == 3
-        for c in data["claims"]:
+        assert len(data) == 3
+        for c in data:
             assert "route" in c
 
     def test_empty_claims(self):
@@ -153,5 +167,4 @@ class TestRouteClaims:
         _write_claims([], claims_file)
         data, code = run_route(claims_file)
         assert code == 0
-        assert data["claims"] == []
-        assert data["stats"]["authority_hit"] == 0
+        assert data == []  # empty input stays empty in-place

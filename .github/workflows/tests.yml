@@ -19,7 +19,28 @@ jobs:
 
       - name: Run tests
         run: |
-          cd engineering/mr-review-triage
-          uv run pytest tests -q
-          cd ../../in-progress/teach
-          uv run pytest -q
+          set -uo pipefail
+          rc=0
+          # Tier 2 skills: own pyproject → own venv (docs/agents/skill-authoring.md)
+          for pyproj in $(find . -name pyproject.toml -not -path "./.venv/*" -not -path "*/.venv/*" | sort); do
+            d=$(dirname "$pyproj")
+            if [ -d "$d/tests" ]; then
+              echo "::group::uv run --project $d pytest tests"
+              (cd "$d" && uv run pytest tests -q) || rc=$?
+              # exit 5 = no tests collected (fixture-only dirs) — not a failure
+              [ "$rc" -eq 5 ] && rc=0
+              echo "::endgroup::"
+            fi
+          done
+          # Tier 1 skills: pytest-only → shared root venv
+          for tdir in $(find . -type d -name tests -not -path "./.venv/*" -not -path "*/.venv/*" \
+                        -not -path "*/site-packages/*" -not -path "*/fixtures/*" \
+                        -not -path "*/golden/*" | sort); do
+            [ -f "$(dirname "$tdir")/pyproject.toml" ] && continue  # tier 2, done above
+            ls "$tdir"/test_*.py >/dev/null 2>&1 || continue  # shell/fixture-only dirs
+            echo "::group::root venv pytest $tdir"
+            (uv run --project . pytest "$tdir" -q) || rc=$?
+            [ "$rc" -eq 5 ] && rc=0
+            echo "::endgroup::"
+          done
+          exit $rc

@@ -5,6 +5,8 @@ description = "Shared test venv for pytest-only skills in this repo. Skills with
 requires-python = ">=3.10"
 dependencies = [
     "pytest>=8",
+    "jsonschema",   # fact-check tests (adapter schema assertions)
+    "requests",     # fetch-article tests (adapter module import)
 ]
 
 [tool.pytest.ini_options]
