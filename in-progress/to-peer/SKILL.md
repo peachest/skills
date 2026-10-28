@@ -1,12 +1,12 @@
 ---
 name: to-peer
-description: "Create a peer agent session in a NEW herdr tab (never split pane). One command: tab create → agent start → optional bootstrap prompt. Use when the user asks to 创建 peer session / 开新 tab 派活 / to-peer / spawn a peer in a new tab. Message protocol (five-part dispatch, replies, closure) lives in multi-agent-collab — this skill owns creation only."
+description: "Create a peer agent session in a NEW herdr tab (never split pane), and tear it down (回收/teardown) when the work closes: closure signal → tab close → zero-residue check. One command: tab create → agent start → optional bootstrap prompt. Use when the user asks to 创建 peer session / 开新 tab 派活 / to-peer / spawn a peer in a new tab, or to 回收/遣散/收尾/清理 peer. Message protocol (five-part dispatch, replies, closure) lives in multi-agent-collab — this skill owns creation and teardown."
 argument-hint: "<name> <cwd> [--workspace W] [--prompt-file F|-] [--machine M] [--runtime R] [--label L] [--focus] [--caller-ws] [--description D]"
 ---
 
 # to-peer — 在新 tab 创建 peer session
 
-本 skill 只负责**创建**：一个新 tab + 一个 pi agent + 可选的首条 prompt。peer 起来之后的通信协议（五段消息、followUp 门、回执对账）由 **multi-agent-collab** skill 负责，创建完成后走那边。
+本 skill 负责 peer 生命周期的两端：**创建**（一个新 tab + 一个 pi agent + 可选的首条 prompt）和 **teardown**（回收）。中间的通信协议（五段消息、followUp 门、回执对账）由 **multi-agent-collab** skill 负责，创建完成后走那边。
 
 **新建与复用的分工（用户拍板）**：to-peer = 每次都新建一个全新 peer session，不做复用判断。要把任务派给一个已存在的 session（复用），走 multi-agent-collab 并显式提供 session id 或名称。向已有 peer 投递新任务前，确认它没有自己的在办职责——`idle` 只表示 agent 空闲，不表示它没有已承接的任务线（case：wJ:p1 idle 但在忙自己的镜像检查任务，被误投后用户纠正）。
 
@@ -66,6 +66,18 @@ bash <SKILL_DIR>/scripts/herdr-tab-peer.sh <name> [repo-cwd] [--workspace W] [--
 成功输出一行 JSON：`{"name","tab_id","pane_id","workspace_id","cwd","status","prompt","identity","session_id"}`。`workspace_id` 是创建后的实际值；跨 ws 派发时把回执和后续 `herdr:` 地址都用这个 ws 前缀拼。prompt 未带文件时为 `none`——之后用 multi-agent-collab 的发送通道（herdr_send 工具或其 `herdr-send.py`，followUp 门）派活。
 
 **退出码**：`0` 成功（含 registered/skipped-remote-machine）· `1` 用法/校验 · `2` herdr 错误或验证失败（ws 断言不符时脚本已自动关 tab，不残留）· `3` 冲突（agent 重名 / 同名身份已存在；stdout JSON 报已有持有者，用户裁决）· `4` peer 已创建但缺身份 workspace（问用户是否初始化）。
+
+## Teardown（回收 peer）
+
+用户说「回收/遣散/收尾/清理 peer」时走本节。**closure signal 只收口对话，不停止进程**——pi agent 无 stop 子命令，进程回收 = tab close（实证：stand down 已发 agent 仍在跑，还得补关）。顺序固定，五步：
+
+1. **圈定账单**：只收本 session 创建的 peer（pane id 取创建回执）；其他 session 建的 peer 留在账单外，用户点名才代清（实证：误关别人 peer 靠 `pi --session <uuid>` 重建续接补救）。idle ≠ 可清——peer 当前无在办任务线才可清。
+2. **先发 closure signal**（格式见 multi-agent-collab），收到回执或 no-reply-needed 后再动进程。带 recall clause（「有反馈再联系」）且近期可能召回的 peer 不进本次 teardown，只收口。
+3. **tab close**：`herdr [--session R|--machine M] tab close <pane-id>`，多个用 for 循环逐个关；跨 runtime 逐个带 `--session`。
+4. **清理账单尾款**：peer 全关完后处理本次任务派生的 worktree（`wt remove`）、已合并的本地分支（`git branch -d`）、实验目录。**先关 peer 再删 worktree**——peer 的 cwd 随树一起死，顺序反了 peer 挂在死目录上。`.auto` 实验记录保留。
+5. **零残留核验**：`herdr agent list`（跨机加 `--machine M`）+ `wt list` + `git branch` 过一遍，本 session 创建的条目清零即 teardown 完成；有残留回到第 3 步补关。
+
+带身份登记的 peer 还要收尾台账：`sessions.log` 对应当值行补 `endedAt`（创建时写的是 null）。
 
 **融合验证**：创建后脚本内建有界活性轮询（`agent list` 确认 agent 存活 + 抓取 pi session UUID），无需 agent 自行组装"建完再查"管道。验证失败自动关 tab 并 exit 2。
 
