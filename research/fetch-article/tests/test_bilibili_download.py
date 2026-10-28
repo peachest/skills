@@ -187,8 +187,10 @@ class TestAria2cDownload:
             audio_path2 = result2["audio_path"]
 
         assert audio_path1 == audio_path2
-        # Verify aria2c was called with --continue=true both times
-        assert mock_subprocess.run.call_count == 2
+        # Second fetch is a cache hit (bvid+page+cid+duration match, file
+        # exists) — only the FIRST call downloads. Re-download must be forced
+        # by a cid change or a deleted file, not merely by re-fetching.
+        assert mock_subprocess.run.call_count == 1
         for call in mock_subprocess.run.call_args_list:
             args = call[0][0]
             assert "--continue=true" in args
@@ -617,3 +619,38 @@ class TestAttachCredential:
         session = MagicMock()
         bilibili._attach_credential(session, str(cred))  # 不抛
         assert session.cookies.set.call_count == 0
+
+    def test_cache_invalidated_when_cid_changes(self, tmp_path, monkeypatch):
+        """Re-upload/source swap (cid change) → audio re-downloaded."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        fake_size = 1000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        session = _make_mock_session()
+        with patch.object(bilibili, "_make_session", return_value=session), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+            bvid = "BV1TestBVID02"
+            bilibili.fetch(f"https://www.bilibili.com/video/{bvid}/")
+            downloads_after_first = mock_subprocess.run.call_count
+
+            # Simulate re-upload: view fixture now reports a different cid
+            # (adapter reads cid from pages[page_index], not data.cid)
+            view = _load_fixture("view.json")
+            view["data"]["pages"][0]["cid"] = str(
+                int(view["data"]["pages"][0]["cid"]) + 1)
+            session.get.side_effect = _reside_view(session, view)
+
+            bilibili.fetch(f"https://www.bilibili.com/video/{bvid}/")
+
+        assert mock_subprocess.run.call_count == downloads_after_first + 1
+
+
+def _reside_view(session, view):
+    """Wrap a fake session so the view endpoint returns an updated fixture."""
+    original = session.get.side_effect
+
+    def side_effect(url, *args, **kwargs):
+        if "view" in url:
+            return _FakeResponse(view)
+        return original(url, *args, **kwargs)
+    return side_effect

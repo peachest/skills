@@ -293,6 +293,27 @@ def fetch(url: str, output_dir: str = None) -> dict:
     print(f"  Page {page_num}/{page_count}, cid={cid}, duration={duration}s",
           file=sys.stderr)
 
+    # Cache probe: audio reuse keyed on bvid+page+cid+duration. cid changes on
+    # re-upload/source swap; duration is the belt-and-suspenders check. Cheap
+    # fields (title/desc/comments) are ALWAYS refreshed below even on a hit.
+    cached_meta = None
+    if output_dir:
+        meta_path = os.path.join(output_dir, "metadata.json")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    m = json.load(f)
+                if (m.get("bvid") == bvid and m.get("page") == page_num
+                        and m.get("cid") == cid
+                        and m.get("duration_sec") == duration
+                        and m.get("audio_path")
+                        and os.path.isfile(m["audio_path"])):
+                    cached_meta = m
+                    print("  [cache] audio valid (cid match) — download will be "
+                          "skipped", file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+
     # 简介 + 评论（观众/作者视角，供下游了解视频整体内容；失败不致命）
     desc = info.get("desc", "")
     try:
@@ -339,6 +360,7 @@ def fetch(url: str, output_dir: str = None) -> dict:
             "uploader": owner,
             "publish_date": str(pubdate),
             "duration_sec": duration,
+            "cid": cid,
             "has_cc_subtitles": True,
             "audio_path": None,
             "content_length": None,
@@ -367,64 +389,72 @@ def fetch(url: str, output_dir: str = None) -> dict:
             "page_count": page_count,
         }
 
-    # ── Step 4: Get audio URL and download ──
-    print(f"  [4/4] Getting audio URL…", file=sys.stderr)
-    play = wbi_get("https://api.bilibili.com/x/player/wbi/playurl",
-                   {"bvid": bvid, "cid": cid,
-                    "fnval": 16, "fnver": 0, "qn": 0, "platform": "pc"})
-
-    audio_path = os.path.join(output_dir, "audio.mp4")
-    stream_type = None
-
-    # DASH audio first (lowest bandwidth); durl fallback only when no DASH audio
-    dash = play.get("dash") or {}
-    dash_audio = dash.get("audio", [])
-    if dash_audio:
-        best = min(dash_audio, key=lambda a: a.get("bandwidth", 0))
-        audio_url = best.get("baseUrl", best.get("base_url", ""))
-        bandwidth = best.get("bandwidth", 0)
-        print(f"  Audio URL obtained (DASH, bandwidth={bandwidth})", file=sys.stderr)
-        _download_with_aria2c(audio_url, audio_path, output_dir)
-        stream_type = "dash_audio"
+    # ── Step 4: Get audio URL and download (skipped on cache hit) ──
+    if cached_meta is not None:
+        audio_path = cached_meta["audio_path"]
+        content_length = (cached_meta.get("content_length")
+                          or os.path.getsize(audio_path))
+        stream_type = cached_meta.get("stream_type", "dash_audio")
+        print(f"  Audio reused from cache ({content_length / 1_048_576:.1f} MB)",
+              file=sys.stderr)
     else:
-        durl = play.get("durl", [])
-        if not durl:
-            raise RuntimeError("No audio URL found")
-        if len(durl) == 1:
-            audio_url = durl[0]["url"]
-            print(f"  Audio URL obtained (durl, {durl[0].get('size', 0) / 1_048_576:.1f} MB)",
-                  file=sys.stderr)
-            _download_with_aria2c(audio_url, audio_path, output_dir)
-        else:
-            # Multi-segment durl: download each, then ffmpeg concat
-            print(f"  Audio URL obtained (durl, {len(durl)} segments)", file=sys.stderr)
-            segment_paths = []
-            for i, seg in enumerate(durl):
-                seg_path = os.path.join(output_dir, f"segment_{i}.m4s")
-                _download_with_aria2c(seg["url"], seg_path, output_dir)
-                segment_paths.append(seg_path)
-            # Generate list.txt for ffmpeg concat
-            list_path = os.path.join(output_dir, "list.txt")
-            with open(list_path, "w") as f:
-                for sp in segment_paths:
-                    f.write(f"file '{os.path.basename(sp)}'\n")
-            # ffmpeg concat (binary resolved via imageio_ffmpeg, no system dep)
-            result = subprocess.run(
-                [_resolve_ffmpeg(), "-y", "-f", "concat", "-safe", "0",
-                 "-i", list_path, "-c", "copy", audio_path],
-                capture_output=True, text=True, timeout=120)
-            if result.returncode != 0:
-                raise RuntimeError(f"ffmpeg concat failed: {result.stderr[-500:]}")
-            # Clean up segments
-            for sp in segment_paths:
-                os.remove(sp)
-            os.remove(list_path)
-        stream_type = "durl_video"
+        print(f"  [4/4] Getting audio URL…", file=sys.stderr)
+        play = wbi_get("https://api.bilibili.com/x/player/wbi/playurl",
+                       {"bvid": bvid, "cid": cid,
+                        "fnval": 16, "fnver": 0, "qn": 0, "platform": "pc"})
 
-    content_length = os.path.getsize(audio_path)
-    if content_length == 0:
-        raise RuntimeError("Downloaded file is empty")
-    print(f"  Downloaded {content_length / 1_048_576:.1f} MB", file=sys.stderr)
+        audio_path = os.path.join(output_dir, "audio.mp4")
+        stream_type = None
+
+        # DASH audio first (lowest bandwidth); durl fallback only when no DASH audio
+        dash = play.get("dash") or {}
+        dash_audio = dash.get("audio", [])
+        if dash_audio:
+            best = min(dash_audio, key=lambda a: a.get("bandwidth", 0))
+            audio_url = best.get("baseUrl", best.get("base_url", ""))
+            bandwidth = best.get("bandwidth", 0)
+            print(f"  Audio URL obtained (DASH, bandwidth={bandwidth})", file=sys.stderr)
+            _download_with_aria2c(audio_url, audio_path, output_dir)
+            stream_type = "dash_audio"
+        else:
+            durl = play.get("durl", [])
+            if not durl:
+                raise RuntimeError("No audio URL found")
+            if len(durl) == 1:
+                audio_url = durl[0]["url"]
+                print(f"  Audio URL obtained (durl, {durl[0].get('size', 0) / 1_048_576:.1f} MB)",
+                      file=sys.stderr)
+                _download_with_aria2c(audio_url, audio_path, output_dir)
+            else:
+                # Multi-segment durl: download each, then ffmpeg concat
+                print(f"  Audio URL obtained (durl, {len(durl)} segments)", file=sys.stderr)
+                segment_paths = []
+                for i, seg in enumerate(durl):
+                    seg_path = os.path.join(output_dir, f"segment_{i}.m4s")
+                    _download_with_aria2c(seg["url"], seg_path, output_dir)
+                    segment_paths.append(seg_path)
+                # Generate list.txt for ffmpeg concat
+                list_path = os.path.join(output_dir, "list.txt")
+                with open(list_path, "w") as f:
+                    for sp in segment_paths:
+                        f.write(f"file '{os.path.basename(sp)}'\n")
+                # ffmpeg concat (binary resolved via imageio_ffmpeg, no system dep)
+                result = subprocess.run(
+                    [_resolve_ffmpeg(), "-y", "-f", "concat", "-safe", "0",
+                     "-i", list_path, "-c", "copy", audio_path],
+                    capture_output=True, text=True, timeout=120)
+                if result.returncode != 0:
+                    raise RuntimeError(f"ffmpeg concat failed: {result.stderr[-500:]}")
+                # Clean up segments
+                for sp in segment_paths:
+                    os.remove(sp)
+                os.remove(list_path)
+            stream_type = "durl_video"
+
+        content_length = os.path.getsize(audio_path)
+        if content_length == 0:
+            raise RuntimeError("Downloaded file is empty")
+        print(f"  Downloaded {content_length / 1_048_576:.1f} MB", file=sys.stderr)
 
     # Write metadata
     meta = {
@@ -433,6 +463,7 @@ def fetch(url: str, output_dir: str = None) -> dict:
         "uploader": owner,
         "publish_date": str(pubdate),
         "duration_sec": duration,
+        "cid": cid,
         "has_cc_subtitles": has_subs,
         "audio_path": audio_path,
         "content_length": content_length,

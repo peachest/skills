@@ -29,7 +29,13 @@ for arg in "$@"; do
 done
 [ -n "$URL" ] || { echo "usage: $0 <bilibili-url> [outdir] [--no-slides] [--no-merge]" >&2; exit 3; }
 
-OUTDIR="${OUTDIR:-$HOME/tmp/run-bilibili-$(date +%Y%m%d-%H%M%S)}"
+# Workspace is bvid-addressed when the URL carries a BV id, so two sessions
+# (or reruns) of the same video share one workspace: fetch reuses cached audio
+# (cid-validated inside bilibili.py), and stages 2/3 skip when their products
+# already exist. Non-BV URLs (b23.tv short links) fall back to a timestamp dir
+# — no cache, resolved fresh each run.
+BV_ARG=$(printf '%s' "$URL" | grep -oE 'BV[a-zA-Z0-9]+' | head -1)
+OUTDIR="${OUTDIR:-$HOME/tmp/run-bilibili-${BV_ARG:-$(date +%Y%m%d-%H%M%S)}}"
 mkdir -p "$OUTDIR"
 DONE_MARK="$OUTDIR/.done"
 finalize() { echo "$1" > "$DONE_MARK"; exit "$1"; }
@@ -46,15 +52,21 @@ FETCH_PY="$SKILL_DIR/../fetch-article/scripts/fetch.py"
 
 # ── Stage 1: fetch ──
 echo "[1/4] fetch: $URL"
-FETCH_JSON=$(PY "$FETCH_PY" "$URL" --json) || { echo "✗ fetch failed"; finalize 3; }
+FETCH_JSON=$(PY "$FETCH_PY" "$URL" --json --output-dir "$OUTDIR") || { echo "✗ fetch failed"; finalize 3; }
 # fetch.py's raw_path is its article.json FILE — the workspace is its dir
 WORK_DIR=$(printf '%s' "$FETCH_JSON" | python3 -c "import sys,json,os; print(os.path.dirname(json.load(sys.stdin)['raw_path']))") \
   || { echo "✗ fetch JSON parse failed"; finalize 3; }
 echo "  workspace: $WORK_DIR"
 
 # ── Stage 2: transcribe (bash; loads runtime.conf itself) ──
-echo "[2/4] transcribe"
-bash "$SCRIPT_DIR/transcribe.sh" "$WORK_DIR" || { echo "✗ transcribe failed"; finalize 3; }
+# Skip when this workspace already has a raw ASR product — delete
+# $WORK_DIR/faster-whisper/transcript.md to force a re-transcribe.
+if [ -s "$WORK_DIR/faster-whisper/transcript.md" ]; then
+  echo "[2/4] transcribe — cached transcript found, skipped"
+else
+  echo "[2/4] transcribe"
+  bash "$SCRIPT_DIR/transcribe.sh" "$WORK_DIR" || { echo "✗ transcribe failed"; finalize 3; }
+fi
 
 # locate the transcript dir produced by this run (references/transcripts/**/<BV>)
 BV=$(python3 -c "import json;print(json.load(open('$WORK_DIR/metadata.json')).get('bvid',''))")
@@ -63,8 +75,15 @@ TD=$(find "$OUTDIR/references/transcripts" -type d -name "*${BV}*" 2>/dev/null |
 # ── Stage 3: slides (optional; failures degrade to partial) ──
 RC=0
 if [ "$NO_SLIDES" -eq 0 ]; then
-  echo "[3/4] slides"
-  PY "$SCRIPT_DIR/slides-extract.py" "$WORK_DIR" || RC=2
+  # Skip when slides were already extracted — delete
+  # $WORK_DIR/slides/slides.json to force a re-extract (OCR is the
+  # most expensive stage; keyed to the audio's cid validity via fetch).
+  if [ -s "$WORK_DIR/slides/slides.json" ]; then
+    echo "[3/4] slides — cached slides.json found, skipped"
+  else
+    echo "[3/4] slides"
+    PY "$SCRIPT_DIR/slides-extract.py" "$WORK_DIR" || RC=2
+  fi
 else
   echo "[3/4] slides skipped (--no-slides)"
 fi
