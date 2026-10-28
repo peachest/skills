@@ -369,7 +369,10 @@ class TestStreamSelection:
         mock_subprocess = _make_mock_subprocess_success(fake_size)
         with patch.object(bilibili, "_make_session",
                           return_value=_make_mock_session("playurl_multi.json")), \
-             patch.object(bilibili, "subprocess", mock_subprocess):
+             patch.object(bilibili, "subprocess", mock_subprocess), \
+             patch.object(bilibili, "_resolve_ffmpeg", return_value="/usr/bin/ffmpeg"):
+            # _resolve_ffmpeg 一并 patch：CI runner 无 imageio-ffmpeg/ffmpeg，
+            # 被测代码只把返回值传给已 mock 的 subprocess.run
 
             result = bilibili.fetch(
                 "https://www.bilibili.com/video/BV1TestBVID01/",
