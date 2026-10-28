@@ -98,9 +98,11 @@ def _mock_ytdlp(info_json: dict, write_vtt: bool, audio_ok: bool = True):
 
 
 class TestFetch:
+    # _find_ytdlp 一并 patch：CI runner 无 yt-dlp，被测代码只把返回值传给已 mock 的 subprocess.run
     def test_subtitle_path_skips_audio(self, tmp_path):
         with patch.object(youtube.subprocess, "run",
-                          side_effect=_mock_ytdlp(INFO, write_vtt=True)):
+                          side_effect=_mock_ytdlp(INFO, write_vtt=True)), \
+             patch.object(youtube, "_find_ytdlp", return_value="/usr/bin/yt-dlp"):
             r = youtube.fetch(f"https://youtu.be/{VID}", output_dir=str(tmp_path))
         assert r["has_subtitles"] is True
         assert r["audio_path"] is None
@@ -112,7 +114,8 @@ class TestFetch:
 
     def test_no_subtitle_downloads_audio(self, tmp_path):
         with patch.object(youtube.subprocess, "run",
-                          side_effect=_mock_ytdlp(INFO, write_vtt=False)):
+                          side_effect=_mock_ytdlp(INFO, write_vtt=False)), \
+             patch.object(youtube, "_find_ytdlp", return_value="/usr/bin/yt-dlp"):
             r = youtube.fetch(f"https://youtu.be/{VID}", output_dir=str(tmp_path))
         assert r["has_subtitles"] is False
         assert r["stream_type"] == "audio_only"
@@ -122,7 +125,8 @@ class TestFetch:
     def test_audio_failure_raises(self, tmp_path):
         with patch.object(youtube.subprocess, "run",
                           side_effect=_mock_ytdlp(INFO, write_vtt=False,
-                                                  audio_ok=False)):
+                                                  audio_ok=False)), \
+             patch.object(youtube, "_find_ytdlp", return_value="/usr/bin/yt-dlp"):
             with pytest.raises(RuntimeError, match="audio download failed"):
                 youtube.fetch(f"https://youtu.be/{VID}", output_dir=str(tmp_path))
 
