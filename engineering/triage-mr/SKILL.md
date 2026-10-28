@@ -84,6 +84,11 @@ Read `/skill:fix` and run its process with `issues.json` as input. In triage
 mode /fix produces **verdict semantics only** (ordinal, classification, reason,
 fix plan, priority) — it never writes `classified.json`.
 
+**分流指针**：大量新鲜 findings 且值得并行对抗评审时，verdict pass 先走
+`/skill:challenge-and-fix`（fanout 定谳：驳回/接受/更优方案），只修
+ACCEPT/PROPOSE 存活项再回到本循环落 verdict；少量或强技术性的 findings 直接
+`/skill:fix` 串行。判断标准：findings 多、彼此独立、争议成本 > 并行开销。
+
 The moment each verdict is finalized, call:
 
 ```bash
