@@ -55,7 +55,7 @@ A skill may carry tests even though it is primarily documentation — `tests/` a
 `wiki/` 是持久知识层（条目格式、状态机、sanitize 规范见 `wiki/README.md`）。`<skill-name>` = skill 目录名（如 `engineering/mr-review-triage` → `wiki/mr-review-triage/`）。
 
 - **改 skill 前**：`wiki/<skill-name>/` 存在时先读——`patterns.md` 的 open 条目是该 skill 已知问题（修改方案别与其冲突、能顺带吸收则吸收）；`skill-impact.md` 里的被拒提案不得无新证据重提。目录不存在 = 冷启动，直接动手。
-- **改 skill 后**：按两段式 commit 记账（规则见 `wiki/README.md` 的 skill-impact 节）：先提交 skill 本体变更，拿到 hash 后再单独 commit 向 `skill-impact.md` 回填一行（提案/落点/commit hash/验证），禁止 "(this commit)" 占位符。用户否决的方案记 rejected（含理由）。行为性修改必记；纯错别字/排版豁免。无 wiki 目录则连同本次修改创建。
+- **改 skill 后**：原子提交——skill 本体变更与 `skill-impact.md` 台账行**同一 commit**，台账 commit 列写本次 commit 的 subject 原文（不用 hash：hash 对 filter-repo 改写不免疫且存在自引用死锁）。规则见 `wiki/README.md` 的 skill-impact 节，由 `scripts/githooks/` 三道闸门机械强制（pre-commit 配对 + commit-msg subject 一致 + pre-push 漂移检测）。确属纯排版/错别字修复用 --no-verify 跳过配对闸门。用户否决的方案记 rejected（含理由）。行为性修改必记。无 wiki 目录则连同本次修改创建。
 - **写入 sanitize**：wiki 在公共仓库——证据只写 `session-id#entry`，内网域名/项目名/凭证按 `docs/agents/skill-authoring.md` 占位符脱敏，commit 前跑 `bash scripts/sanitize-check.sh`（gitleaks + 内部标识 pattern 层）。
 
 ## Recheck scripts

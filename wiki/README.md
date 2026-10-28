@@ -62,21 +62,37 @@ wiki/
 
 | date | proposal | commit | verification |
 |---|---|---|---|
-| YYYY-MM-DD | 提案内容（含动机与被拒理由） | <hash> | 验证方式与结果 |
+| YYYY-MM-DD | 提案内容（含动机与被拒理由） | <commit subject 原文> | 验证方式与结果 |
 ```
 
-### 两段式 commit（禁止 "(this commit)" 占位符）
+### 原子提交 + subject 锚点（2026-10-28 起，机械强制）
 
-skill 修改与台账记账分两个 commit：
+skill 修改与台账记账是**同一个 commit**（原子更新：同落同退，漏记不可能发生）：
 
-1. **Commit 1**：只含 skill 本体变更（SKILL.md / scripts / agents/）。此时不写
-   skill-impact 行——commit hash 还不存在，提前写只能写占位符。
-2. **Commit 2**：拿到 Commit 1 的 hash 后，向 `skill-impact.md` 回填台账行
-   （commit 列写 Commit 1 的 hash），单独提交。台账行属于 wiki 层，不触发
-   post-commit 的 skill 重装，无副作用。
+1. 先想好本次 commit 的 subject；
+2. skill 本体变更 + `skill-impact.md` 台账行一起 stage（commit 列写**该 subject 原文**）；
+3. 一次提交，commit-msg 闸门校验两者一致。
 
-同一 session 连续多次改同一 skill 时，可合并为一个台账行（commit 列写区间
-`<hash1>..<hashN>` 或主 hash），但仍须在最后一个 skill commit 落地后回填。
+为什么 commit 列写 subject 而不是 hash：commit hash 在引用“包含它自己的那个
+commit”时存在自引用死锁，且 filter-repo 历史改写会批量杀死裸 hash（2026-10-26
+实证 14 个引用死亡）；subject 对历史改写免疫，且可用 `git log -F --grep` 检索。
+
+**机械闸门**（`scripts/githooks/wiki_check.py`，三模式）：
+
+- `pre-commit`：skill 目录有 staged 变更 → 对应 `wiki/<name>/skill-impact.md` 必须
+  同时 staged；新增行（date ≥ 2026-10-28）禁止裸 hash / 占位符。
+- `commit-msg`：新增台账行（date=今天）的 commit 列必须等于本 commit subject。
+- `pre-push`：新增行的 commit 列必须能 `git log -F --grep` 检索到（防漂移/笔误）；
+  存量行（date < 2026-10-28）的裸 hash 做存在性检查（filter-repo drift 检测）。
+
+确属特例（纯排版/错别字修复）用 `git commit --no-verify` 跳过，并在台账行说明。
+
+**存量行的豁免值**：`—`（待落地提案或锚点丢失）、空、`(above)`、“见 git log”——
+校验跳过。回填历史行（考据到存活锚点）允许写 subject，date 写被记账 commit 的
+日期（不写今天，否则触发 subject 相等性检查）。
+
+同一 session 连续多次改同一 skill 可合并为一个台账行，commit 列写主 commit 的
+subject（多个时用 "; " 分隔）。
 
 ## sanitize 规则（公共仓库，写入前强制）
 
