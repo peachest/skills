@@ -216,6 +216,15 @@ def cmd_dump(args) -> None:
     }, ensure_ascii=False, indent=2))
 
 
+def _untangle_flag_paths(argv: list[str]) -> list[str]:
+    # session paths start with '--' (cwd-slug dirs) — argparse would eat them as options.
+    argv = list(argv)
+    for i, a in enumerate(argv[:-1]):
+        if a in ("--dump", "--sessions-dir") and argv[i + 1].startswith("-"):
+            argv[i + 1] = "./" + argv[i + 1]
+    return argv
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("tool", nargs="?", help="tool name, e.g. bash / subagent / edit")
@@ -226,7 +235,7 @@ def main() -> None:
     ap.add_argument("--arg-chars", type=int, default=4000, help="clip args to N chars (dump mode)")
     ap.add_argument("--result-chars", type=int, default=1500, help="clip result text to N chars (dump mode)")
     ap.add_argument("--full-args", action="store_true", help="no args clipping (dump mode)")
-    args = ap.parse_args()
+    args = ap.parse_args(_untangle_flag_paths(sys.argv[1:]))
 
     if args.dump:
         if not args.tool:

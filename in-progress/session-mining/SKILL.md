@@ -26,7 +26,7 @@ Script routes never cover the recipe rows: "who failed" is audit-shaped, "what s
 
 ## 2. Shared skeleton
 
-1. **Triage** — run the route, write the candidate JSON to `~/tmp/<topic>-sessions.json`; later funnel stages filter that file incrementally, never re-walk the corpus. Noise signature: low marker count + high entry count + scattered tool histogram = incidental injection. Strings from the skill's own body inflate string matches; count real `toolCall` entries.
+1. **Triage** — run the route, write the candidate JSON to `~/tmp/<topic>-sessions.json`; later funnel stages filter that file incrementally, never re-walk the corpus. Noise signature: low marker count + high entry count + scattered tool histogram = incidental injection. Strings from the skill's own body inflate string matches; count real `toolCall` entries. Keyword fan-out over the corpus is one pass: `rg -l 'kw1|kw2|…'` alternation, never N keyword-N-pass re-reads (2026-10-28: 8 keyword passes over 3.1GB before collapsing).
 2. **Anchor versions** — before any cross-session comparison: `python3 <SKILL_DIR>/scripts/version-anchor.py <session.jsonl> [--skill <name>]`. `commit` / `uncommitted` (`matches_current_file: false` = ghost version, findings cite bytes that exist nowhere else) / `third-party`. Skill name ≠ trigger name — a wrapper skill's injection anchors to the wrapper.
 3. **Index or dump** —
    ```bash

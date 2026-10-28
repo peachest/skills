@@ -122,6 +122,17 @@ class TestDump:
         assert "glab api mr 1" in by_id["c2"]["args"]
         assert "code 1" in by_id["c2"]["result"]
 
+    def test_dump_dash_leading_path(self, monkeypatch, capsys, session_file, tmp_path):
+        # regression: session paths start with '--' (cwd-slug dirs); argparse
+        # used to eat the --dump value as an unknown option
+        _, f = session_file
+        d = tmp_path / "--mnt-disk1-hyx--"
+        d.mkdir()
+        dash_file = d / f.name
+        f.rename(dash_file)
+        out = run_script(monkeypatch, capsys, ["bash", "--dump", str(dash_file), "--args-contains", "glab api"])
+        assert out["matched_calls"] == 2
+
     def test_arg_clipping(self, monkeypatch, capsys, session_file, tmp_path):
         _, f = session_file
         lines = f.read_text().splitlines()
