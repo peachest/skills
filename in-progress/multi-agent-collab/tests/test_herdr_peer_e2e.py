@@ -14,10 +14,15 @@ think are marked slow and need RUN_SLOW_E2E=1.
 
 import json
 import os
+import shutil
 import subprocess
 import uuid
 
 import pytest
+
+# CI runner 无 herdr 二进制：所有需要真 runtime 的用例（含非 slow 的 exit2 guardrail）
+# 必须在 fixture 启动 herdr server 之前跳过，否则 fixture setup 直接 ERROR
+HERDR_AVAILABLE = shutil.which("herdr") is not None
 
 from conftest import peer_session_file, peer_user_injections, wait_for
 
@@ -118,6 +123,7 @@ def test_send_followup_delivers_with_identity(peer, scripts_dir, e2e_runtime):
     )
 
 
+@pytest.mark.skipif(not HERDR_AVAILABLE, reason="herdr CLI not available (CI runner); e2e_runtime fixture needs a real herdr server")
 def test_send_not_found_is_exit2(peer, scripts_dir, e2e_runtime):
     """A stale/unreachable pane yields exit 2 with an agent_not_found envelope —
     never a silent pass (pitfall #29/#30 guardrail)."""
