@@ -74,17 +74,6 @@ Blocking uses the tracker's **native** dependency relationship — essential bec
 
 The answer isn't part of the body — it's recorded on resolution (see [Work through the map](#work-through-the-map)). Assets created while resolving a ticket are linked from the issue, not pasted in.
 
-### Kanban mirroring (herdr)
-
-When **both** hold at publish time, mirror every new ticket as a board card (one entry point, two surfaces — tracker stays canonical, board is the execution view):
-
-1. **In herdr**: `HERDR_SOCKET_PATH` is set.
-2. **Kanban topology exists**: `board --project <BOARDS_DIR> board list` returns boards (BOARDS_DIR from the kanban skill's `runtime.conf`, default `~/boards`).
-
-Mirror per the kanban skill's 建卡契约: runtime = socket basename, cross-checked against repo ownership (<platform> business repos → dev, personal tool repos → agent; disagree → ask, never guess); space = `new-workspace` + repo cwd + unique `space_ref`; card title = ticket name; description = **pointer only** (issue URL + blocked_by + 完成判据), never the question body — the issue is the canonical question, the card just points at it. Column = Backlog, except tickets whose spec already exists (跳相位) go straight to Implement. Map issues mirror nothing — an effort is cards, not a board.
-
-Apply the same mirror in **Work through the map** step 5 for newly-surfaced tickets.
-
 ## Ticket Types
 
 Every ticket is either **HITL** — human in the loop, worked *with* a human who speaks for themselves — or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange; the agent never stands in for the human's side of it (a grilling agent that answers its own questions has broken this).
@@ -150,6 +139,6 @@ User invokes with a map (URL or number). A ticket is **optional** — without on
 2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work. **Local-markdown tracker only:** claim with `tracker ticket status --map <slug> --id <N> --set claimed` (no assignee field — claimed status *is* the claim; requires `reviewed_at != null`).
 3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/skill:grilling` and `/skill:domain-modeling`.
 4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far. **Local-markdown tracker only:** fill the ticket's `## Answer`, append `- [#<id> <title>](issues/<NN>-<slug>.md) — <gist>` to the map's `## Decisions so far`, then `tracker ticket status --map <slug> --id <N> --set resolved` (thin CRUD, G-Q15 -- the CLI only sets status; body edits are the agent's job).
-5. Add newly-surfaced tickets (create-then-wire; mirror each to kanban per [Kanban mirroring](#kanban-mirroring-herdr)); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets. If the finding cannot be held by this map at all, route it per [Discovery routing](#discovery-routing) before creating anything.
+5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets. If the finding cannot be held by this map at all, route it per [Discovery routing](#discovery-routing) before creating anything.
 
 The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.
