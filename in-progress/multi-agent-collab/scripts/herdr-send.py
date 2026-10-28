@@ -114,6 +114,11 @@ def main():
         # $HERDR_SESSION is NOT inherited in machine mode — inheriting it made
         # every in-herdr cross-machine send fail the mutual-exclusion check
         # (2026-10-21, w5:p2 whisper dispatch); a machine pins its own session.
+        # An EXPLICIT --runtime alongside --machine is still a caller error
+        # (silent drop would misroute the reply path) — only the env default
+        # is discarded here.
+        if runtime is not None:
+            fail(1, "--machine and --runtime are mutually exclusive (a machine pins its session)")
         runtime = None
     else:
         runtime = runtime or os.environ.get("HERDR_SESSION")
