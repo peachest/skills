@@ -236,3 +236,27 @@ internal hosts/projects/credentials; tickets reference public GitHub issues.
   keeping _stub_env refactor, F4 pin re-applied inside it).
 - Verification: pytest 111 green post-merge (80 pre-existing + 6 new F1/F3/F5
   cases + 3 param'd F2 + F4 + #64's 22); TDD red→green per fix.
+
+## 2026-10-28 — resolve read-back confirmation: a 2xx PUT is intent, not state
+
+- Proposal: internal-MR incident (2026-10-26 session audit) — post reported 11/11 ok
+  ("already labeled — resolved") while every thread stayed OPEN on the
+  platform; `_resolve_gitlab_thread` returned True on any 2xx PUT with no
+  read-back. Discovered by the user, not by any gate; the session lesson
+  ("post ok counts are intent reports, verify --json is the only terminal
+  truth") lived only in session memory.
+- Landing: commit 10c39f6 — `_resolve_gitlab_thread` confirms with a GET
+  read-back after the PUT (one PUT+read retry on a still-open result, then
+  fail-closed); the note-level fallback path is read-back confirmed too;
+  `ok` counts confirmed resolutions only. GitHub paths already asserted
+  `thread.isResolved` from the mutation response (unchanged). Companion doc
+  change: triage-mr SKILL.md step-3 completion criterion is now "exit 0 +
+  immediate verify --json open-count read" (resolve check does not gate on
+  CI — closes the post-to-verify blind window P-010's CI gate had created).
+- Rejected alternative: trusting the 2xx PUT plus verify-gate-only backstop —
+  rejected because the verify gate was scheduled after CI terminal state,
+  leaving an unbounded window where the false ok was the only signal.
+- Verification: pytest 172 green (6 new read-back unit cases + CLI
+  regression "read-back still open fails after exactly one retry");
+  remote-probe harness fix (extra_routes now precede base routes,
+  first-match-wins overrides).
