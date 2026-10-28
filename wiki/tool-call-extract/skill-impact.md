@@ -7,4 +7,4 @@
 | 2026-10-16 | Relay enrichment（可选）：dump 模式后新增 relay-enrich.py 调用指引，为每 tool call 附 duration_s/attempt_index/status（ATIF 源，no-relay-data 非阻塞） | SKILL.md step 3b（relay-enrich 指引）+ references | 121584c | 全量测试通过 |
 | 2026-10-20 | 新增 step 5 交接规则：dump 含错误时默认直接接续 tool-call-diagnose（不再询问）；零错误纯取数才收尾留一行指针。证据：27 次 extract 仅 4 次进入 diagnose（15%），错误型 dump 常被弃置 | c330655 | pytest 7 passed；gitleaks clean | |
 
-| 2026-10-22 退役：与兄弟 extract skill 合并为 in-progress/session-mining（路由表统一入口，脚本/测试整体迁移，消费者已重指向）。理由与证据见 wiki/session-mining/skill-impact.md | — | 32ba779 | 46 tests green | |
+| 2026-10-22 退役：与兄弟 extract skill 合并为 in-progress/session-mining（路由表统一入口，脚本/测试整体迁移，消费者已重指向）。理由与证据见 wiki/session-mining/skill-impact.md | — | 0f739d5 | 46 tests green | |
