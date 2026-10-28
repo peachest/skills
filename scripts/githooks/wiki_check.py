@@ -26,8 +26,10 @@ TODAY = time.strftime("%Y-%m-%d")
 SKILL_ROOTS = ("in-progress", "engineering", "research", "productivity")
 EXEMPT_COL3 = {"—", "-", "", "(above)"}
 LEDGER_ROW = re.compile(r"^\|\s*20\d\d-\d\d-\d\d\s*\|")
-# 裸 hash：前后不是 hex/路径字符（排除 URL 尾巴、路径片段）
-HASH_RE = re.compile(r"(?<![0-9a-zA-Z./])[0-9a-f]{7,40}(?![0-9a-zA-Z])")
+# 裸 hash：前后不是 hex/路径字符；排除 range 左端（c55ee46..49dd158 的左值）
+HASH_RE = re.compile(r"(?<![0-9a-zA-Z./])[0-9a-f]{7,40}(?!\.|[0-9a-zA-Z])")
+# pi session id 形态（01a0xxxx/01a1xxxx，uuid v7 前缀）不是 commit hash
+SESSION_ID_RE = re.compile(r"\b01a[0-9a-f]{5}\b")
 PLACEHOLDER_RE = re.compile(r"\(this commit\)|（this commit）|「this commit」|\(本次\)", re.I)
 LEDGER_RE_PATH = re.compile(r"^wiki/[^/]+/skill-impact\.md$")
 
@@ -77,7 +79,9 @@ def added_ledger_lines(path):
 
 
 def split_row(line):
-    """| date | proposal | commit | verification | → cells（容忍单元格内转义 |）"""
+    """| date | ... | commit | verification | → cells（容忍单元格内转义 |）。
+    schema 无关取列：4 列正典与 5 列变体（含 Landing 列）的 commit 列均为 cells[-3]，
+    verification 均为 cells[-2]。"""
     return re.split(r"(?<!\\)\|", line)
 
 
@@ -118,12 +122,13 @@ def pre_commit():
                 errors.append(f"[wiki-fmt] {f}: 台账行需 4 列（date|proposal|commit|verification）: {body[:80]}")
                 continue
             date = cells[1].strip()
-            col3 = cells[3].strip()
-            col4 = cells[4].strip() if len(cells) > 4 else ""
+            col3 = cells[-3].strip()
+            col4 = cells[-2].strip()
             if is_new and date >= EFFECTIVE:
                 if col3 not in EXEMPT_COL3 and "git log" not in col3:
-                    if HASH_RE.search(col3):
-                        errors.append(f"[wiki-fmt] {f}: 新规范行 commit 列禁止裸 hash（{HASH_RE.search(col3).group()}）——写 commit subject 原文")
+                    bare = [m.group() for m in HASH_RE.finditer(col3) if not SESSION_ID_RE.fullmatch(m.group())]
+                    if bare:
+                        errors.append(f"[wiki-fmt] {f}: 新规范行 commit 列禁止裸 hash（{bare[0]}）——写 commit subject 原文")
             if is_new and not col4:
                 errors.append(f"[wiki-fmt] {f}: 台账行 verification 列为空——写验证方式与结果")
 
@@ -157,7 +162,7 @@ def commit_msg(msgfile):
             if len(cells) < 5:
                 continue
             date = cells[1].strip()
-            col3 = cells[3].strip()
+            col3 = cells[-3].strip()
             if date == TODAY and col3 not in EXEMPT_COL3 and col3 != subject:
                 errors.append(
                     f"[wiki-anchor] {f}: 台账新行 commit 列与本次 commit subject 不一致。\n"
@@ -181,7 +186,7 @@ def pre_push():
             if len(cells) < 5:
                 continue
             date = cells[1].strip()
-            col3 = cells[3].strip()
+            col3 = cells[-3].strip()
             if col3 in EXEMPT_COL3 or col3.startswith("见 git log"):
                 continue
             if date >= EFFECTIVE:
@@ -199,11 +204,14 @@ def pre_push():
                             f"    用 git log --oneline 找到真实 subject；若历史被 filter-repo 改写，参考 .git/filter-repo/commit-map"
                         )
             else:
-                # legacy 行：hash 存在性检查（filter-repo drift 检测）
+                # legacy 行：hash 存在性检查（filter-repo / squash drift 检测）
                 for m in HASH_RE.finditer(col3):
-                    if not hash_exists(m.group()):
+                    h = m.group()
+                    if SESSION_ID_RE.fullmatch(h):
+                        continue  # subject 里嵌的 pi session id，非 commit 引用
+                    if not hash_exists(h):
                         errors.append(
-                            f"[wiki-drift] {f}:{i} legacy 行 hash {m.group()} 在本仓已不存在（历史改写？），请重新维护：\n"
+                            f"[wiki-drift] {f}:{i} legacy 行 hash {h} 在本仓已不存在（历史改写/squash？），请重新维护：\n"
                             f"    参考 .git/filter-repo/commit-map 做新旧映射，或按 message/内容考据"
                         )
     return errors
