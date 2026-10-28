@@ -6,6 +6,7 @@ markdown-fence stripping. Vision payloads: the caller puts image_url parts
 in messages — this client never inspects message content.
 """
 import asyncio
+from pathlib import Path
 
 import aiohttp
 
@@ -43,6 +44,27 @@ def strip_fence(text: str) -> str:
     if text.startswith("```"):
         text = text.strip("`").lstrip("\n")
     return text
+
+
+def log_change(log_dir, *, script: str, item: str, raw: str, out: str,
+               **extra) -> None:
+    """Append one JSONL provenance line for an accepted LLM rewrite.
+
+    Writes <log_dir>/llm-changes.jsonl — the "what did the LLM change" audit
+    trail (per grilling decision B: diff-length log, not full prompts).
+    Failures are non-fatal (logging must never break transcription).
+    """
+    import json
+    import time
+    try:
+        rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "script": script,
+               "item": item, "raw_len": len(raw), "out_len": len(out),
+               "ratio": round(len(out) / len(raw), 3) if raw else None, **extra}
+        Path(log_dir).mkdir(parents=True, exist_ok=True)
+        with open(Path(log_dir) / "llm-changes.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 async def chat(sess: aiohttp.ClientSession, *, baseurl: str, model: str,

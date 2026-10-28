@@ -204,6 +204,9 @@ async def clean_transcript(d: Path, sess, conf, args, stats, stats_lock) -> bool
                 f"ladder exhausted: chunk {idx + 1}/{len(chunks)} raw={len(c)}"
             )
         cleaned_parts.append(out)
+        from _llm import log_change
+        log_change(d, script="clean-transcripts", item=f"chunk-{idx + 1}",
+                   raw=c, out=out, used_fallback=used_fb)
         if used_fb:
             print(f"[warn] {d.name}: chunk {idx + 1} needed fallback model", flush=True)
     if args.dry_run:

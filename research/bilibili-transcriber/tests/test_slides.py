@@ -145,3 +145,22 @@ def test_upscale_missing_source(tmp_path):
     import PIL
     with pytest.raises(FileNotFoundError):
         se.upscale(str(tmp_path / "nope.jpg"))
+
+
+def test_render_report_manifest_and_appendix(tmp_path):
+    """report.md = manifest table + final body + context.md appendix."""
+    ws, td = tmp_path / "ws", tmp_path / "td"
+    ws.mkdir(); td.mkdir()
+    (ws / "metadata.json").write_text('{"bvid":"BV1x","title":"T"}', encoding="utf-8")
+    (ws / "context.md").write_text("# 视频上下文：T\n\n## 简介\n内容\n", encoding="utf-8")
+    (td / "transcript.md").write_text("x", encoding="utf-8")  # exists → 状态列非"未生成"
+
+    body = "## 文稿\n\nhello"
+    report = ms.render_report(ws, td, "T", body)
+    assert "| 元数据 | fetch-article (bilibili adapter) | 存在" in report
+    assert "清洗前留档" in report and "未生成" in report
+    assert body in report                      # final content embedded
+    assert "## 附录：视频上下文" in report and "## 简介" in report
+    assert report.startswith("# T")            # manifest heads the report
+    # context.md 的 H1 已剥掉（附录不重复大标题）
+    assert report.count("视频上下文：T") == 0

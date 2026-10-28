@@ -122,11 +122,15 @@ async def main() -> int:
     en_parts = align_slices(zh_parts, en)
     sem = asyncio.Semaphore(args.concurrency)
     out: list[str | None] = [None] * len(zh_parts)
+    out_path = Path(args.out) if args.out else raw_path.with_name(raw_path.stem + "-reclean.md")
 
     async with aiohttp.ClientSession() as sess:
         async def one(i: int) -> None:
             p = PROMPT.format(glossary=glossary, en=en_parts[i], zh=zh_parts[i])
             out[i] = await clean_chunk(sess, conf, p, sem)
+            from _llm import log_change
+            log_change(out_path.parent, script="reclean-en", item=f"chunk-{i + 1}",
+                       raw=zh_parts[i], out=out[i])
             print(f"chunk {i + 1}/{len(zh_parts)} ok ({len(out[i])} chars)", file=sys.stderr)
         await asyncio.gather(*(one(i) for i in range(len(zh_parts))))
 
@@ -135,7 +139,6 @@ async def main() -> int:
         print(f"warning: output {len(text)} chars is under 50% of the zh raw body "
               f"({len(zh)} chars) — check for silent summarization", file=sys.stderr)
 
-    out_path = Path(args.out) if args.out else raw_path.with_name(raw_path.stem + "-reclean.md")
     raw_text = raw_path.read_text(encoding="utf-8")
     header = DIVIDER.split(raw_text)[0] if raw_path.suffix == ".md" else ""
     note = (f"\n\n---\n\n> 校对说明：基于中文 ASR 原稿（{raw_path.name}）+ 英文原版字幕"

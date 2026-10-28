@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -172,3 +173,22 @@ class TestLlmClient:
         out = asyncio.run(_llm.chat(sess, baseurl="https://x", model="v", messages=msgs))
         assert out == "[非幻灯片]"
         assert calls[0]["json"]["messages"] == msgs
+
+
+class TestLogChange:
+    def test_appends_jsonl(self, tmp_path):
+        _llm.log_change(tmp_path, script="clean", item="chunk-1", raw="abcd",
+                        out="ab", used_fallback=False)
+        _llm.log_change(tmp_path, script="clean", item="chunk-2", raw="xyz",
+                        out="wxyz")
+        lines = (tmp_path / "llm-changes.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 2
+        r1 = json.loads(lines[0])
+        assert r1["script"] == "clean" and r1["item"] == "chunk-1"
+        assert r1["raw_len"] == 4 and r1["out_len"] == 2 and r1["ratio"] == 0.5
+        assert "ts" in r1
+
+    def test_failure_non_fatal(self, tmp_path, monkeypatch):
+        # unwritable target must not raise
+        monkeypatch.setattr(Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("ro")))
+        _llm.log_change(tmp_path / "sub", script="s", item="i", raw="a", out="b")  # no raise

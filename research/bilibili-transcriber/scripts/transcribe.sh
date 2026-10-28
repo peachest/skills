@@ -206,32 +206,20 @@ if [ "$NEEDS_CHUNK" -eq 1 ]; then
     --chunk-dir "$CHUNK_DIR"
 
   if [ ! -f "$RAW_TEXT_PATH" ] || [ ! -s "$RAW_TEXT_PATH" ]; then
-    echo "  Chunked transcription produced no output, falling back to direct"
-    NEEDS_CHUNK=0
+    echo "  Chunked transcription produced no output, falling back to direct (--no-chunk)"
+    "${PYTHON}" "${SCRIPT_DIR}/chunk_transcribe.py" \
+      --wav "$WAV_PATH" \
+      --endpoint "$WHISPER_ENDPOINT" \
+      --model "$WHISPER_MODEL" \
+      --lang "$WHISPER_LANG" \
+      --no-chunk \
+      --output "$RAW_TEXT_PATH"
   fi
 fi
 
-if [ "$NEEDS_CHUNK" -eq 0 ]; then
-  echo "  Direct transcription (WAV ${WAV_SIZE_MB}MB ≤ ${MAX_FILESIZE_MB}MB)"
-  RESPONSE=$(curl -s --noproxy '*' \
-    -X POST "${WHISPER_ENDPOINT}/audio/transcriptions" \
-    -F "file=@$WAV_PATH" \
-    -F "model=${WHISPER_MODEL}" \
-    -F "language=${WHISPER_LANG}" \
-    -F "response_format=verbose_json")
-
-  TEXT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text',''))" 2>/dev/null)
-  if [ -z "$TEXT" ]; then
-    echo "✗ ASR failed. Response:"
-    echo "$RESPONSE" | head -5
-    exit 1
-  fi
-  echo "$TEXT" > "$RAW_TEXT_PATH"
-  # preserve the full verbose_json (per-segment timestamps) alongside the
-  # text — downstream dual-transcribe.py harvests segments from here; direct
-  # mode must stay layout-compatible with chunked mode
-  mkdir -p "${OUT_DIR}/chunks/transcripts"
-  echo "$RESPONSE" > "${OUT_DIR}/chunks/transcripts/direct.json"
+if [ ! -f "$RAW_TEXT_PATH" ] || [ ! -s "$RAW_TEXT_PATH" ]; then
+  echo "✗ ASR produced no output (chunked + direct fallback both failed)"
+  exit 1
 fi
 
 T3=$(date +%s%N)

@@ -314,10 +314,12 @@ def create_chunk(wav_path: str, chunk_path: str, start: float, duration: float):
 
 
 def transcribe_chunk(chunk_path: str, endpoint: str, model: str,
-                     lang: str) -> tuple:
+                     lang: str, raw_out: str = None) -> tuple:
     """
     Send a chunk to the whisper ASR service.
     Returns (text, segments) where segments is from verbose_json.
+    raw_out: when set, the full verbose_json response is saved there
+    (provenance layer — dual-transcribe harvests timestamps from it).
     """
     result = subprocess.run(
         ["curl", "-s", "--noproxy", "*", "--max-time", "300",
@@ -330,6 +332,10 @@ def transcribe_chunk(chunk_path: str, endpoint: str, model: str,
     )
     try:
         data = json.loads(result.stdout)
+        if raw_out and data.get("text") is not None:
+            os.makedirs(os.path.dirname(raw_out), exist_ok=True)
+            with open(raw_out, "w") as f:
+                json.dump(data, f, ensure_ascii=False)
         return data.get("text", ""), data.get("segments", [])
     except json.JSONDecodeError:
         print(f"  [error] ASR failed for {os.path.basename(chunk_path)}: "
@@ -385,6 +391,9 @@ def main():
                         help="Min silence duration for threshold strategy (default: 1.5s)")
     parser.add_argument("--max-filesize-mb", type=float, default=25.0,
                         help="Max WAV file size in MB before chunking (default: 25)")
+    parser.add_argument("--no-chunk", action="store_true",
+                        help="Force direct (single-request) transcription regardless of size — "
+                             "fallback path when chunked transcription produced no output")
     parser.add_argument("--parallel", type=int, default=4,
                         help="Max parallel transcription requests (default: 4)")
     parser.add_argument("--output", default=None,
@@ -413,10 +422,15 @@ def main():
     print(f"[info] WAV: {wav_path} ({filesize_mb:.1f}MB, {duration:.1f}s)")
 
     # ── Decide: chunk or direct ──
-    if filesize_mb <= args.max_filesize_mb:
-        print(f"[info] File size ≤ {args.max_filesize_mb}MB, transcribing directly")
+    if args.no_chunk or filesize_mb <= args.max_filesize_mb:
+        print(f"[info] Direct transcription "
+              f"({ 'forced by --no-chunk' if args.no_chunk else f'file size ≤ {args.max_filesize_mb}MB'})")
+        transcripts_dir = os.path.join(
+            args.chunk_dir or os.path.join(os.path.dirname(wav_path), "chunks"),
+            "transcripts")
         text, segments = transcribe_chunk(
-            wav_path, args.endpoint, args.model, args.lang)
+            wav_path, args.endpoint, args.model, args.lang,
+            raw_out=os.path.join(transcripts_dir, "direct.json"))
         print(f"[info] Transcription: {len(text)} chars, {len(segments)} segments")
 
         issues = flag_low_confidence(segments)

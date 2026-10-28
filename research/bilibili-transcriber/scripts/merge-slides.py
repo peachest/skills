@@ -107,6 +107,37 @@ def format_timeline(segments: list[dict], slides: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
+def build_manifest(workspace: Path, td: Path) -> list[tuple[str, str, Path]]:
+    """(artifact, producer, path) rows for the report manifest table."""
+    rows = [
+        ("元数据", "fetch-article (bilibili adapter)", workspace / "metadata.json"),
+        ("视频上下文（简介+评论）", "fetch-article (bilibili adapter)", workspace / "context.md"),
+        ("原始 ASR segments", "chunk_transcribe.py", workspace / "chunks" / "transcripts"),
+        ("转写稿", "transcribe.sh", td / "transcript.md"),
+        ("清洗前留档", "clean-transcripts.py", td / "transcript.raw.md"),
+        ("LLM 改写日志", "clean/dual/reclean", td / "llm-changes.jsonl"),
+        ("幻灯片 OCR", "slides-extract.py", workspace / "slides" / "slides.json"),
+        ("融合稿", "merge-slides.py", td / "transcript.final.md"),
+    ]
+    return rows
+
+
+def render_report(workspace: Path, td: Path, title: str, final_body: str) -> str:
+    lines = [f"# {title}", "",
+             "## 产物清单（追溯用）", "",
+             "| 产物 | 生成者 | 状态 |", "|---|---|---|"]
+    for name, producer, path in build_manifest(workspace, td):
+        status = f"存在（{path.stat().st_size // 1024}KB）" if path.is_file() or path.is_dir() else "未生成"
+        lines.append(f"| {name} | {producer} | {status} |")
+    lines += ["", "---", "", final_body, ""]
+    ctx = workspace / "context.md"
+    if ctx.is_file():
+        ctx_body = ctx.read_text(encoding="utf-8")
+        ctx_body = ctx_body.split("\n", 1)[1] if ctx_body.startswith("# ") else ctx_body
+        lines += ["---", "", "## 附录：视频上下文（简介与评论）", "", ctx_body.strip(), ""]
+    return "\n".join(lines)
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         sys.exit(f"Usage: {sys.argv[0]} <workspace-dir> [--transcript-dir <dir>]")
@@ -155,8 +186,11 @@ def main() -> None:
 
     dest = td / "transcript.final.md"
     dest.write_text("\n".join(out), encoding="utf-8")
+    report = td / "report.md"
+    report.write_text(render_report(workspace, td, title, "\n".join(out)), encoding="utf-8")
     used = len(usable_slides(slides))
     print(f"done: {dest}")
+    print(f"  report     : {report}")
     print(f"  transcript source: {src}; segments: {len(segments)}; slides interleaved: {used}/{len(slides)}")
 
 

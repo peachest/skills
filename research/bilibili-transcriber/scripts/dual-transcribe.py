@@ -286,6 +286,11 @@ async def process_target(item: dict, sess, conf, args, sem, asr_sem, stats, lock
     for i in range(0, len(windows), 4):
         batch = windows[i:i + 4]
         got = await llm_merge_batch(sess, conf, batch, sem)
+        from _llm import log_change
+        log_change(tdir, script="dual-transcribe",
+                   item=f"batch-{i // 4 + 1}-win{len(batch)}",
+                   raw="\n".join(s["text"] for w in batch for s in w["zh"]),
+                   out="\n".join(got))
         # per-window sanity: zh part non-empty for pair/zh_only windows
         for w, b in zip(batch, got):
             if classify_window(w) in ("pair", "zh_only") and len(b) < 10:
