@@ -27,7 +27,7 @@ A session touches a project if it changed cwd there, ran bash against its paths,
 
 Each block leads with the next action — not context, not a plan. The action. If no clear next action exists, say so; guessing manufactures a position you do not have.
 
-Cross-repository dependencies — one MR waiting on another repo's MR — are stated in prose within the relevant block: "MR !9 阻塞于 HAMi MR !2".
+Cross-repository dependencies — one MR waiting on another repo's MR — are stated in prose within the relevant block: "internal-MR 阻塞于 HAMi 仓另一 internal-MR".
 
 ## In-session rules
 
@@ -37,7 +37,7 @@ Restate position only when the current turn produced a state change — a commit
 
 `[<project> · <branch> · <状态描述符>] 下一步: <action>`
 
-The status descriptor is what the work actually shows — tip sha, MR state, the current task phrase: `[hami · MR !14 open + CI 监控中 · wiring 完成]`.
+The status descriptor is what the work actually shows — tip sha, MR state, the current task phrase: `[hami · internal-MR open + CI 监控中 · wiring 完成]`.
 
 If other projects this session touches have items needing attention (an MR awaiting merge, unpushed commits), append one line: `另有: <project> <!n> 待合并, <project> N 未推送`. No attention items — no appended line.
 

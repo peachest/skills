@@ -13,7 +13,7 @@ bare transport — validation is identical for both) and for each entry:
   3. Resolves the thread iff the entry's per-item `resolved` field says so —
      post executes the verdict-time decision, it never re-judges; a GitLab
      resolve counts only after a GET read-back confirms the platform state
-     (a 2xx PUT alone is intent, not state — the MR !46 incident)
+     (a 2xx PUT alone is intent, not state — the internal-MR incident)
 
 Join + anchor validation (hard-fail BEFORE any platform call):
   - every entry's discussion_id must byte-match an id in the pull state
@@ -718,7 +718,7 @@ def _read_resolved_gitlab(base, disc_id, curl):
 def _resolve_gitlab_thread(base, disc_id, curl):
     """Resolve one GitLab thread: discussion-level PUT first; when that fails
     structurally (some instances 500 on it), the note sweep is the working
-    fallback resolve path. A 2xx PUT is intent, not platform state — the MR !46
+    fallback resolve path. A 2xx PUT is intent, not platform state — the internal-MR
     incident returned 2xx on every outdated-position thread while all stayed
     open — so success is counted only after a GET read-back reports resolved;
     one PUT+read retry absorbs the transient window, then the item fails

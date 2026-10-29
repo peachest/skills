@@ -48,7 +48,7 @@ force-push 后：pull --digest --against 对账 → 新 findings 回到循环
 
 **追尾规则**：OCR bot 对每次 push 追评一轮，而修复本身又触发新 pipeline。
 post 推迟到 CI 终态之后 = 裁决→push→新 pipeline→gate 拦截→再 push 的死循环
-（MR !6 积压 47 条未 resolve 线程）。正确节奏：**每轮 verdict 落盘后立即
+（internal-MR 积压 47 条未 resolve 线程）。正确节奏：**每轮 verdict 落盘后立即
 post 当轮条目**，CI 门只挡 verify 与跨轮 pull；push 触发的新一轮评审由下一
 次 pull 消费。Full evidence: patterns.md P-010.
 

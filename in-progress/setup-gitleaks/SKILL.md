@@ -105,7 +105,7 @@ pass before trusting the gate:
 1. Seed a **real variant form** — a shape your rules should catch but the
    template placeholder never exercises (e.g. `VAR_PASSWORD="..."` with a
    variable-name prefix, or a literal from the repo's own CI/config style).
-   The llmops-wiki 2026-10-26 case: `\\b(password)` left the `\\b` boundary
+   The platform-wiki 2026-10-26 case: `\\b(password)` left the `\\b` boundary
    dead in front of `_`, so `REDIS_PASSWORD=` passed clean until a canary
    with the prefix form caught it.
 2. Put the canary **inside the repo**. A path outside the worktree makes

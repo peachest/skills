@@ -75,7 +75,7 @@
 - 方案: ID 生命周期全部收回脚本内——verdict.py 按序号从 pull 文件字节级复制 discussion_id 并计算 anchor，agent 界面收敛为序号+裁决语义（#59）；post 对每条 entry 做 join+anchor 校验，失配在任何平台调用前 hard-fail（#61）；pull --digest 对账与 verify 人读输出零 ID 形态（#60/#64）；triage-mr SKILL.md 全删手动 fallback（#65）
 - 触发条件: trace 中出现 ID 截断形态、手写 id 落盘或 (file,line) 回填
 - passCheck: classified.json 无 agent 手写痕迹（verdict.py 唯一写者）；join 校验拦截截断 id
-- 证据: spec #57 problem statement（截断家族第五例触发本 spec）；peer 诊断 01a13ea6 / 01a12f97（截断×3、id:null 手写、(file,line) 模糊回填）；MR !688 复现实验定谳"端点 500"实为 8 位前缀截断（Amendment R2）
+- 证据: spec #57 problem statement（截断家族第五例触发本 spec）；peer 诊断 01a13ea6 / 01a12f97（截断×3、id:null 手写、(file,line) 模糊回填）；internal-MR 复现实验定谳"端点 500"实为 8 位前缀截断（Amendment R2）
 - 出现: 2026-10-15 spec #57 立项事故 → absorbed 2026-10-15 spec #57 #59/#61/#65
 
 ## P-009 post 调用点文档漂移
@@ -90,7 +90,7 @@
 
 ## P-010 post 追尾：CI 门挡住每轮 post，裁决积压三轮
 - 状态: absorbed-into-skill
-- 现象: "裁决→修复→push"型 MR（每轮修复即 push）上，post 被推迟到 CI 终态之后——而每次 push 又触发新 pipeline + OCR bot 新一轮评审，post 永远排队。实证：ascend MR !6 六轮 146 findings，三轮裁决（47 条）只躺在本地 classified.json，post 仅在 r2 后跑过一次，47 线程零回复滞留远端，用户看出"一直没有 resolve"
+- 现象: "裁决→修复→push"型 MR（每轮修复即 push）上，post 被推迟到 CI 终态之后——而每次 push 又触发新 pipeline + OCR bot 新一轮评审，post 永远排队。实证：ascend internal-MR 六轮 146 findings，三轮裁决（47 条）只躺在本地 classified.json，post 仅在 r2 后跑过一次，47 线程零回复滞留远端，用户看出"一直没有 resolve"
 - 根因: 流程语义错误——把 CI 门当成了所有 post 的前置（SKILL.md 原文 "pull and verify run a pipeline timing gate" 被 agent 泛化到 post），而 post 的 join/anchor 校验只针对 pull 快照，与 CI 无关；bot 每-push-追评的机制使"等 CI 再 post"在修复型 MR 上结构性不可满足
 - 方案: SKILL.md 追尾规则——每轮 verdict 后立即 post 当轮条目（post 本就不设 CI 门；`--skip-pipeline-check` 是 pull/verify 的逃生门，与 post 无关），CI 门只挡 verify 与跨轮 pull；push 触发的新评审由下轮 pull 消费。修复后实测：post 一次清空 47 条积压（145/145 ok）
 - 证据: session 01a15884 r3-r6（post 调用 13 次中多为 gate exit 2；146 resolvable / 47 open / verdict 145 落盘 99 上墙）

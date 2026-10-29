@@ -418,7 +418,7 @@ def test_docstring_semantics_rewritten():
     assert "--pull-file" in text and "--force" in text
 
 
-# ── ⑥ GitLab resolve read-back: a 2xx PUT is intent, not state (MR !46) ──
+# ── ⑥ GitLab resolve read-back: a 2xx PUT is intent, not state (internal-MR) ──
 
 
 def _load_post_module():
