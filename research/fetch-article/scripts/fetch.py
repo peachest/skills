@@ -54,6 +54,11 @@ def main():
                         help="Output plain body text only")
     parser.add_argument("--output-dir", default=None,
                         help="Output directory (default: temp)")
+    parser.add_argument("--media", choices=["text", "visual"], default="text",
+                        help="text: CC subtitles replace audio download when "
+                             "available (default). visual: also download "
+                             "video/audio even if CC subtitles exist — for "
+                             "slide extraction / watching. bilibili only.")
     args = parser.parse_args()
 
     adapter_name = classify_url(args.url)
@@ -76,7 +81,9 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    result = adapter_module.fetch(args.url, output_dir=output_dir)
+    result = adapter_module.fetch(args.url, output_dir=output_dir,
+                                  **({"media": args.media}
+                                     if adapter_name == "bilibili" else {}))
     result["source"] = adapter_name
 
     # Save raw output

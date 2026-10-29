@@ -25,8 +25,14 @@ python3), and prints all artifact paths at the end:
 
 ```bash
 bash <SKILL_DIR>/scripts/run.sh "https://www.bilibili.com/video/BV1xx/" [outdir]
-# flags: --no-slides / --no-merge
+# flags: --visual / --no-slides / --no-merge
 ```
+
+**Extraction depth (ask the user when intent is unclear)**: default text
+mode stops at CC-subtitles-or-audio (whichever first) — no video stream.
+`--visual` downloads the video even when CC subtitles exist and runs the
+slides stage (slide-deck OCR + [mm:ss 幻灯片] timeline); use it whenever
+the user wants to see slides/frames, not just read the transcript.
 
 Exit codes (also written to `<outdir>/.done`): 0 = all stages ok,
 2 = transcript ok but slides/merge failed, 3 = fetch/transcribe failed.

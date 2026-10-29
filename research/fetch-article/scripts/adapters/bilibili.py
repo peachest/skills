@@ -233,7 +233,7 @@ def _write_context(output_dir, title, desc, pinned, hot, latest):
     return path
 
 
-def fetch(url: str, output_dir: str = None) -> dict:
+def fetch(url: str, output_dir: str = None, media: str = "text") -> dict:
     """
     Download Bilibili video audio via WBI-signed API.
 
@@ -353,41 +353,47 @@ def fetch(url: str, output_dir: str = None) -> dict:
             f.write(body_text)
         print(f"  Transcript saved → {tpath}", file=sys.stderr)
 
-        # CC subtitles available — skip audio download entirely
-        meta = {
-            "bvid": bvid,
-            "title": title,
-            "uploader": owner,
-            "publish_date": str(pubdate),
-            "duration_sec": duration,
-            "cid": cid,
-            "has_cc_subtitles": True,
-            "audio_path": None,
-            "content_length": None,
-            "stream_type": "cc_subtitle_only",
-            "page": page_num,
-            "page_count": page_count,
-        }
-        meta_path = os.path.join(output_dir, "metadata.json")
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        print(f"  Metadata → {meta_path} (CC subtitles, audio download skipped)",
-              file=sys.stderr)
+        # CC subtitles available — skip audio download entirely (text mode
+        # only; media="visual" falls through to the video/audio download so
+        # slides-extract has a video.mp4 to work on)
+        if media != "text":
+            print(f"  media=visual: downloading video/audio despite CC subtitles",
+                  file=sys.stderr)
+        else:
+            meta = {
+                "bvid": bvid,
+                "title": title,
+                "uploader": owner,
+                "publish_date": str(pubdate),
+                "duration_sec": duration,
+                "cid": cid,
+                "has_cc_subtitles": True,
+                "audio_path": None,
+                "content_length": None,
+                "stream_type": "cc_subtitle_only",
+                "page": page_num,
+                "page_count": page_count,
+            }
+            meta_path = os.path.join(output_dir, "metadata.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+            print(f"  Metadata → {meta_path} (CC subtitles, audio download skipped)",
+                  file=sys.stderr)
 
-        return {
-            "title": title,
-            "author": owner,
-            "publish_time": str(pubdate),
-            "body_text": body_text,
-            "images": [],
-            "duration_sec": duration,
-            "audio_path": None,
-            "has_cc_subtitles": True,
-            "content_length": None,
-            "stream_type": "cc_subtitle_only",
-            "page": page_num,
-            "page_count": page_count,
-        }
+            return {
+                "title": title,
+                "author": owner,
+                "publish_time": str(pubdate),
+                "body_text": body_text,
+                "images": [],
+                "duration_sec": duration,
+                "audio_path": None,
+                "has_cc_subtitles": True,
+                "content_length": None,
+                "stream_type": "cc_subtitle_only",
+                "page": page_num,
+                "page_count": page_count,
+            }
 
     # ── Step 4: Get audio URL and download (skipped on cache hit) ──
     if cached_meta is not None:

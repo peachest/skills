@@ -86,8 +86,12 @@ extract metadata (title, author, publish_time, images).
 ### Bilibili
 
 Downloads audio via WBI-signed API. Only downloads — does NOT transcribe.
-If CC subtitles are available, saves them directly (skip ASR).
-Output includes `duration_sec`, `stream_type`, `content_length`, and `subs_available` fields.
+
+**media depth (bilibili only)**: `fetch.py <url> --media text|visual`
+- `text` (default): CC subtitles replace audio download when available
+  (`stream_type: cc_subtitle_only`)
+- `visual`: download video/audio even if CC subtitles exist — required for
+  slide extraction / watching; subtitles still saved as ASR ground truth
 
 Also writes `context.md` into the workspace: 简介 (video description) + 置顶评论
 + 热门评论 Top 5 + 最新评论 Top 5 — the author/audience perspective around the

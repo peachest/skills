@@ -657,3 +657,45 @@ def _reside_view(session, view):
             return _FakeResponse(view)
         return original(url, *args, **kwargs)
     return side_effect
+
+
+class TestMediaMode:
+    """media=visual：CC 字幕存在时也继续下载音/视频（幻灯片抽帧需要画面）。"""
+
+    def test_visual_mode_downloads_despite_cc(self, tmp_path):
+        """CC subtitles exist + media=visual → audio download still happens."""
+        output_dir = str(tmp_path)
+        fake_size = 2000
+
+        mock_subprocess = _make_mock_subprocess_success(fake_size)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session(
+                              player_fixture="player_v2_with_subs.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir, media="visual")
+
+        assert mock_subprocess.run.call_count > 0  # audio WAS downloaded
+        assert result["stream_type"] == "dash_audio"
+        assert result["has_cc_subtitles"] is True  # subtitles kept as ground truth
+        assert result["audio_path"] is not None
+
+    def test_text_mode_still_skips_download_on_cc(self, tmp_path):
+        """Default (media=text) unchanged: CC subtitles → skip download."""
+        output_dir = str(tmp_path)
+
+        mock_subprocess = _make_mock_subprocess_success(2000)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session(
+                              player_fixture="player_v2_with_subs.json")), \
+             patch.object(bilibili, "subprocess", mock_subprocess):
+
+            result = bilibili.fetch(
+                "https://www.bilibili.com/video/BV1TestBVID01/",
+                output_dir=output_dir)
+
+        assert mock_subprocess.run.call_count == 0
+        assert result["stream_type"] == "cc_subtitle_only"
+        assert result["audio_path"] is None

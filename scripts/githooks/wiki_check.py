@@ -162,7 +162,7 @@ def commit_msg(msgfile):
             if len(cells) < 5:
                 continue
             date = cells[1].strip()
-            col3 = cells[-3].strip()
+            col3 = cells[-3].strip().replace("\\|", "|")  # unescape cell-escaped pipes
             if date == TODAY and col3 not in EXEMPT_COL3 and col3 != subject:
                 errors.append(
                     f"[wiki-anchor] {f}: 台账新行 commit 列与本次 commit subject 不一致。\n"

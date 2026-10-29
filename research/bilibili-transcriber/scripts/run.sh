@@ -3,7 +3,12 @@
 # run.sh — one-shot pipeline entry: fetch → ASR transcribe → slides → merge.
 #
 # Usage:
-#   bash run.sh <bilibili-url> [outdir] [--no-slides] [--no-merge]
+#   bash run.sh <bilibili-url> [outdir] [--visual] [--no-slides] [--no-merge]
+#
+#   --visual: download the video stream even when CC subtitles exist, and
+#     run the slides stage — for slide-deck extraction / watching the video.
+#     Default (text mode) stops at CC-subtitles-or-audio, whichever is
+#     available first.
 #
 #   outdir defaults to ~/tmp/run-bilibili-<timestamp>/. All python stages run
 #   through `uv run --project <SKILL_DIR>` (the .venv is auto-created via
@@ -19,15 +24,16 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
-URL=""; OUTDIR=""; NO_SLIDES=0; NO_MERGE=0
+URL=""; OUTDIR=""; VISUAL=0; NO_SLIDES=0; NO_MERGE=0
 for arg in "$@"; do
   case "$arg" in
+    --visual) VISUAL=1 ;;
     --no-slides) NO_SLIDES=1 ;;
     --no-merge)  NO_MERGE=1 ;;
     *) if [ -z "$URL" ]; then URL="$arg"; elif [ -z "$OUTDIR" ]; then OUTDIR="$arg"; fi ;;
   esac
 done
-[ -n "$URL" ] || { echo "usage: $0 <bilibili-url> [outdir] [--no-slides] [--no-merge]" >&2; exit 3; }
+[ -n "$URL" ] || { echo "usage: $0 <bilibili-url> [outdir] [--visual] [--no-slides] [--no-merge]" >&2; exit 3; }
 
 # Workspace is bvid-addressed when the URL carries a BV id, so two sessions
 # (or reruns) of the same video share one workspace: fetch reuses cached audio
@@ -51,8 +57,9 @@ PY() { uv run --project "$SKILL_DIR" python "$@"; }
 FETCH_PY="$SKILL_DIR/../fetch-article/scripts/fetch.py"
 
 # ── Stage 1: fetch ──
-echo "[1/4] fetch: $URL"
-FETCH_JSON=$(PY "$FETCH_PY" "$URL" --json --output-dir "$OUTDIR") || { echo "✗ fetch failed"; finalize 3; }
+echo "[1/4] fetch: $URL (media=$([ "$VISUAL" -eq 1 ] && echo visual || echo text))"
+MEDIA_FLAG=$([ "$VISUAL" -eq 1 ] && echo "--media visual" || echo "")
+FETCH_JSON=$(PY "$FETCH_PY" "$URL" --json --output-dir "$OUTDIR" $MEDIA_FLAG) || { echo "✗ fetch failed"; finalize 3; }
 # fetch.py's raw_path is its article.json FILE — the workspace is its dir
 WORK_DIR=$(printf '%s' "$FETCH_JSON" | python3 -c "import sys,json,os; print(os.path.dirname(json.load(sys.stdin)['raw_path']))") \
   || { echo "✗ fetch JSON parse failed"; finalize 3; }
@@ -72,9 +79,13 @@ fi
 BV=$(python3 -c "import json;print(json.load(open('$WORK_DIR/metadata.json')).get('bvid',''))")
 TD=$(find "$OUTDIR/references/transcripts" -type d -name "*${BV}*" 2>/dev/null | tail -1)
 
-# ── Stage 3: slides (optional; failures degrade to partial) ──
+# ── Stage 3: slides (visual mode only in effect; failures degrade to partial) ──
 RC=0
-if [ "$NO_SLIDES" -eq 0 ]; then
+if [ "$VISUAL" -eq 0 ]; then
+  echo "[3/4] slides skipped (text mode — pass --visual for slide extraction)"
+elif [ "$NO_SLIDES" -eq 1 ]; then
+  echo "[3/4] slides skipped (--no-slides)"
+else
   # Skip when slides were already extracted — delete
   # $WORK_DIR/slides/slides.json to force a re-extract (OCR is the
   # most expensive stage; keyed to the audio's cid validity via fetch).
@@ -84,8 +95,6 @@ if [ "$NO_SLIDES" -eq 0 ]; then
     echo "[3/4] slides"
     PY "$SCRIPT_DIR/slides-extract.py" "$WORK_DIR" || RC=2
   fi
-else
-  echo "[3/4] slides skipped (--no-slides)"
 fi
 
 # ── Stage 4: merge (needs slides + transcript) ──
