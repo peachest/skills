@@ -192,7 +192,7 @@ def pre_push():
             if date >= EFFECTIVE:
                 # subject 锚点：整体可检索（多锚点 "; " 分隔）
                 for anchor in col3.split(";"):
-                    anchor = anchor.strip()
+                    anchor = anchor.strip().replace("\\|", "|")  # unescape cell-escaped pipes (same as wiki-anchor)
                     if not anchor or anchor in EXEMPT_COL3 or anchor.startswith("见 git log"):
                         continue
                     if HASH_RE.search(anchor):
