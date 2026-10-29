@@ -99,9 +99,16 @@ video. Comment calls attach `~/.bilibili-cli/credential.json` cookies when
 present (anonymous requests get risk-control degraded results); all comment
 failures degrade to empty sections, never fatal.
 
-See [bilibili-transcriber](../bilibili-transcriber/SKILL.md) for ASR. The
-transcriber's runtime moved (2026-10) to a faster-whisper backend reached
-via SSH tunnel — see its SKILL.md / runtime.conf.example. The old cluster ASR backend is deprecated.
+**Next step — route by intent, never hand-roll download/frames**: this skill
+only gets media back; every downstream capability lives in
+[bilibili-transcriber](../bilibili-transcriber/SKILL.md):
+
+- 转写 / 文字稿 / 字幕（只要内容） → transcriber `run.sh <url>`（text 模式：CC 字幕
+  或 ASR，不碰视频流）
+- 画面 / 幻灯片 / 抽帧 / 看视频（slide deck / vision）→ transcriber
+  `run.sh <url> --visual`（视频流下载 + 场景抽帧 + OCR 全管线；本 skill 的
+  `--media visual` 只是它的第一站）
+- 批量 / 队列 → transcriber `pipeline-queue.py`
 
 ### Zhihu (知乎专栏)
 
