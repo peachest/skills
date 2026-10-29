@@ -31,7 +31,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # grep -E pattern. Word-bounded where the token is also a common substring.
-PATTERNS='gitblue|ai_bot001|transwarp|harbor\.trans|harborblue|\bllmops\b|\bllm1[0-9]\b|\bllm(2[0-9]|3[0-9])\b|\bdev(17|32|119)\b|172\.1[6-9]\.|\bnodexpu\b|NodeXpu|ppu-device|\bkvtop\b|\bbase-charts\b|\bSMG\b|\bsmg\b|applied-ai|\baip\b|\bcvat\b|icc\.io|\bmlops\b|\bmwh\b|\bapplet\b|hami-webui|HAMi-WebUI|\bkgpu\b|token-factory|speculative-training|\bhamife\b'
+PATTERNS='gitblue|ai_bot001|transwarp|harbor\.trans|harborblue|\bllmops\b|\bllm1[0-9]\b|\bllm(2[0-9]|3[0-9])\b|\bdev(17|32|119)\b|172\.1[6-9]\.|\bnodexpu\b|NodeXpu|ppu-device|\bkvtop\b|\bbase-charts\b|\bSMG\b|\bsmg\b|applied-ai|\baip\b|\bcvat\b|icc\.io|\bmlops\b|\bmwh\b|\bapplet\b|hami-webui|HAMi-WebUI|\bkgpu\b|token-factory|speculative-training|\bhamife\b|\bbuildenv\b|MR !\b?[0-9]+'
 
 mode="tracked"
 if [[ "${1:-}" == "-u" ]]; then mode="untracked"; shift; fi
