@@ -242,7 +242,11 @@ async def main() -> int:
     if args.limit:
         dirs = dirs[: args.limit]
 
-    conf = load_conf()
+    conf = load_conf(
+        "CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL",
+        keys=("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL", "CLEAN_LLM_KEY",
+              "CLEAN_LLM_FALLBACK", "CLEAN_LLM_EFFORT", "CLEAN_LANG"),
+    )
     todo = [d for d in dirs if not is_cleaned(d)]
     print(f"{len(dirs)} listed, {len(dirs) - len(todo)} already cleaned, {len(todo)} to clean")
 

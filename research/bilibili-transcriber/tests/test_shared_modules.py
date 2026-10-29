@@ -192,3 +192,34 @@ class TestLogChange:
         # unwritable target must not raise
         monkeypatch.setattr(Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("ro")))
         _llm.log_change(tmp_path / "sub", script="s", item="i", raw="a", out="b")  # no raise
+
+
+def test_clean_transcripts_conf_keys_wired():
+    """Regression (peer 01a1878b caught in production): clean-transcripts.py:245
+    called load_conf() with no args after the _conf refactor — returned {} and
+    every run KeyError'd. Its call site must request the CLEAN_LLM key family."""
+    import re
+    src = (Path(__file__).parent.parent / "scripts" / "clean-transcripts.py").read_text(encoding="utf-8")
+    m = re.search(r"conf = load_conf\(([^)]*)\)", src, re.S)
+    assert m, "clean-transcripts.py must call load_conf with explicit keys"
+    call = m.group(1)
+    for key in ("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL", "CLEAN_LLM_FALLBACK",
+                "CLEAN_LLM_EFFORT", "CLEAN_LANG"):
+        assert key in call, f"missing {key} in load_conf call"
+
+    # and the wiring actually works end-to-end
+    import os
+    import tempfile
+    d = Path(tempfile.mkdtemp())
+    (d / "runtime.conf").write_text("CLEAN_LLM_BASEURL=https://x\nCLEAN_LLM_MODEL=m\n", encoding="utf-8")
+    orig = _conf.CONF_PATH
+    _conf.CONF_PATH = d / "runtime.conf"
+    try:
+        conf = _conf.load_conf(
+            "CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL",
+            keys=("CLEAN_LLM_BASEURL", "CLEAN_LLM_MODEL", "CLEAN_LLM_KEY",
+                  "CLEAN_LLM_FALLBACK", "CLEAN_LLM_EFFORT", "CLEAN_LANG"))
+    finally:
+        _conf.CONF_PATH = orig
+    assert conf["CLEAN_LLM_BASEURL"] == "https://x"
+    assert conf["CLEAN_LANG"] == ""
