@@ -699,3 +699,18 @@ class TestMediaMode:
         assert mock_subprocess.run.call_count == 0
         assert result["stream_type"] == "cc_subtitle_only"
         assert result["audio_path"] is None
+
+    def test_cc_timed_json_saved(self, tmp_path):
+        """CC path also saves the raw timed body (from/to) as cc-timed.json."""
+        output_dir = str(tmp_path)
+        with patch.object(bilibili, "_make_session",
+                          return_value=_make_mock_session(
+                              player_fixture="player_v2_with_subs.json")), \
+             patch.object(bilibili, "subprocess",
+                          _make_mock_subprocess_success(2000)):
+            bilibili.fetch("https://www.bilibili.com/video/BV1TestBVID01/",
+                           output_dir=output_dir)
+        timed = tmp_path / "cc-timed.json"
+        assert timed.is_file()
+        body = json.loads(timed.read_text())
+        assert isinstance(body, list) and body  # non-empty timed lines

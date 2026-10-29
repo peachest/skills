@@ -235,6 +235,52 @@ def ocr_frame(conf: dict, image_path: str, attempts: int = 3) -> str:
     ))
 
 
+def extract_frames_grid(video: Path, out_dir: Path, grid_sec: float) -> list[dict]:
+    """Uniform grid sampling: one frame every grid_sec seconds.
+
+    For progressive-animation decks (PPT built up in steps) scene-cut frames
+    land mid-animation and stay incomplete — a uniform grid almost always
+    catches a finished state (peer 01a1878b experiment on BV1WPx769EPZ:
+    grid beats scene detection on such decks, and only grid catches
+    flash pages shorter than the grid interval). Dedup + [非幻灯片]
+    filtering downstream keeps the extra frames cheap.
+    """
+    frames_dir = out_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    for old in frames_dir.glob("frame_*.jpg"):
+        old.unlink()
+    duration = ffprobe_duration(video)
+    frames = []
+    t = 0.0
+    i = 0
+    while t < duration:
+        f = frames_dir / f"frame_{i:03d}.jpg"
+        g = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{t:.3f}",
+             "-i", str(video), "-frames:v", "1", "-q:v", "2", str(f)],
+            capture_output=True, text=True, timeout=120)
+        if g.returncode == 0 and f.exists():
+            frames.append({"file": str(f), "time_sec": t})
+        t += grid_sec
+        i += 1
+    return frames
+
+
+def scene_score_stats(video: Path) -> list[float]:
+    """Probe pass: scene score of every frame boundary, sorted desc.
+
+    Cheap (single ffmpeg null-run) — run before choosing a threshold:
+    if even the top scores sit far below the default 0.3, the deck is
+    progressive-animation and the grid sampler is the right tool.
+    """
+    r = subprocess.run(
+        ["ffmpeg", "-loglevel", "info", "-i", str(video),
+         "-vf", "select='gte(scene,0)',metadata=print", "-f", "null", "-"],
+        capture_output=True, text=True, timeout=1800)
+    scores = [float(m) for m in re.findall(r"lavfi\.scene_score=([0-9.]+)", r.stderr)]
+    return sorted(scores, reverse=True)
+
+
 def extract_frames_adaptive(video: Path, out_dir: Path, threshold: float,
                             min_frames: int = 3, min_duration: float = 120,
                             retry_threshold: float = 0.15) -> list[dict]:
@@ -249,9 +295,15 @@ def extract_frames_adaptive(video: Path, out_dir: Path, threshold: float,
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        sys.exit(f"Usage: {sys.argv[0]} <workspace-dir>")
-    workspace = Path(sys.argv[1])
+    args = sys.argv[1:]
+    grid_sec = 0.0
+    if "--grid" in args:
+        i = args.index("--grid")
+        grid_sec = float(args[i + 1])
+        del args[i:i + 2]
+    if len(args) < 1:
+        sys.exit(f"Usage: {sys.argv[0]} <workspace-dir> [--grid <sec>]")
+    workspace = Path(args[0])
     if not workspace.is_dir():
         sys.exit(f"FAIL workspace not found: {workspace}")
     conf = _ocr_conf()
@@ -268,9 +320,24 @@ def main() -> None:
     video = download_video(workspace)
     print(f"[1/4] video: {video.name} ({video.stat().st_size // 1048576}MB)")
 
-    print(f"[2/4] scene-cut frames (threshold={threshold})…")
-    frames = extract_frames_adaptive(video, out_dir, threshold)
-    print(f"  {len(frames) - 1} scene cuts + t=0 frame")
+    print(f"[2/4] frame extraction…")
+    if grid_sec > 0:
+        frames = extract_frames_grid(video, out_dir, grid_sec)
+        print(f"  uniform grid every {grid_sec}s: {len(frames)} frames")
+    else:
+        # score probe before committing to scene detection: top scores far
+        # below the default threshold ⇒ progressive-animation deck ⇒ grid
+        stats = scene_score_stats(video)
+        top = stats[0] if stats else 0.0
+        if top < threshold * 0.5:
+            grid_sec = 15.0
+            print(f"  scene scores max {top:.3f} << default {threshold} — "
+                  f"progressive-animation deck, degrading to uniform grid ({grid_sec}s)")
+            frames = extract_frames_grid(video, out_dir, grid_sec)
+            print(f"  uniform grid every {grid_sec}s: {len(frames)} frames")
+        else:
+            frames = extract_frames_adaptive(video, out_dir, threshold)
+            print(f"  {len(frames) - 1} scene cuts (top score {top:.3f}) + t=0 frame")
 
     print(f"[3/4] adjacent-frame dedup (dHash hamming ≤ {hash_threshold})…")
     kept = dedup_adjacent(frames, hash_threshold)

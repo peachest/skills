@@ -178,16 +178,28 @@ For talk-style videos, extract the deck alongside the transcript:
 
 ```bash
 cd <SKILL_DIR> && uv run python scripts/slides-extract.py <workspace-dir>
+# progressive-animation decks (PPT built up in steps): force uniform sampling
+cd <SKILL_DIR> && uv run python scripts/slides-extract.py <workspace-dir> --grid 15
 ```
 
-Downloads the video (yt-dlp, agent node side — WSL has no ffmpeg), cuts frames
-at scene changes (`select='gt(scene,0.3)'`, `SLIDE_SCENE_THRESHOLD`
-overridable — lower it for animation-style transitions; the frame at t=0
-always kept), dedups adjacent frames by dHash hamming distance (code
-default 8), then OCRs each kept slide via the vision endpoint in
-runtime.conf (`OCR_LLM_*`) with a verbatim-transcription prompt (structure
-preserved, numbers never dropped; non-slide shots return `[非幻灯片]`).
-Resumable: OCR results cached in `<workspace>/slides/slides.json`.
+**Threshold recipe — probe before tuning**: if a run returns almost no cuts,
+don't just lower the threshold. Probe the scene-score distribution first
+(every frame boundary's `lavfi.scene_score`, printed by ffmpeg with
+`metadata=print`); if even the top scores sit far below the default 0.3,
+the deck is progressive-animation — scene cuts land mid-animation and stay
+incomplete (peer experiment BV1WPx769EPZ: top score 0.34, scene frames
+universally partial while a 15s grid caught finished states). Use `--grid 15`
+(or rely on the automatic degradation: top score < 50% of threshold ⇒
+uniform 15s grid). Flash pages shorter than the grid interval are only
+caught by scene detection — for such decks run both and union.
+
+Scene extraction (`select='gt(scene,0.3)'`, `SLIDE_SCENE_THRESHOLD`
+overridable; the frame at t=0 always kept), then adjacent-frame dedup by
+dHash hamming distance (code default 8), then per-frame OCR via the vision
+endpoint in runtime.conf (`OCR_LLM_*`) with a verbatim-transcription prompt
+(structure preserved, numbers never dropped; non-slide shots return
+`[非幻灯片]`). Both modes share the dedup/OCR stages — extra grid frames
+are cheap. Resumable: OCR results cached in `<workspace>/slides/slides.json`.
 
 Done when: `<workspace>/slides/slides.json` (timestamped entries with text)
 and `slides.md` exist, and no kept frame has empty OCR text.

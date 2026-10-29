@@ -347,6 +347,15 @@ def fetch(url: str, output_dir: str = None, media: str = "text") -> dict:
         has_subs = True
         print(f"  Found CC subtitles: {len(body_text)} chars", file=sys.stderr)
 
+        # Keep the raw timed body (from/to per line) — text-only transcript.md
+        # loses the timestamps any timeline consumer (slide alignment) needs;
+        # re-fetching via the player API is the exact chore this avoids.
+        timed_path = os.path.join(output_dir, "cc-timed.json")
+        with open(timed_path, "w", encoding="utf-8") as f:
+            json.dump(sub_data.get("body", []), f, ensure_ascii=False)
+        print(f"  Timed subtitles → {timed_path} ({len(sub_data.get('body', []))} lines)",
+              file=sys.stderr)
+
         # Save transcript
         tpath = os.path.join(output_dir, "transcript.md")
         with open(tpath, "w", encoding="utf-8") as f:
