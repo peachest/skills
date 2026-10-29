@@ -33,9 +33,8 @@ python3 <SKILL_DIR>/scripts/fetch.py \
 
 ## Operational Notes
 
-- **Script path**: `<SKILL_DIR>` is the single global install
-  (`~/.agents/skills/fetch-article/`). There is no project-local
-  `.agent/skills/` copy — always invoke via the absolute `<SKILL_DIR>` path.
+- **Script path**: `<SKILL_DIR>` = `~/.agents/skills/fetch-article` (single
+  global install).
 - **Timeouts**: `fetch.py` has no built-in timeout and bilibili downloads can
   exceed 2 min. Run long fetches (videos >30 min) through a background task
   with an explicit timeout (≥600s), not a foreground bash call.
@@ -61,9 +60,6 @@ python3 <SKILL_DIR>/scripts/fetch.py \
 }
 ```
 
-Temp artifacts always go under `FETCH_ARTICLE_TMP_ROOT` (default `~/tmp`),
-never `/tmp` — see Operational Notes.
-
 ## Domain Routing
 
 | Pattern | Adapter | Strategy |
@@ -87,28 +83,21 @@ extract metadata (title, author, publish_time, images).
 
 Downloads audio via WBI-signed API. Only downloads — does NOT transcribe.
 
-**media depth (bilibili only)**: `fetch.py <url> --media text|visual`
-- `text` (default): CC subtitles replace audio download when available
-  (`stream_type: cc_subtitle_only`)
-- `visual`: download video/audio even if CC subtitles exist — required for
-  slide extraction / watching; subtitles still saved as ASR ground truth
+**media depth (bilibili only)**: `fetch.py <url> --media text|visual` —
+`text` (default) lets CC subtitles replace audio download when available;
+`visual` downloads video/audio regardless (slides/vision need the stream).
+Depth semantics: see bilibili-transcriber SKILL.md (the owner).
 
-Also writes `context.md` into the workspace: 简介 (video description) + 置顶评论
-+ 热门评论 Top 5 + 最新评论 Top 5 — the author/audience perspective around the
-video. Comment calls attach `~/.bilibili-cli/credential.json` cookies when
-present (anonymous requests get risk-control degraded results); all comment
-failures degrade to empty sections, never fatal.
+Also writes `context.md` into the workspace (video description + pinned/
+hottest/newest comments — see bilibili-transcriber SKILL.md Pipeline for
+how it's consumed). Comment calls attach `~/.bilibili-cli/credential.json`
+cookies when present (anonymous requests get risk-control degraded
+results); all comment failures degrade to empty sections, never fatal.
 
-**Next step — route by intent, never hand-roll download/frames**: this skill
-only gets media back; every downstream capability lives in
-[bilibili-transcriber](../bilibili-transcriber/SKILL.md):
-
-- 转写 / 文字稿 / 字幕（只要内容） → transcriber `run.sh <url>`（text 模式：CC 字幕
-  或 ASR，不碰视频流）
-- 画面 / 幻灯片 / 抽帧 / 看视频（slide deck / vision）→ transcriber
-  `run.sh <url> --visual`（视频流下载 + 场景抽帧 + OCR 全管线；本 skill 的
-  `--media visual` 只是它的第一站）
-- 批量 / 队列 → transcriber `pipeline-queue.py`
+**Next step — route by intent, never hand-roll download/frames**: downstream
+（转写 / 画面幻灯片抽帧 / 批量）all lives in
+[bilibili-transcriber](../bilibili-transcriber/SKILL.md) — its `run.sh`
+wraps the whole chain; this skill only gets media back.
 
 ### Zhihu (知乎专栏)
 
@@ -127,7 +116,7 @@ Setup:
   (node_modules/playwright), override with `ZHIHU_PLAYWRIGHT_RUNNER`.
 
 On `40362` / CAPTCHA the adapter fails with an explicit message — ask the
-user for a fresh cookie instead of retrying or bypassing.
+user for a fresh cookie.
 
 Only `zhuanlan.zhihu.com/p/<id>` article URLs are supported; other zhihu
 URLs (questions, answers) fall through to the generic adapter.
@@ -150,16 +139,11 @@ Three-layer fallback chain:
    this layer reports failure and falls through
 3. `r.jina.ai` reader proxy — `curl https://r.jina.ai/<URL>` returns the
    page as Markdown (`Title:` / `URL Source:` / `Markdown Content:`),
-   bypassing Cloudflare-protected sites (verified against openai.com).
+   bypassing Cloudflare-protected sites.
    No install needed; may rate-limit without a `JINA_API_KEY`.
 
-Scrapling handles:
-
-- Cloudflare Turnstile / interstitial bypass
-- TLS fingerprint simulation
-- Auto Markdown output
-
-Requires: `pip install "scrapling[all]"`
+Scrapling handles: Cloudflare Turnstile / interstitial bypass, TLS
+fingerprint simulation, auto Markdown output (install: see Requirements).
 
 ## HTML → Markdown Conversion
 
@@ -176,18 +160,8 @@ can adopt it as needed.
 ## Requirements
 
 - Python 3.10+
-- markitdown (`pip install markitdown`)
-- beautifulsoup4 (`pip install beautifulsoup4`)
-- requests (for WBI-signed Bilibili API)
-- yt-dlp (for YouTube)
-- scrapling (optional, for generic fallback with anti-bot)
-- r.jina.ai (optional, no install — network fallback for Cloudflare-protected
-  sites; set `JINA_API_KEY` to avoid anonymous rate limits)
+- markitdown, beautifulsoup4, requests, yt-dlp
+- scrapling (optional, generic-fallback anti-bot):
+  `pip install "scrapling[all]" && scrapling install`
+- r.jina.ai: no install — network fallback; `JINA_API_KEY` avoids rate limits
 - curl (system)
-
-Install scrapling:
-
-```bash
-pip install "scrapling[all]"
-scrapling install  # download browser dependencies
-```

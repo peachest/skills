@@ -1,11 +1,16 @@
 ---
 name: bilibili-transcriber
 description: |
-  Transcribe Bilibili video audio to text. Use when the user has a Bilibili
-  video URL and wants its spoken content as a readable transcript.
+  Transcribe Bilibili video audio to text, and optionally extract slide
+  decks / frames (画面、幻灯片、抽帧) from the video stream via
+  `run.sh --visual`. Use when the user has a Bilibili video URL and wants
+  a readable transcript or the slides/frames, not just media download.
 ---
 
 # Bilibili Video Transcription
+
+Scope: Bilibili sources only (fetch-article's YouTube adapter is
+download-only; non-Bilibili transcription is out of scope).
 
 ## Pipeline
 
@@ -13,9 +18,8 @@ description: |
 fetch-article (download audio) → this skill (transcribe → slides → merge)
 ```
 
-The fetch stage also writes `context.md` into the workspace — 简介、置顶评论、
-热门评论 Top 5、最新评论 Top 5（作者/观众视角，与转写正文互补；详见
-fetch-article SKILL.md 的 Bilibili 节）。
+The fetch stage also writes `context.md` into the workspace（构成见
+fetch-article SKILL.md 的 Bilibili 节）.
 
 ### One-shot entry (RECOMMENDED)
 
@@ -49,7 +53,8 @@ python3 <SKILL_DIR>/../fetch-article/scripts/fetch.py \
 
 Done when: JSON output contains `raw_path` (the `article.json` file
 inside the workspace dir — use its parent directory as the workspace)
-with `audio.mp4` and `metadata.json` alongside.
+with `metadata.json` alongside and (`audio.mp4` **or** `transcript.md` —
+CC-subtitle runs skip the audio download).
 
 ### Stage 2: Transcribe
 
@@ -57,8 +62,8 @@ with `audio.mp4` and `metadata.json` alongside.
 bash <SKILL_DIR>/scripts/transcribe.sh <workspace-dir>/
 ```
 
-Prefer `run.sh` (locks every python stage to `uv run --project <SKILL_DIR>`);
-when invoking `transcribe.sh` directly, run it via
+Prefer `run.sh` (locks every python stage to the skill venv); when invoking
+`transcribe.sh` directly, run it via
 `cd <SKILL_DIR> && uv run bash scripts/transcribe.sh` so the venv deps
 (numpy for chunking) are present.
 
@@ -67,13 +72,6 @@ The script loads
 `<SKILL_DIR>/runtime.conf` for endpoint/model automatically; if absent,
 set `WHISPER_ENDPOINT` and `WHISPER_MODEL` env vars
 (see [Service Discovery](#service-discovery)).
-
-Current backend: faster-whisper large-v3-turbo on the user's WSL laptop,
-reached through an SSH tunnel (`WHISPER_TUNNEL_*` in runtime.conf) —
-transcribe.sh reuses an existing tunnel or opens one automatically
-(`ssh -f -N -L` + `ExitOnForwardFailure`) and probes before transcribing.
-The original cluster-hosted whisper-asr NodePort backend is **deprecated**; its
-discovery recipe stays in `runtime.conf.example` for rollback.
 
 The script transcodes MP4 → 16kHz WAV, then either transcribes directly
 (WAV ≤ 25MB) or uses **silence-aware chunking**: detects natural pause
@@ -98,15 +96,13 @@ paths — both need `CLEAN_LLM_BASEURL` / `CLEAN_LLM_MODEL` (+ optional
 cd <SKILL_DIR> && uv run python scripts/clean-transcripts.py <manifest-or-dirs>
 ```
 
-Chunks the body (~3000 chars), cleans via an OpenAI-compatible endpoint,
-per-chunk ±25% length validation (rejects silent summarizing), escalation
-ladder for stubborn chunks (halve → sampling escape temp 0.7/fp 0.6 — flash
-models deterministically repetition-loop on some dense chunks at temp 0),
-repeated-sentence guard (rejects in-ratio outputs that loop a paragraph),
-resumable (`transcript.raw.md` marker), failures → `clean-failures.json`.
-Language auto-detected per transcript (CJK ratio; `CLEAN_LANG=zh|en` to
-force): zh → homophone-proofreading prompt, en → English proofreading
-prompt (no translation).
+Chunks the body (~3000 chars), cleans via an OpenAI-compatible endpoint
+with per-chunk length validation, escalation ladder, and repeated-sentence
+guard (algorithm internals live in the script), resumable
+(`transcript.raw.md` marker), failures → `clean-failures.json`. Language
+auto-detected per transcript (CJK ratio; `CLEAN_LANG=zh|en` to force):
+zh → homophone-proofreading prompt, en → English proofreading prompt
+(no translation).
 
 **Bilingual dual-audio** (English original + condensed Chinese voice-over
 mixed in one track — common for translated channels; a zh-hinted single pass
@@ -117,14 +113,13 @@ cd <SKILL_DIR> && uv run python scripts/dual-transcribe.py <targets.json>
 ```
 
 Re-runs ASR with `WHISPER_LANG=en` in a scratch root (zh side reuses the
-existing chunk JSONs), aligns both timelines into ~90s windows, then one LLM
-merge per 4 windows: cleaned zh + full EN translation + `[对照存疑]` flags
-where the dub skips content or the EN original corrects an ASR homophone
-(汉玛→Hanuman, 夏天宝座→Summer Palace — the EN side doubles as ground
-truth for proper nouns). Output is the interleaved format the user chose:
-`## [mm:ss - mm:ss]` window → zh paragraphs → `> **EN 原声（译文）**`
-blockquote → optional flag line. Previous text is kept as
-`transcript.mixed.md`; resumable via `dual-state.json`.
+existing chunk JSONs), aligns both timelines into windows, then LLM-merges
+per batch: cleaned zh + full EN translation + `[对照存疑]` flags where the
+dub skips content or the EN original corrects an ASR homophone (the EN side
+doubles as ground truth for proper nouns). Output is the interleaved format
+the user chose: `## [mm:ss - mm:ss]` window → zh paragraphs →
+`> **EN 原声（译文）**` blockquote → optional flag line. Previous text is
+kept as `transcript.mixed.md`; resumable via `dual-state.json`.
 
 Bilingual detection: scan transcripts for ASCII ratio > 10% — anything
 above is a dual-pass candidate. Manual prompt template and pre-marking
@@ -144,9 +139,9 @@ cd <SKILL_DIR> && uv run python scripts/reclean-en.py \
 ```
 
 Same `CLEAN_LLM_*` config as clean-transcripts.py. The EN reference is the
-ground truth for names/terms (ASD-STE100, Mike Hostetler — ASR writes these
-as "ASTST100", "迈克·哈斯特勒"). The zh raw only fixes segmentation order and
-tone; numbers/examples must survive verbatim. A >40%-shorter-than-EN output
+ground truth for names/terms that ASR garbles (e.g. standard numbers like
+ASTST100). The zh raw only fixes segmentation order and tone;
+numbers/examples must survive verbatim. A >40%-shorter-than-EN output
 triggers a summarization warning. Optional glossary file: one
 term/translation per line, injected into the prompt.
 
@@ -207,18 +202,16 @@ cd <SKILL_DIR> && uv run python scripts/merge-slides.py <workspace-dir> \
 
 Writes `transcript.final.md` into the transcript directory: cleaned
 transcript on top, raw segments on a timeline with each slide's OCR text
-inserted as `## [mm:ss 幻灯片]` blocks. Speech and slides are complementary —
-keep both; do not drop transcript text where a slide covers the same content.
+inserted as `## [mm:ss 幻灯片]` blocks.
 
 ## Chunking Configuration
 
 Internal chunking knobs (`STRATEGY`, `CHUNK_SEC`, `SILENCE_DB`, `TOLERANCE`,
-`PARALLEL`, …) keep sane code defaults for 60-120 minute Mandarin tech talks
-— no historical session ever needed to override them, so they are no longer
-documented as user-facing config (override via env vars only if a run
-surprises you; the four partition algorithms — dp/greedy/weighted/threshold —
-are implemented in `chunk_transcribe.py`, comparison in
-[`references/chunking.md`](references/chunking.md)).
+`PARALLEL`, …) have sane code defaults for 60-120 minute Mandarin tech
+talks — override via env vars only if a run surprises you. The four
+partition algorithms — dp/greedy/weighted/threshold — are implemented in
+`chunk_transcribe.py`, comparison in
+[`references/chunking.md`](references/chunking.md).
 
 ## Environment Check
 
@@ -231,11 +224,9 @@ transcription run surprises you:
 bash <SKILL_DIR>/scripts/check-env.sh
 ```
 
-PASS/WARN lines are informational; any FAIL exits 1. It probes: runtime.conf
-values, aria2c/ffmpeg/python3 (with requests+numpy+aiohttp), the ASR endpoint
-via `/v1/models` (model id included), the LLM cleanup endpoint (Step 3),
-bilibili.com reachability (direct, then proxy), and the `bili` CLI credential
-(enumeration only). Run it inside the uv env for a green pass:
+PASS/WARN lines are informational; any FAIL exits 1. It probes everything
+runtime.conf assumes (system tools, ASR/LLM endpoints, bilibili
+reachability, credential). Run it inside the uv env for a green pass:
 `cd <SKILL_DIR> && uv run bash scripts/check-env.sh`.
 
 ## Batch Mode
