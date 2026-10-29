@@ -195,7 +195,8 @@ def pre_push():
                     anchor = anchor.strip().replace("\\|", "|")  # unescape cell-escaped pipes (same as wiki-anchor)
                     if not anchor or anchor in EXEMPT_COL3 or anchor.startswith("见 git log"):
                         continue
-                    if HASH_RE.search(anchor):
+                    bare = [m.group() for m in HASH_RE.finditer(anchor) if not SESSION_ID_RE.fullmatch(m.group())]
+                    if bare:
                         errors.append(f"[wiki-drift] {f}:{i} 新规范行含裸 hash，应改为 subject: {col3[:70]}")
                     elif not resolves_subject(anchor):
                         errors.append(
