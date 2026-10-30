@@ -53,6 +53,16 @@ Rules:
 - **Discoverability**: `check-all-env.sh` (repo root) is the single sweep —
   it must keep working as skills migrate between tiers. Do not introduce a
   third location without updating this section first.
+- **Environment probes in tests must be stripped-env validated.** Tests that
+  resolve binaries or spawn local daemons (`shutil.which` on a CLI name,
+  `subprocess.run(["<tool>"...])`, fixture-started servers) are silent green
+  on nix dev boxes and red in CI — the 2026-10-28 round (yt-dlp / ffmpeg /
+  herdr, three push-round-trips) is the baseline case. Before pushing any
+  new test that touches a binary/daemon probe, run
+  `bash scripts/ci-parity.sh <test-dir>`: it reruns the suite with nix
+  tooling stripped from PATH and CI-preinstalled tools stubbed back in,
+  matching the GitHub runner. A bare `env -i` run is NOT equivalent
+  (it over-strips: loses aria2c/node that CI actually has).
 
 ## Pipeline discipline (script skills)
 

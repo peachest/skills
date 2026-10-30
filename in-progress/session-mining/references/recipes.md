@@ -72,6 +72,13 @@ yield: 5284 sessions → 155 candidates → 143 real users → 59 objects / 1221
 findings. (triage-mr review-rounds baseline, recheck/extract-triage-mrs.py
 family + wiki triage-mr P-012)
 
+## Dump clipping discipline
+
+`--arg-chars` 截断（默认 200 字符）只用于 pass-0 粗筛（谁在调用、命中多少）。
+内容级工作（考据回填、格式审计、extract 正则喂料）必须一开始就 `--full-args`
+——按 session-mining 脚本路由全库重跑一轮的成本（264 文件、1.7MB）远高于
+首次就带全量参数。判断标准：下游要读 args 内容做判定，就不许裁剪。
+
 ## Recovery-chain diff
 
 For "why does X fail": dump with **and** without `--errors-only`, per failure
