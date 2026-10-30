@@ -87,13 +87,13 @@ For 🟡 Edge findings, the grill is optional — only if the user chooses "disc
 
 Work findings in priority order: 🚨 → ⚠️ → 🟢, then 🟡 Edge (user-selected).
 
-For each finding, offer three options via `ask_user_question`:
+For each finding, offer three options via `ask_user`:
 
 1. **Fix** — apply the grilled plan
 2. **Discuss** — deeper `/skill:code-review` analysis
 3. **Skip** — annotate with `// FIXME:` (real defect, deferred) or `// NOTE:` (design decision, not a defect)
 
-One `ask_user_question` at a time. Wait for the user's choice before acting. Batch instructions from the user override this.
+One `ask_user` at a time. Wait for the user's choice before acting. Batch instructions from the user override this.
 
 #### Fix path
 

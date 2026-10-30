@@ -49,7 +49,7 @@ python3 $SCRIPT --no-subagent --verbose               # 只清 trivial session
 
 ### 3. 确认清理方案
 
-将干跑结果整理为 summary 展示给用户，用 `ask_user_question` 询问：
+将干跑结果整理为 summary 展示给用户，用 `ask_user` 询问：
 
 - **是否执行删除？**（确认执行 / 调整参数后重新干跑 / 取消）
 
