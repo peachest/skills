@@ -50,7 +50,7 @@ Write the recap file:
 - **Day overview**: 2-3 sentences on the day's theme across all projects
 - **Per project**:
   - **Done** — what was accomplished (1-3 bullets)
-  - **Decisions** — choices made (from `ask_user_question`, grilling, or explicit turns)
+  - **Decisions** — choices made (from `ask_user`, grilling, or explicit turns)
   - **Subagents** — count and roles of subagent runs
 
 Save to the output path. Display the recap inline.
