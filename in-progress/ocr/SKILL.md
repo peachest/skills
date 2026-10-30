@@ -174,7 +174,10 @@ never look for one; get the session id via `ocr session list` (chapter 7).
 - **Re-review hook**: once `/skill:fix` completes, offer to re-run review on
   the new diff with `--effort low` — verification needs one round, and it
   catches "fixed but fixed wrong". The old session stays in
-  `~/.opencodereview/sessions/` for comparison.
+  `~/.opencodereview/sessions/` for comparison. This hook is one round of a
+  larger loop; the loop itself — convergence gate (actionable findings all
+  fixed or rejected), final full-range confirmation, push timing — is owned
+  by /skill:rolling-ocr.
 
 ## 6. ocr scan (audit existing code)
 
