@@ -30,7 +30,7 @@ Runtime requirements are identical to html-render-check (Playwright under `~/too
 
 1. **Locate and read the artifact.** Read the HTML fully. Note its section structure, the domain it covers, and the concepts it introduces. Check for a `CONTEXT.md` in the project directory — if present, it becomes the canonical vocabulary for Check 5.
 
-2. **Pin the audience.** From the content, guess who this is for, then ask the user via `ask_user` with 2–4 concrete audience options (e.g. "backend engineers who know GPU basics but not CXL" / "infra team familiar with the project" / "mixed technical audience, no domain background"). The confirmed audience is quoted verbatim into every check brief — every axis judges against it.
+2. **Pin the audience.** From the content, guess who this is for, then ask the user via `ask_user_question` with 2–4 concrete audience options (e.g. "backend engineers who know GPU basics but not CXL" / "infra team familiar with the project" / "mixed technical audience, no domain background"). The confirmed audience is quoted verbatim into every check brief — every axis judges against it.
 
 3. **Capture screenshots.** Run `node <SKILL_DIR>/scripts/section-shots.mjs --out-dir <tmpdir> <file.html>`. This emits one fullPage shot plus one shot per `<section>`/`<article>` element, with a `manifest.json` mapping each shot to its heading.
 
